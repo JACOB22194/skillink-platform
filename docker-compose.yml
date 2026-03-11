@@ -1,0 +1,8 @@
+version: '3.8'
+
+services:
+  ai:
+    build: ./Skillink-AI
+    container_name: skillink_ai
+    ports:
+      - "8001:8000"
