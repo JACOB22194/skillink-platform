@@ -4,7 +4,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy.orm import Session
 
 import models
-import schemas
+import schema
 from db import SessionLocal, engine
 
 # This line is the magic. It creates the tables in the database when the server starts.
@@ -27,6 +27,6 @@ def read_root():
     return {"message": "Skillink API and Database are officially connected!"}
 
 
-@app.get("/users", response_model=List[models.User])
+@app.get("/users", response_model=List[schema.UserResponse])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return db.query(models.User).offset(skip).limit(limit).all()
