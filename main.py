@@ -9,11 +9,17 @@ It does 5 things in order:
   3. Creates the FastAPI app with documentation
   4. Serves uploaded files as accessible URLs
   5. Registers all the route files (auth, users, admin)
+
+Fix in this version:
+  - Replaced deprecated @app.on_event("startup") with the modern
+    lifespan context manager (recommended in FastAPI 0.93+)
 """
 
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError
@@ -24,20 +30,49 @@ from routers.auth_router  import router as auth_router
 from routers.user_router  import router as user_router
 from routers.admin_router import router as admin_router
 
-# ── Step 2: Create uploads folder ────────────────────────────────────────────
+# ── Upload folder ─────────────────────────────────────────────────────────────
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-# ── Step 3: Create the FastAPI app ────────────────────────────────────────────
+# ── Lifespan (replaces the old @app.on_event("startup")) ─────────────────────
+# This runs ONCE when the server starts, and again (after yield) when it stops.
+# We use it to create database tables safely after waiting for Postgres to be ready.
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── STARTUP ──────────────────────────────────────────────────────────────
+    retries = 30
+    for attempt in range(1, retries + 1):
+        try:
+            models.Base.metadata.create_all(bind=engine)
+            logging.info("✅ Database tables created / verified successfully.")
+            break
+        except OperationalError as exc:
+            logging.warning(
+                "⏳ Database not ready yet (attempt %s/%s). Retrying in 1s...\n   Error: %s",
+                attempt, retries, exc,
+            )
+            time.sleep(1)
+    else:
+        raise RuntimeError("❌ Could not connect to the database after 30 retries.")
+
+    yield   # ← everything above runs at startup; everything below runs at shutdown
+
+    # ── SHUTDOWN (optional cleanup goes here) ────────────────────────────────
+    logging.info("SkillLink API shutting down.")
+
+
+# ── FastAPI app ───────────────────────────────────────────────────────────────
+
 app = FastAPI(
+    lifespan    = lifespan,   # ✅ modern way to handle startup/shutdown
     title       = "SkillLink API",
     version     = "1.0.0",
     description = """
 ## SkillLink — AI-Powered Freelance Platform
 
 ### How to test this API (step by step)
->>>>>>> First_db_version
 
 **Step 1** — Register an account:
 - Click on `POST /auth/register` → Try it out
@@ -68,41 +103,19 @@ app = FastAPI(
 """,
 )
 
-# ── Step 1: Create all tables ─────────────────────────────────────────────────
-# Safe to run every time — skips tables that already exist
-# Use startup event to wait for DB to be ready before metadata operations.
-
-@app.on_event("startup")
-def startup_create_tables():
-    retries = 30
-    for attempt in range(1, retries + 1):
-        try:
-            models.Base.metadata.create_all(bind=engine)
-            logging.info("Database tables created successfully")
-            break
-        except OperationalError as exc:
-            logging.warning(
-                "Database not ready yet, try %s/%s. Error: %s",
-                attempt,
-                retries,
-                exc,
-            )
-            time.sleep(1)
-    else:
-        raise RuntimeError("Could not connect to database after several retries")
-
-# ── Step 4: Serve uploaded files ──────────────────────────────────────────────
+# ── Serve uploaded files ──────────────────────────────────────────────────────
 # After a portfolio upload, the file is accessible at:
 # http://localhost:8000/uploads/portfolios/<filename>
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-# ── Step 5: Register all route files ─────────────────────────────────────────
+# ── Register all route files ──────────────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(admin_router)
 
 
 # ── Health checks ──────────────────────────────────────────────────────────────
+
 @app.get("/", tags=["Health"])
 def root():
     return {
@@ -114,4 +127,3 @@ def root():
 @app.get("/health", tags=["Health"])
 def health():
     return {"status": "ok"}
-

@@ -4,17 +4,20 @@ models.py — Database Tables
 Each class here = one table in PostgreSQL.
 SQLAlchemy reads these classes and creates the actual tables.
 
-Changes from the original your team wrote:
-  - Added  mfa_enabled  and  mfa_secret  to User table (needed for MFA login)
-  - Added  portfolio_file  to Freelancer table (needed for portfolio upload)
-  - Everything else is exactly as your teammate wrote it
+Changes in this version (task 2.4.1):
+  - Fixed deprecated import (declarative_base moved to sqlalchemy.orm)
+  - Added database indexes on all foreign keys and frequently queried columns
+    (indexes make SELECT queries much faster, especially on large tables)
+  - Added skill_taxonomy table (task 2.4.3 seeds this with 50+ IT skills)
+  - Added mfa_enabled and mfa_secret to User (needed for MFA login)
+  - Added portfolio_file to Freelancer (needed for portfolio upload)
 """
 
 from sqlalchemy import (
     Column, Integer, String, Text,
-    Float, DateTime, Enum, ForeignKey, Boolean
+    Float, DateTime, Enum, ForeignKey, Boolean, Index
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
 from db import Base
 import enum
@@ -81,11 +84,11 @@ class User(Base):
     id          = Column(Integer, primary_key=True, index=True)
     email       = Column(String(255), unique=True, nullable=False, index=True)
     password    = Column(String(255), nullable=False)
-    role        = Column(Enum(UserRole), nullable=False)
-    status      = Column(Enum(UserStatus), default=UserStatus.active)
-    mfa_enabled = Column(Boolean, default=False)      # NEW: is MFA turned on?
-    mfa_secret  = Column(String(64), nullable=True)   # NEW: the TOTP secret key
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    role        = Column(Enum(UserRole), nullable=False, index=True)   # ✅ index: admin queries filter by role
+    status      = Column(Enum(UserStatus), default=UserStatus.active, index=True)  # ✅ index: suspend checks
+    mfa_enabled = Column(Boolean, default=False)
+    mfa_secret  = Column(String(64), nullable=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ index: sorting
 
     # Relationships (links to other tables)
     freelancer        = relationship("Freelancer",   back_populates="user", uselist=False)
@@ -107,12 +110,12 @@ class Freelancer(Base):
     __tablename__ = "freelancers"
 
     freelancer_id  = Column(Integer, primary_key=True, index=True)
-    user_id        = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    user_id        = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)  # ✅ FK index
     bio            = Column(Text)
-    hourly_rate    = Column(Float)
-    success_score  = Column(Float, default=0.0)
+    hourly_rate    = Column(Float, index=True)       # ✅ index: AI/search sorts by rate
+    success_score  = Column(Float, default=0.0, index=True)  # ✅ index: leaderboard queries
     wallet_balance = Column(Float, default=0.0)
-    portfolio_file = Column(String(500), nullable=True)   # NEW: uploaded portfolio path
+    portfolio_file = Column(String(500), nullable=True)
 
     user                = relationship("User",            back_populates="freelancer")
     proposals           = relationship("Proposal",        back_populates="freelancer")
@@ -130,11 +133,27 @@ class Client(Base):
     __tablename__ = "clients"
 
     client_id    = Column(Integer, primary_key=True, index=True)
-    user_id      = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    user_id      = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)  # ✅ FK index
     company_name = Column(String(255))
 
     user     = relationship("User",    back_populates="client")
     projects = relationship("Project", back_populates="client")
+
+
+# ─────────────────────────────────────────────
+#  TABLE: skill_taxonomy  ← NEW (task 2.4.3)
+# ─────────────────────────────────────────────
+# This is the master list of IT skills.
+# The AI service reads from this table to match freelancers to projects.
+# We seed it with 50+ IT skills in seed.py.
+
+class SkillTaxonomy(Base):
+    __tablename__ = "skill_taxonomy"
+
+    skill_id     = Column(Integer, primary_key=True, index=True)
+    name         = Column(String(100), unique=True, nullable=False, index=True)  # ✅ index: name lookups
+    category     = Column(String(100), nullable=False, index=True)  # e.g. "Frontend", "Backend", "DevOps"
+    description  = Column(Text, nullable=True)   # optional short description of the skill
 
 
 # ─────────────────────────────────────────────
@@ -145,7 +164,7 @@ class Skill(Base):
     __tablename__ = "skills"
 
     skill_id = Column(Integer, primary_key=True, index=True)
-    name     = Column(String(100), unique=True, nullable=False)
+    name     = Column(String(100), unique=True, nullable=False, index=True)  # ✅ index: name lookups
 
     freelancer_skills = relationship("FreelancerSkill", back_populates="skill")
     project_skills    = relationship("ProjectSkill",    back_populates="skill")
@@ -158,8 +177,8 @@ class Skill(Base):
 class FreelancerSkill(Base):
     __tablename__ = "freelancer_skills"
 
-    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), primary_key=True)
-    skill_id      = Column(Integer, ForeignKey("skills.skill_id"),           primary_key=True)
+    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), primary_key=True, index=True)  # ✅ FK index
+    skill_id      = Column(Integer, ForeignKey("skills.skill_id"),           primary_key=True, index=True)  # ✅ FK index
 
     freelancer = relationship("Freelancer", back_populates="skills")
     skill      = relationship("Skill",      back_populates="freelancer_skills")
@@ -173,11 +192,11 @@ class Project(Base):
     __tablename__ = "projects"
 
     project_id  = Column(Integer, primary_key=True, index=True)
-    client_id   = Column(Integer, ForeignKey("clients.client_id"), nullable=False)
+    client_id   = Column(Integer, ForeignKey("clients.client_id"), nullable=False, index=True)  # ✅ FK index
     title       = Column(String(255), nullable=False)
     description = Column(Text)
-    budget      = Column(Float)
-    status      = Column(Enum(ProjectStatus), default=ProjectStatus.open)
+    budget      = Column(Float, index=True)          # ✅ index: AI pricing queries filter by budget
+    status      = Column(Enum(ProjectStatus), default=ProjectStatus.open, index=True)  # ✅ index: open projects filter
 
     client     = relationship("Client",       back_populates="projects")
     proposals  = relationship("Proposal",     back_populates="project")
@@ -195,8 +214,8 @@ class Project(Base):
 class ProjectSkill(Base):
     __tablename__ = "project_skills"
 
-    project_id = Column(Integer, ForeignKey("projects.project_id"), primary_key=True)
-    skill_id   = Column(Integer, ForeignKey("skills.skill_id"),     primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.project_id"), primary_key=True, index=True)  # ✅ FK index
+    skill_id   = Column(Integer, ForeignKey("skills.skill_id"),     primary_key=True, index=True)  # ✅ FK index
 
     project = relationship("Project", back_populates="skills")
     skill   = relationship("Skill",   back_populates="project_skills")
@@ -210,11 +229,11 @@ class Proposal(Base):
     __tablename__ = "proposals"
 
     proposal_id        = Column(Integer, primary_key=True, index=True)
-    project_id         = Column(Integer, ForeignKey("projects.project_id"),       nullable=False)
-    freelancer_id      = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False)
+    project_id         = Column(Integer, ForeignKey("projects.project_id"),       nullable=False, index=True)  # ✅ FK index
+    freelancer_id      = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)  # ✅ FK index
     bid_amount         = Column(Float)
-    ai_relevance_score = Column(Float)
-    status             = Column(Enum(ProposalStatus), default=ProposalStatus.pending)
+    ai_relevance_score = Column(Float, index=True)  # ✅ index: AI sorts proposals by this score
+    status             = Column(Enum(ProposalStatus), default=ProposalStatus.pending, index=True)  # ✅ index
 
     project    = relationship("Project",    back_populates="proposals")
     freelancer = relationship("Freelancer", back_populates="proposals")
@@ -228,9 +247,9 @@ class Contract(Base):
     __tablename__ = "contracts"
 
     contract_id   = Column(Integer, primary_key=True, index=True)
-    project_id    = Column(Integer, ForeignKey("projects.project_id"),       nullable=False)
-    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False)
-    status        = Column(Enum(ContractStatus), default=ContractStatus.active)
+    project_id    = Column(Integer, ForeignKey("projects.project_id"),       nullable=False, index=True)  # ✅ FK index
+    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)  # ✅ FK index
+    status        = Column(Enum(ContractStatus), default=ContractStatus.active, index=True)  # ✅ index
 
     project    = relationship("Project",    back_populates="contracts")
     freelancer = relationship("Freelancer", back_populates="contracts")
@@ -247,9 +266,9 @@ class Milestone(Base):
     __tablename__ = "milestones"
 
     milestone_id = Column(Integer, primary_key=True, index=True)
-    contract_id  = Column(Integer, ForeignKey("contracts.contract_id"), nullable=False)
+    contract_id  = Column(Integer, ForeignKey("contracts.contract_id"), nullable=False, index=True)  # ✅ FK index
     amount       = Column(Float)
-    status       = Column(Enum(MilestoneStatus), default=MilestoneStatus.pending)
+    status       = Column(Enum(MilestoneStatus), default=MilestoneStatus.pending, index=True)  # ✅ index
 
     contract = relationship("Contract", back_populates="milestones")
 
@@ -262,9 +281,9 @@ class Escrow(Base):
     __tablename__ = "escrow"
 
     escrow_id   = Column(Integer, primary_key=True, index=True)
-    contract_id = Column(Integer, ForeignKey("contracts.contract_id"), unique=True, nullable=False)
+    contract_id = Column(Integer, ForeignKey("contracts.contract_id"), unique=True, nullable=False, index=True)  # ✅ FK index
     amount      = Column(Float)
-    status      = Column(Enum(EscrowStatus), default=EscrowStatus.held)
+    status      = Column(Enum(EscrowStatus), default=EscrowStatus.held, index=True)  # ✅ index
 
     contract = relationship("Contract", back_populates="escrow")
     payments = relationship("Payment",  back_populates="escrow")
@@ -278,8 +297,8 @@ class Payment(Base):
     __tablename__ = "payments"
 
     payment_id   = Column(Integer, primary_key=True, index=True)
-    escrow_id    = Column(Integer, ForeignKey("escrow.escrow_id"), nullable=False)
-    payment_date = Column(DateTime(timezone=True), server_default=func.now())
+    escrow_id    = Column(Integer, ForeignKey("escrow.escrow_id"), nullable=False, index=True)  # ✅ FK index
+    payment_date = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ index: date range queries
 
     escrow = relationship("Escrow", back_populates="payments")
 
@@ -292,9 +311,9 @@ class Review(Base):
     __tablename__ = "reviews"
 
     review_id     = Column(Integer, primary_key=True, index=True)
-    project_id    = Column(Integer, ForeignKey("projects.project_id"),       nullable=False)
-    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False)
-    rating        = Column(Integer)
+    project_id    = Column(Integer, ForeignKey("projects.project_id"),       nullable=False, index=True)  # ✅ FK index
+    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)  # ✅ FK index
+    rating        = Column(Integer, index=True)   # ✅ index: sorting/filtering by rating
     comment       = Column(Text)
 
     project    = relationship("Project",    back_populates="reviews")
@@ -309,7 +328,7 @@ class AIPricing(Base):
     __tablename__ = "ai_pricing"
 
     pricing_id    = Column(Integer, primary_key=True, index=True)
-    project_id    = Column(Integer, ForeignKey("projects.project_id"), unique=True, nullable=False)
+    project_id    = Column(Integer, ForeignKey("projects.project_id"), unique=True, nullable=False, index=True)  # ✅ FK index
     suggested_min = Column(Float)
     suggested_max = Column(Float)
 
@@ -324,9 +343,9 @@ class TrustScore(Base):
     __tablename__ = "trust_scores"
 
     score_id      = Column(Integer, primary_key=True, index=True)
-    user_id       = Column(Integer, ForeignKey("users.id"), nullable=False)
-    score         = Column(Float, default=0.0)
-    calculated_at = Column(DateTime(timezone=True), server_default=func.now())
+    user_id       = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # ✅ FK index
+    score         = Column(Float, default=0.0, index=True)  # ✅ index: admin sorts by score
+    calculated_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ index: latest score
 
     user = relationship("User", back_populates="trust_scores")
 
@@ -339,10 +358,10 @@ class Message(Base):
     __tablename__ = "messages"
 
     message_id  = Column(Integer, primary_key=True, index=True)
-    sender_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
-    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    sender_id   = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)    # ✅ FK index
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)    # ✅ FK index
     content     = Column(Text)
-    sent_at     = Column(DateTime(timezone=True), server_default=func.now())
+    sent_at     = Column(DateTime(timezone=True), server_default=func.now(), index=True) # ✅ index: chat ordering
 
     sender   = relationship("User", foreign_keys=[sender_id],   back_populates="sent_messages")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
@@ -356,8 +375,8 @@ class Dispute(Base):
     __tablename__ = "disputes"
 
     dispute_id  = Column(Integer, primary_key=True, index=True)
-    contract_id = Column(Integer, ForeignKey("contracts.contract_id"), unique=True, nullable=False)
-    status      = Column(Enum(DisputeStatus), default=DisputeStatus.open)
+    contract_id = Column(Integer, ForeignKey("contracts.contract_id"), unique=True, nullable=False, index=True)  # ✅ FK index
+    status      = Column(Enum(DisputeStatus), default=DisputeStatus.open, index=True)  # ✅ index
 
     contract = relationship("Contract", back_populates="dispute")
 
@@ -370,9 +389,9 @@ class Verification(Base):
     __tablename__ = "verification"
 
     verification_id = Column(Integer, primary_key=True, index=True)
-    user_id         = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    user_id         = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)  # ✅ FK index
     document_type   = Column(String(100))
-    status          = Column(Enum(VerificationStatus), default=VerificationStatus.pending)
+    status          = Column(Enum(VerificationStatus), default=VerificationStatus.pending, index=True)  # ✅ index
 
     user = relationship("User", back_populates="verification")
 
@@ -385,9 +404,9 @@ class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"
 
     transaction_id = Column(Integer, primary_key=True, index=True)
-    freelancer_id  = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False)
+    freelancer_id  = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)  # ✅ FK index
     amount         = Column(Float)
-    type           = Column(Enum(TransactionType))
+    type           = Column(Enum(TransactionType), index=True)  # ✅ index: filter deposit vs withdraw
 
     freelancer = relationship("Freelancer", back_populates="wallet_transactions")
 
@@ -400,8 +419,8 @@ class File(Base):
     __tablename__ = "files"
 
     file_id     = Column(Integer, primary_key=True, index=True)
-    project_id  = Column(Integer, ForeignKey("projects.project_id"), nullable=False)
-    uploader_id = Column(Integer, ForeignKey("users.id"),            nullable=False)
+    project_id  = Column(Integer, ForeignKey("projects.project_id"), nullable=False, index=True)  # ✅ FK index
+    uploader_id = Column(Integer, ForeignKey("users.id"),            nullable=False, index=True)  # ✅ FK index
     file_path   = Column(String(500))
 
     project = relationship("Project", back_populates="files")
@@ -416,7 +435,7 @@ class SystemLog(Base):
 
     log_id       = Column(Integer, primary_key=True, index=True)
     action       = Column(String(255))
-    performed_by = Column(Integer, ForeignKey("users.id"))
-    timestamp    = Column(DateTime(timezone=True), server_default=func.now())
+    performed_by = Column(Integer, ForeignKey("users.id"), index=True)  # ✅ FK index: filter logs by admin
+    timestamp    = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ index: sort by time
 
     performed_by_user = relationship("User", back_populates="system_logs")
