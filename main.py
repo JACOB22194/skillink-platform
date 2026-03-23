@@ -28,10 +28,7 @@ from routers.admin_router import router as admin_router
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-<<<<<<< HEAD
-app = FastAPI()
-# dependency
-=======
+
 # ── Step 3: Create the FastAPI app ────────────────────────────────────────────
 app = FastAPI(
     title       = "SkillLink API",
@@ -114,13 +111,7 @@ def root():
         "version": "1.0.0",
     }
 
-<<<<<<< HEAD
-
-@app.get("/users", response_model=List[models.User])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(models.User).offset(skip).limit(limit).all()
-=======
 @app.get("/health", tags=["Health"])
 def health():
     return {"status": "ok"}
->>>>>>> First_db_version
+
