@@ -11,7 +11,8 @@ services:
     networks:
       - skillink_network
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:15
@@ -27,6 +28,12 @@ services:
       - db_data:/var/lib/postgresql/data
     networks:
       - skillink_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-skillink_user}", "-d", "${POSTGRES_DB:-skillink_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 networks:
   skillink_network:
