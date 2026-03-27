@@ -13,10 +13,10 @@ import pyotp    # generates MFA secrets and verifies 6-digit codes
 import qrcode   # draws QR code images
 import io       # keeps the image in memory (never saved to disk)
 import base64   # converts the image to a text string the frontend can display
+import bcrypt   # direct bcrypt usage instead of passlib
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 
 from db import get_db
 import models
@@ -24,19 +24,17 @@ import schema
 from auth import create_access_token, create_refresh_token, decode_token, get_current_user
 
 router  = APIRouter(prefix="/auth", tags=["Authentication"])
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ── Password helpers ──────────────────────────────────────────────────────────
 
 def hash_password(plain: str) -> str:
     """Converts 'MyPass1' → '$2b$12$abc...' (one-way, cannot be reversed)"""
-    return pwd_ctx.hash(plain)
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 def check_password(plain: str, hashed: str) -> bool:
     """Returns True if the plain text matches the stored hash"""
-    return pwd_ctx.verify(plain, hashed)
-
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  POST /auth/register

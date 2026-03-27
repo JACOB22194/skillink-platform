@@ -24,7 +24,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError
 
-from db import engine
+from db import engine, SessionLocal
 import models
 from routers.auth_router  import router as auth_router
 from routers.user_router  import router as user_router
@@ -127,3 +127,28 @@ def root():
 @app.get("/health", tags=["Health"])
 def health():
     return {"status": "ok"}
+
+@app.get("/test-db", tags=["Health"])
+def test_database():
+    """
+    Simple endpoint to test database connection and retrieve basic stats.
+    """
+    try:
+        db = SessionLocal()
+        
+        # Count users in database
+        user_count = db.query(models.User).count()
+        
+        db.close()
+        
+        return {
+            "status": "✅ Database connection successful",
+            "total_users": user_count,
+            "message": "Database is working properly"
+        }
+    except Exception as e:
+        return {
+            "status": "❌ Database connection failed",
+            "error": str(e),
+            "message": "Could not connect to the database"
+        }

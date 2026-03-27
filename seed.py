@@ -58,11 +58,12 @@ DATABASE_URL = os.getenv(
 
 engine       = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine)
-pwd_ctx      = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 
 def hash_password(plain: str) -> str:
-    return pwd_ctx.hash(plain)
+    import bcrypt
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
