@@ -22,6 +22,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 
 from db import engine, SessionLocal
@@ -101,6 +102,15 @@ app = FastAPI(
 | client | own profile, company info |
 | admin | everything above + all /admin/* endpoints |
 """,
+)
+
+# ── CORS middleware ───────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ── Serve uploaded files ──────────────────────────────────────────────────────
