@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Remove package-lock.json and reinstall to rebuild native modules for Alpine
-RUN rm -f package-lock.json && npm install
+RUN rm -f package-lock.json && npm install --legacy-peer-deps
 
 # Copy the rest of your React/Vite code
 COPY . .

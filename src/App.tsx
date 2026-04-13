@@ -1,14 +1,60 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import FreelancerDashboard from './pages/FreelancerDashboard';
+import ClientDashboard from './pages/ClientDashboard';
+import AdminDashboard from './pages/AdminDashboard';
+import RequireRole from './shared/RequireRole';
+import MFASetupPage from './pages/MFASetupPage';
+
 const App = () => {
-	return (
-		<div className="min-h-screen flex flex-col bg-black text-white/95 items-center justify-center text-2xl font-bold text-center">
-			<img
-				className="size-40"
-				src="https://res.cloudinary.com/dltj8bim0/image/upload/v1761060580/logo_kukwt0.png"
-				alt=""
-			/>
-			<p>Hello Vite + React + TailwindCSS!</p>
-		</div>
-	);
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* The main URL "/" will show the Landing Page */}
+        <Route path="/" element={<LandingPage />} />
+        
+        {/* The "/login" URL will show your dark-mode Login screen */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+
+        {/* Dashboard routes */}
+        <Route
+          path="/dashboard/freelancer"
+          element={
+            <RequireRole role="freelancer">
+              <FreelancerDashboard />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/dashboard/client"
+          element={
+            <RequireRole role="client">
+              <ClientDashboard />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/dashboard/admin"
+          element={
+            <RequireRole role="admin">
+              <AdminDashboard />
+            </RequireRole>
+          }
+        />
+  <Route
+    path="/settings/mfa"
+    element={
+      <RequireRole role={["freelancer", "client", "admin"]}>
+        <MFASetupPage />
+      </RequireRole>
+    }
+  />
+      </Routes>
+    </BrowserRouter>
+  );
 };
 
 export default App;

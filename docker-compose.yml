@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
-  frontend:
-    build: ./Skilllink-Frontend
-    container_name: skillink_frontend
+  frontend: 
+    build: .
+    container_name: skillink_frontend_
     ports:
       - "3000:3000"
