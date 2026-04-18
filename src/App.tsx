@@ -7,6 +7,7 @@ import ClientDashboard from './pages/ClientDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import RequireRole from './shared/RequireRole';
 import MFASetupPage from './pages/MFASetupPage';
+import PostProjectPage from './pages/PostProjectPage';
 
 const App = () => {
   return (
@@ -41,6 +42,14 @@ const App = () => {
           element={
             <RequireRole role="admin">
               <AdminDashboard />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/post-project"
+          element={
+            <RequireRole role="client">
+              <PostProjectPage />
             </RequireRole>
           }
         />

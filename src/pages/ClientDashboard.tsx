@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,9 +99,9 @@ const Badge: React.FC<{ bg: string; color: string; border: string; children: Rea
     </span>
   );
 
-const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | string; icon: React.ReactNode; colors: ThemeColors }> =
-  ({ label, active, badge, icon, colors }) => (
-    <div style={{
+const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | string; icon: React.ReactNode; colors: ThemeColors; onClick?: () => void }> =
+  ({ label, active, badge, icon, colors, onClick }) => (
+    <div onClick={onClick} style={{
       display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
       color: active ? colors.primary : colors.subtext,
       borderLeft: `2px solid ${active ? colors.primary : "transparent"}`,
@@ -125,14 +126,113 @@ const IconClip   = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="n
 const IconTeam   = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>;
 const IconInv    = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14l-4-4 4-4M15 10h5M15 6h3a2 2 0 012 2v8a2 2 0 01-2 2h-3"/></svg>;
 
+// ─── Sub-views ────────────────────────────────────────────────────────────────
+
+const CompanyProfileView: React.FC<{ colors: ThemeColors }> = ({ colors }) => {
+  const [loading, setLoading] = React.useState(true);
+  const [companyName, setCompanyName] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [feedback, setFeedback] = React.useState("");
+
+  React.useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/users/me/profile`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("access_token")}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCompanyName(data.company_name || "");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    setSaving(true);
+    setFeedback("");
+    try {
+      const res = await fetch(`${API_BASE}/users/me/profile`, {
+        method: "PUT",
+        headers: { 
+          "Authorization": `Bearer ${localStorage.getItem("access_token")}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ company_name: companyName })
+      });
+      if (res.ok) {
+        setFeedback("Profile updated successfully!");
+        setTimeout(() => setFeedback(""), 3000);
+      } else {
+        setFeedback("Failed to update profile.");
+      }
+    } catch (e) {
+      setFeedback("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div style={{ padding: 20, color: colors.subtext }}>Loading profile...</div>;
+
+  return (
+    <div style={{ animation: "fadeIn 0.5s ease" }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: colors.text }}>Company Profile</div>
+        <div style={{ fontSize: 12, color: colors.subtext, marginTop: 3 }}>Manage your corporate identity and public details.</div>
+      </div>
+      
+      <div style={{ background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 12, padding: 24, maxWidth: 600 }}>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: colors.subtext, marginBottom: 8, textTransform: "uppercase", letterSpacing: ".05em" }}>Company Name</label>
+        <input 
+          type="text" 
+          value={companyName} 
+          onChange={(e) => setCompanyName(e.target.value)} 
+          style={{ width: "100%", padding: "10px 14px", fontSize: 14, background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, marginBottom: 16, outline: "none", boxSizing: "border-box" }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <button 
+            onClick={saveProfile} 
+            disabled={saving}
+            style={{ background: colors.primary, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer" }}
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+          {feedback && <span style={{ fontSize: 12, color: colors.primary }}>{feedback}</span>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const StubView: React.FC<{ colors: ThemeColors; title: string }> = ({ colors, title }) => (
+  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", color: colors.subtext, animation: "fadeIn 0.5s ease" }}>
+     <div style={{ fontSize: 40, marginBottom: 16 }}>🚧</div>
+     <div style={{ fontSize: 20, fontWeight: 500, color: colors.text, marginBottom: 8 }}>{title}</div>
+     <div style={{ fontSize: 13, textAlign: "center", maxWidth: 300, lineHeight: 1.5 }}>
+       This feature is currently stubbed via our API-First design approach. Endpoints and schemas are being finalized.
+     </div>
+  </div>
+);
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const ClientDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
   });
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [activeView, setActiveView] = useState("Dashboard");
   const c = getColors(darkMode);
 
   const toggleTheme = () => {
@@ -165,6 +265,9 @@ const ClientDashboard: React.FC = () => {
           Skill<span style={{ color: c.primary }}>Link</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={() => navigate("/post-project")} style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", marginRight: "8px" }}>
+            + Post Project
+          </button>
           <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
             {darkMode ? "☀️" : "🌙"}
           </button>
@@ -205,14 +308,14 @@ const ClientDashboard: React.FC = () => {
         {/* ── Sidebar ── */}
         <aside style={{ width: 200, borderRight: `0.5px solid ${c.border}`, background: c.surface, display: "flex", flexDirection: "column", padding: "16px 0", flexShrink: 0 }}>
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Main</div>
-          <NavItem label="Dashboard" active icon={<IconGrid />} colors={c} />
-          <NavItem label="Company Profile" icon={<IconUser />} colors={c} />
-          <NavItem label="Messages" badge={7} icon={<IconMsg />} colors={c} />
+          <NavItem label="Dashboard" active={activeView === "Dashboard"} onClick={() => setActiveView("Dashboard")} icon={<IconGrid />} colors={c} />
+          <NavItem label="Company Profile" active={activeView === "Company Profile"} onClick={() => setActiveView("Company Profile")} icon={<IconUser />} colors={c} />
+          <NavItem label="Messages" badge={7} active={activeView === "Messages"} onClick={() => setActiveView("Messages")} icon={<IconMsg />} colors={c} />
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Hiring</div>
-          <NavItem label="Find Talent" badge="New" icon={<IconSearch />} colors={c} />
-          <NavItem label="Active Projects" icon={<IconClip />} colors={c} />
-          <NavItem label="Workrooms" icon={<IconTeam />} colors={c} />
-          <NavItem label="Invoices" icon={<IconInv />} colors={c} />
+          <NavItem label="Find Talent" badge="New" active={activeView === "Find Talent"} onClick={() => setActiveView("Find Talent")} icon={<IconSearch />} colors={c} />
+          <NavItem label="Active Projects" active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />} colors={c} />
+          <NavItem label="Workrooms" active={activeView === "Workrooms"} onClick={() => setActiveView("Workrooms")} icon={<IconTeam />} colors={c} />
+          <NavItem label="Invoices" active={activeView === "Invoices"} onClick={() => setActiveView("Invoices")} icon={<IconInv />} colors={c} />
           <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Switch theme</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Contact us</div>
@@ -221,11 +324,12 @@ const ClientDashboard: React.FC = () => {
 
         {/* ── Main ── */}
         <main style={{ flex: 1, overflowY: "auto", padding: 20, background: c.bg }}>
-
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Dashboard</div>
-            <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Nexora Labs · AI-assisted hiring overview</div>
-          </div>
+          {activeView === "Dashboard" && (
+            <div style={{ animation: "fadeIn 0.5s ease" }}>
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Dashboard</div>
+                <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Nexora Labs · AI-assisted hiring overview</div>
+              </div>
 
           {/* Metric cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
@@ -251,7 +355,7 @@ const ClientDashboard: React.FC = () => {
             {card(
               <>
                 {sectionHeader("Active Projects",
-                  <button style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>+ Post Project</button>
+                  <button onClick={() => navigate("/post-project")} style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>+ Post Project</button>
                 )}
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {ACTIVE_PROJECTS.map((p) => {
@@ -322,6 +426,10 @@ const ClientDashboard: React.FC = () => {
               </table>
             </>
           )}
+            </div>
+          )}
+          {activeView === "Company Profile" && <CompanyProfileView colors={c} />}
+          {["Messages", "Find Talent", "Active Projects", "Workrooms", "Invoices"].includes(activeView) && <StubView colors={c} title={activeView} />}
         </main>
 
         {/* ── Right Panel ── */}
