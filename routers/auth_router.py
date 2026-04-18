@@ -245,16 +245,56 @@ def setup_mfa(
     qrcode.make(uri).save(buf, format="PNG")
     qr_b64 = base64.b64encode(buf.getvalue()).decode()
 
-    # Save the secret to the database
+    # Save the secret but do NOT set mfa_enabled=True yet.
+    # MFA is only activated after the user confirms a valid
+    # 6-digit code via POST /auth/mfa/confirm below.
     me.mfa_secret  = secret
-    me.mfa_enabled = True
+    me.mfa_enabled = False
     db.commit()
 
     return {
-        "message": "MFA enabled! Scan the QR code with Google Authenticator or Authy.",
-        "secret":  secret,
-        "qr_code": f"data:image/png;base64,{qr_b64}",
+        "message":          "Scan the QR code, then confirm with a 6-digit code at POST /auth/mfa/verify.",
+        "secret":           secret,
+        "provisioning_uri": uri,
+        "qr_code":          f"data:image/png;base64,{qr_b64}",
     }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /auth/mfa/verify
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/mfa/verify",
+    response_model=schema.MessageResponse,
+    summary="Confirm MFA setup with a 6-digit code",
+    description="""
+Called by the frontend (MFASetupPage step 3) after the user scans the QR code.
+Send the 6-digit code currently shown in the authenticator app.
+On success, mfa_enabled is set to True and MFA is fully active on the account.
+""",
+)
+def confirm_mfa(
+    
+    body: schema.MFAConfirmRequest,
+    me:   models.User = Depends(get_current_user),
+    db:   Session     = Depends(get_db),
+):
+    if not me.mfa_secret:
+        raise HTTPException(
+            status_code=400,
+            detail="No MFA secret found. Please run /auth/mfa/setup first.",
+        )
+
+    if not pyotp.TOTP(me.mfa_secret).verify(body.totp_code, valid_window=1):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid code. Please try again — make sure your device clock is correct.",
+        )
+
+    me.mfa_enabled = True
+    db.commit()
+    return {"message": "MFA has been successfully enabled on your account."}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

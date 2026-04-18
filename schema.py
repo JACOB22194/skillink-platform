@@ -86,6 +86,11 @@ class MFASetupRequest(BaseModel):
     enable: bool         # True = turn MFA on, False = turn MFA off
 
 
+class MFAConfirmRequest(BaseModel):
+    """Body for POST /auth/mfa/confirm"""
+    totp_code: str       # the 6-digit code shown in Google Authenticator after scanning QR
+
+
 class ChangePasswordRequest(BaseModel):
     """Body for POST /auth/change-password"""
     current_password: str
