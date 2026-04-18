@@ -1,21 +1,20 @@
 """
-schema.py — Request & Response Shapes
-======================================
-Pydantic models define what data looks like going IN and OUT of the API.
+schema.py — Request & Response Shapes (Phase 3 Update)
+========================================================
+All Pydantic schemas for the entire API.
 
-When a request arrives:
-  → Pydantic checks it matches the schema
-  → If something is wrong (missing field, wrong type) → returns 422 error automatically
-
-When a response goes out:
-  → Pydantic converts the database object to clean JSON
-
-NOTE: Your original schema.py had a bug — UserResponse was defined TWICE.
-The second definition silently replaced the first. That is fixed here.
+Phase 3 additions:
+  - ProjectCreate, ProjectResponse, ProjectUpdate
+  - ProposalCreate, ProposalResponse, ProposalStatusUpdate, ProposalStatusUpdateResponse
+  - ContractResponse
+  - MilestoneCreate, MilestoneResponse, MilestoneStatusUpdate
+  - EscrowFundRequest, EscrowResponse
+  - WalletBalanceResponse, WalletWithdrawRequest, WalletTransactionResponse
+  - FileResponse
 """
 
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 
@@ -31,17 +30,44 @@ class UserStatus(str, Enum):
     active    = "active"
     suspended = "suspended"
 
+class ProjectStatus(str, Enum):
+    open        = "open"
+    in_progress = "in_progress"
+    completed   = "completed"
+
+class ProposalStatus(str, Enum):
+    pending  = "pending"
+    accepted = "accepted"
+    rejected = "rejected"
+
+class ContractStatus(str, Enum):
+    active    = "active"
+    completed = "completed"
+    disputed  = "disputed"
+
+class MilestoneStatus(str, Enum):
+    pending  = "pending"
+    approved = "approved"
+    paid     = "paid"
+
+class EscrowStatus(str, Enum):
+    held     = "held"
+    released = "released"
+
+class TransactionType(str, Enum):
+    deposit  = "deposit"
+    withdraw = "withdraw"
+
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  AUTH SCHEMAS
+#  AUTH SCHEMAS (unchanged from Phase 2)
 # ═════════════════════════════════════════════════════════════════════════════
 
 class RegisterRequest(BaseModel):
-    """Body for POST /auth/register"""
     email:        EmailStr
     password:     str
     role:         UserRole
-    company_name: Optional[str] = None   # only needed when role = client
+    company_name: Optional[str] = None
 
     @field_validator("password")
     @classmethod
@@ -56,38 +82,32 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """Body for POST /auth/login"""
     email:    EmailStr
     password: str
 
 
 class TokenResponse(BaseModel):
-    """What the server returns after a successful login"""
-    access_token:  str    # use this on every API call (lasts 30 min)
-    refresh_token: str    # use this to get a new access token (lasts 7 days)
+    access_token:  str
+    refresh_token: str
     token_type:    str = "bearer"
     role:          str
     user_id:       int
 
 
 class RefreshRequest(BaseModel):
-    """Body for POST /auth/refresh"""
     refresh_token: str
 
 
 class MFAVerifyRequest(BaseModel):
-    """Body for POST /auth/verify-mfa"""
     email:     EmailStr
-    totp_code: str       # the 6-digit code shown in Google Authenticator
+    totp_code: str
 
 
 class MFASetupRequest(BaseModel):
-    """Body for POST /auth/mfa/setup"""
-    enable: bool         # True = turn MFA on, False = turn MFA off
+    enable: bool
 
 
 class ChangePasswordRequest(BaseModel):
-    """Body for POST /auth/change-password"""
     current_password: str
     new_password:     str
 
@@ -104,64 +124,54 @@ class ChangePasswordRequest(BaseModel):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  USER & PROFILE SCHEMAS
+#  USER & PROFILE SCHEMAS (unchanged from Phase 2)
 # ═════════════════════════════════════════════════════════════════════════════
 
 class UserResponse(BaseModel):
-    """What the API returns when showing a user"""
     id:          int
     email:       str
     role:        UserRole
     status:      UserStatus
     mfa_enabled: bool
     created_at:  datetime
-
     model_config = {"from_attributes": True}
 
 
 class FreelancerProfileResponse(BaseModel):
-    """Freelancer profile details"""
     freelancer_id:  int
     bio:            Optional[str]
     hourly_rate:    Optional[float]
     success_score:  float
     wallet_balance: float
     portfolio_file: Optional[str]
-
     model_config = {"from_attributes": True}
 
 
 class FreelancerProfileUpdate(BaseModel):
-    """Body for PUT /users/me/profile (when user is a freelancer)"""
     bio:         Optional[str]   = None
     hourly_rate: Optional[float] = None
 
 
 class ClientProfileResponse(BaseModel):
-    """Client profile details"""
     client_id:    int
     company_name: Optional[str]
-
     model_config = {"from_attributes": True}
 
 
 class ClientProfileUpdate(BaseModel):
-    """Body for PUT /users/me/profile (when user is a client)"""
     company_name: Optional[str] = None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  ADMIN SCHEMAS
+#  ADMIN SCHEMAS (unchanged from Phase 2)
 # ═════════════════════════════════════════════════════════════════════════════
 
 class AdminUserItem(BaseModel):
-    """A user row as seen by the admin"""
     id:         int
     email:      str
     role:       UserRole
     status:     UserStatus
     created_at: datetime
-
     model_config = {"from_attributes": True}
 
 
@@ -184,9 +194,202 @@ class AdminStatsResponse(BaseModel):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  PROJECT SCHEMAS  (Phase 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ProjectCreate(BaseModel):
+    """Body for POST /projects"""
+    title:           str
+    description:     Optional[str] = None
+    budget:          float
+    required_skills: Optional[List[str]] = None
+
+    @field_validator("budget")
+    @classmethod
+    def budget_minimum(cls, v: float) -> float:
+        if v < 10.0:
+            raise ValueError("Budget must be at least $10.00.")
+        return v
+
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Title cannot be empty.")
+        return v.strip()
+
+
+class ProjectUpdate(BaseModel):
+    """Body for PUT /projects/{id} — all fields optional"""
+    title:           Optional[str]        = None
+    description:     Optional[str]        = None
+    budget:          Optional[float]      = None
+    required_skills: Optional[List[str]]  = None
+
+    @field_validator("budget")
+    @classmethod
+    def budget_minimum(cls, v: float) -> float:
+        if v is not None and v < 10.0:
+            raise ValueError("Budget must be at least $10.00.")
+        return v
+
+
+class ProjectResponse(BaseModel):
+    """What the API returns for a project"""
+    project_id:      int
+    client_id:       int
+    title:           str
+    description:     Optional[str]
+    budget:          float
+    status:          ProjectStatus
+    required_skills: List[str] = []
+    model_config = {"from_attributes": True}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  PROPOSAL SCHEMAS  (Phase 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ProposalCreate(BaseModel):
+    """Body for POST /proposals"""
+    project_id: int
+    bid_amount: float
+
+    @field_validator("bid_amount")
+    @classmethod
+    def bid_minimum(cls, v: float) -> float:
+        if v < 1.0:
+            raise ValueError("Bid amount must be at least $1.00.")
+        return v
+
+
+class ProposalResponse(BaseModel):
+    proposal_id:        int
+    project_id:         int
+    freelancer_id:      int
+    bid_amount:         float
+    ai_relevance_score: Optional[float]
+    status:             ProposalStatus
+    model_config = {"from_attributes": True}
+
+
+class ProposalStatusUpdate(BaseModel):
+    """Body for PUT /proposals/{id}/status"""
+    action: str  # "accept" or "reject"
+
+
+class ProposalStatusUpdateResponse(BaseModel):
+    proposal_id: int
+    status:      ProposalStatus
+    contract_id: Optional[int]
+    message:     str
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  CONTRACT SCHEMAS  (Phase 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ContractResponse(BaseModel):
+    contract_id:   int
+    project_id:    int
+    freelancer_id: int
+    status:        ContractStatus
+    model_config = {"from_attributes": True}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  MILESTONE SCHEMAS  (Phase 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class MilestoneCreate(BaseModel):
+    """Body for POST /contracts/{id}/milestones"""
+    amount: float
+
+    @field_validator("amount")
+    @classmethod
+    def amount_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("Milestone amount must be greater than $0.")
+        return v
+
+
+class MilestoneResponse(BaseModel):
+    milestone_id: int
+    contract_id:  int
+    amount:       float
+    status:       MilestoneStatus
+    model_config = {"from_attributes": True}
+
+
+class MilestoneStatusUpdate(BaseModel):
+    """Body for PUT /milestones/{id}/status"""
+    status: MilestoneStatus
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  ESCROW & PAYMENT SCHEMAS  (Phase 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class EscrowFundRequest(BaseModel):
+    """Body for POST /escrow/fund/{contract_id}"""
+    payment_reference: str  # PayPal/Stripe transaction ID (or "SANDBOX-xxx" for testing)
+    amount:            Optional[float] = None  # Override escrow amount (optional)
+
+
+class EscrowResponse(BaseModel):
+    escrow_id:         int
+    contract_id:       int
+    amount:            float
+    status:            EscrowStatus
+    payment_reference: Optional[str] = None
+    message:           Optional[str] = None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  WALLET SCHEMAS  (Phase 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class WalletBalanceResponse(BaseModel):
+    freelancer_id:  int
+    wallet_balance: float
+
+
+class WalletWithdrawRequest(BaseModel):
+    """Body for POST /wallet/withdraw"""
+    amount: float
+
+    @field_validator("amount")
+    @classmethod
+    def amount_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("Withdrawal amount must be greater than $0.")
+        return v
+
+
+class WalletTransactionResponse(BaseModel):
+    transaction_id: int
+    freelancer_id:  int
+    amount:         float
+    type:           TransactionType
+    model_config = {"from_attributes": True}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  FILE SCHEMAS  (Phase 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class FileResponse(BaseModel):
+    file_id:       int
+    project_id:    int
+    uploader_id:   int
+    file_path:     str
+    original_name: Optional[str] = None
+    message:       Optional[str] = None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  GENERIC
 # ═════════════════════════════════════════════════════════════════════════════
 
 class MessageResponse(BaseModel):
-    """Generic success message"""
     message: str
