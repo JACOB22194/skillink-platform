@@ -4,3 +4,5 @@ services:
     container_name: skillink_ai_
     ports:
       - "8001:8000"
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
