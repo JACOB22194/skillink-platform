@@ -1,0 +1,1 @@
+\b(i\s+am\s+looking\s+for|we\s+are\s+looking\s+for|i\s+need\s+(a|an|someone|an\s+experienced)|we\s+need\s+(a|an|someone)|looking\s+for\s+a\s+freelancer|urgent\s+project|asap|please\s+note|feel\s+free\s+to|reach\s+out|get\s+back\s+to\s+(me|us)|long\s+term\s+opportunity|budget\s+is\s+flexible|this\s+is\s+(a|an|an\s+urgent)|hi[\s,!.]*|hello[\s,!.]*|dear\s+(sir|madam|freelancer))\b

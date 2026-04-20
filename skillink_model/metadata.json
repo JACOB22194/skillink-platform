@@ -1,0 +1,12 @@
+{
+  "model_type": "LogisticRegression",
+  "sklearn_version": "1.6.1",
+  "num_sub_categories": 47,
+  "num_categories": 9,
+  "tfidf_vocab_size": 5000,
+  "test_accuracy": 0.7255,
+  "test_f1_macro": 0.6716,
+  "test_f1_weighted": 0.7253,
+  "train_samples": 12092,
+  "inference_latency_ms": 0.45
+}
