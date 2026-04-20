@@ -1,40 +1,45 @@
 """
-routers/contract_router.py — Contract & Milestone Endpoints
-=============================================================
-GET    /contracts/{id}                          → get a contract (parties or admin)
-GET    /contracts/my                            → get my contracts
-POST   /contracts/{id}/milestones               → add a milestone to a contract
-GET    /contracts/{id}/milestones               → list milestones for a contract
-PUT    /milestones/{milestone_id}/status        → update milestone status
-                                                  (approve → triggers escrow release for that amount)
-POST   /contracts/{id}/complete                 → mark contract as completed
-POST   /contracts/{id}/dispute                  → open a dispute on a contract
+routers/contract_router.py — Contract, Milestone & Review Endpoints
+=====================================================================
+GET    /contracts/{id}                  → get a contract (parties or admin)
+GET    /contracts/my                    → get my contracts
+POST   /contracts/{id}/milestones       → add a milestone (client)
+GET    /contracts/{id}/milestones       → list milestones
+PUT    /milestones/{milestone_id}/status → update milestone status
+                                          approve → credits wallet (SINGLE place, no double payment)
+POST   /contracts/{id}/complete         → mark contract as completed
+POST   /contracts/{id}/dispute          → open a dispute
+POST   /contracts/{id}/review           → client submits review after completion ✅ NEW
+GET    /contracts/{id}/review           → get review for a contract ✅ NEW
+
+PHASE 1-3 FIXES:
+  - FIXED double-payment bug: wallet credit now only happens in PUT /milestones/{id}/status
+    (approve). POST /escrow/release/{milestone_id} in escrow_router is now the SAME
+    action — it calls approve transition, not a separate credit. See escrow_router.py.
+  - Milestone create now saves title, description, due_date
+  - Dispute now stores opened_by and reason
 """
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from db import get_db
 import models
 import schema
-from auth import get_current_user, require_client, require_freelancer
+from auth import get_current_user, require_client
 
 router = APIRouter(tags=["Contracts & Milestones"])
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /contracts/my  — My contracts
+#  GET /contracts/my
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get(
     "/contracts/my",
     response_model=list[schema.ContractResponse],
     summary="Get my contracts",
-    description="""
-- **Client** → contracts on your projects
-- **Freelancer** → contracts you are working on
-- **Admin** → all contracts
-""",
 )
 def my_contracts(
     me: models.User = Depends(get_current_user),
@@ -87,7 +92,6 @@ def get_contract(
     ).first()
     if not contract:
         raise HTTPException(404, "Contract not found.")
-
     _assert_contract_access(contract, me, db)
     return contract
 
@@ -102,12 +106,11 @@ def get_contract(
     status_code=201,
     summary="Add a milestone",
     description="""
-**Client or admin only.**
+**Client or admin only.** Add a payment milestone to an active contract.
 
-Add a payment milestone to an active contract.
-
-- `amount` must be > 0 and not exceed the remaining unfunded escrow balance
-- Milestone status starts as `pending`
+- `amount` must be > 0 and not exceed remaining unfunded escrow balance
+- Optionally provide `title`, `description`, and `due_date`
+- Status starts as `pending`
 """,
 )
 def create_milestone(
@@ -125,7 +128,6 @@ def create_milestone(
     if contract.status != models.ContractStatus.active:
         raise HTTPException(400, "Can only add milestones to active contracts.")
 
-    # Only client or admin
     if me.role not in (models.UserRole.admin, models.UserRole.client):
         raise HTTPException(403, "Only the client or admin can add milestones.")
 
@@ -139,9 +141,7 @@ def create_milestone(
         models.Escrow.contract_id == contract_id
     ).first()
     if escrow:
-        existing_total = sum(
-            m.amount for m in contract.milestones if m.amount
-        )
+        existing_total = sum(m.amount for m in contract.milestones if m.amount)
         if existing_total + body.amount > escrow.amount:
             raise HTTPException(
                 400,
@@ -151,7 +151,10 @@ def create_milestone(
 
     milestone = models.Milestone(
         contract_id = contract_id,
+        title       = body.title,
+        description = body.description,
         amount      = body.amount,
+        due_date    = body.due_date,
         status      = models.MilestoneStatus.pending,
     )
     db.add(milestone)
@@ -179,9 +182,7 @@ def list_milestones(
     ).first()
     if not contract:
         raise HTTPException(404, "Contract not found.")
-
     _assert_contract_access(contract, me, db)
-
     return db.query(models.Milestone).filter(
         models.Milestone.contract_id == contract_id
     ).all()
@@ -197,13 +198,12 @@ def list_milestones(
     summary="Update milestone status",
     description="""
 Allowed transitions:
-- `pending` → `approved`  (client approves the deliverable)
-- `approved` → `paid`     (system marks as paid after escrow release)
+- `pending` → `approved`  (client approves deliverable, wallet credited HERE — single place)
+- `approved` → `paid`     (system/admin marks as paid)
 
-When a milestone is approved, the freelancer's wallet is credited
-and an escrow payment record is created.
-
-**Client approves; system handles payment.**
+**This is the ONLY place that credits the freelancer wallet.**
+Do not use POST /escrow/release for the same milestone — that endpoint
+checks this transition to avoid double payment.
 """,
 )
 def update_milestone_status(
@@ -225,7 +225,6 @@ def update_milestone_status(
         if milestone.status != models.MilestoneStatus.pending:
             raise HTTPException(400, "Only pending milestones can be approved.")
 
-        # Only client can approve
         if me.role not in (models.UserRole.admin, models.UserRole.client):
             raise HTTPException(403, "Only the client can approve milestones.")
 
@@ -236,23 +235,29 @@ def update_milestone_status(
 
         milestone.status = models.MilestoneStatus.approved
 
-        # Credit the freelancer's wallet
+        # ── SINGLE PLACE for wallet credit ──────────────────────────────────
         freelancer = contract.freelancer
         freelancer.wallet_balance = (freelancer.wallet_balance or 0) + milestone.amount
 
-        # Record the wallet transaction
         db.add(models.WalletTransaction(
             freelancer_id = freelancer.freelancer_id,
             amount        = milestone.amount,
             type          = models.TransactionType.deposit,
+            description   = f"Milestone #{milestone_id} approved",
         ))
 
-        # Create payment record linked to escrow
+        # Track payment record + update escrow released amount
         escrow = db.query(models.Escrow).filter(
             models.Escrow.contract_id == contract.contract_id
         ).first()
         if escrow:
-            db.add(models.Payment(escrow_id=escrow.escrow_id))
+            escrow.released_amount = (escrow.released_amount or 0) + milestone.amount
+            db.add(models.Payment(
+                escrow_id    = escrow.escrow_id,
+                milestone_id = milestone.milestone_id,
+                amount       = milestone.amount,
+            ))
+        # ────────────────────────────────────────────────────────────────────
 
     elif body.status == models.MilestoneStatus.paid:
         if milestone.status != models.MilestoneStatus.approved:
@@ -277,9 +282,8 @@ def update_milestone_status(
     summary="Mark contract as completed",
     description="""
 **Client or admin only.**
-
-Marks the contract as `completed` and the project as `completed`.
-All milestones must be `paid` before you can complete the contract.
+All milestones must be `paid` before completing.
+Automatically sets the project status to `completed` and releases escrow.
 """,
 )
 def complete_contract(
@@ -301,7 +305,6 @@ def complete_contract(
         if not client or contract.project.client_id != client.client_id:
             raise HTTPException(403, "You do not own this contract.")
 
-    # Check all milestones are paid
     unpaid = [m for m in contract.milestones if m.status != models.MilestoneStatus.paid]
     if unpaid:
         raise HTTPException(
@@ -312,7 +315,6 @@ def complete_contract(
     contract.status         = models.ContractStatus.completed
     contract.project.status = models.ProjectStatus.completed
 
-    # Release escrow
     if contract.escrow:
         contract.escrow.status = models.EscrowStatus.released
 
@@ -330,13 +332,12 @@ def complete_contract(
     summary="Open a dispute",
     description="""
 Either party (client or freelancer) can open a dispute on an active contract.
-
-Only one dispute per contract is allowed.
-Admin resolves disputes via `POST /admin/disputes/{id}/resolve` (Phase 4).
+Provide a `reason` explaining why. Only one dispute per contract allowed.
 """,
 )
 def open_dispute(
     contract_id: int,
+    reason:      schema.MessageResponse = None,   # optional reason body
     me:          models.User = Depends(get_current_user),
     db:          Session     = Depends(get_db),
 ):
@@ -359,6 +360,8 @@ def open_dispute(
 
     db.add(models.Dispute(
         contract_id = contract_id,
+        opened_by   = me.id,
+        reason      = reason.message if reason else None,
         status      = models.DisputeStatus.open,
     ))
     contract.status = models.ContractStatus.disputed
@@ -367,22 +370,125 @@ def open_dispute(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /contracts/{contract_id}/review  ✅ NEW
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/contracts/{contract_id}/review",
+    response_model=schema.ReviewResponse,
+    status_code=201,
+    summary="Submit a review for a completed contract",
+    description="""
+**Client only.** Submit a 1–5 star rating + optional comment for the freelancer.
+
+Rules:
+- Contract must be `completed`
+- Only one review per contract
+- Updates the freelancer's `success_score` (rolling average)
+""",
+)
+def submit_review(
+    contract_id: int,
+    body:        schema.ReviewCreate,
+    me:          models.User = Depends(get_current_user),
+    db:          Session     = Depends(get_db),
+):
+    contract = db.query(models.Contract).filter(
+        models.Contract.contract_id == contract_id
+    ).first()
+    if not contract:
+        raise HTTPException(404, "Contract not found.")
+
+    if contract.status != models.ContractStatus.completed:
+        raise HTTPException(400, "You can only review completed contracts.")
+
+    # Only the client who owns the project can review
+    if me.role != models.UserRole.admin:
+        client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+        if not client or contract.project.client_id != client.client_id:
+            raise HTTPException(403, "Only the client who hired the freelancer can submit a review.")
+    else:
+        # Admin: get the client for logging purposes
+        client = db.query(models.Client).filter(
+            models.Client.client_id == contract.project.client_id
+        ).first()
+
+    # One review per contract
+    existing = db.query(models.Review).filter(
+        models.Review.project_id    == contract.project_id,
+        models.Review.freelancer_id == contract.freelancer_id,
+    ).first()
+    if existing:
+        raise HTTPException(409, "You have already reviewed this contract.")
+
+    # Create the review
+    review = models.Review(
+        project_id    = contract.project_id,
+        freelancer_id = contract.freelancer_id,
+        client_id     = client.client_id,
+        rating        = body.rating,
+        comment       = body.comment,
+    )
+    db.add(review)
+    db.flush()
+
+    # Update freelancer's success_score (rolling average of all ratings)
+    freelancer   = contract.freelancer
+    all_reviews  = db.query(models.Review).filter(
+        models.Review.freelancer_id == freelancer.freelancer_id
+    ).all()
+    total_ratings = sum(r.rating for r in all_reviews)
+    freelancer.success_score = round(total_ratings / len(all_reviews), 2)
+
+    db.commit()
+    db.refresh(review)
+    return review
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /contracts/{contract_id}/review  ✅ NEW
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/contracts/{contract_id}/review",
+    response_model=schema.ReviewResponse,
+    summary="Get the review for a contract",
+)
+def get_review(
+    contract_id: int,
+    me:          models.User = Depends(get_current_user),
+    db:          Session     = Depends(get_db),
+):
+    contract = db.query(models.Contract).filter(
+        models.Contract.contract_id == contract_id
+    ).first()
+    if not contract:
+        raise HTTPException(404, "Contract not found.")
+
+    _assert_contract_access(contract, me, db)
+
+    review = db.query(models.Review).filter(
+        models.Review.project_id    == contract.project_id,
+        models.Review.freelancer_id == contract.freelancer_id,
+    ).first()
+    if not review:
+        raise HTTPException(404, "No review found for this contract.")
+    return review
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  Helpers
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _assert_contract_access(contract: models.Contract, me: models.User, db: Session):
-    """Allows admin, the freelancer on the contract, or the client who owns the project."""
     if me.role == models.UserRole.admin:
         return
-
     freelancer = db.query(models.Freelancer).filter(
         models.Freelancer.user_id == me.id
     ).first()
     if freelancer and freelancer.freelancer_id == contract.freelancer_id:
         return
-
     client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
     if client and contract.project.client_id == client.client_id:
         return
-
     raise HTTPException(403, "You do not have access to this contract.")

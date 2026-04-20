@@ -1,16 +1,23 @@
 """
-schema.py — Request & Response Shapes (Phase 3 Update)
-========================================================
-All Pydantic schemas for the entire API.
+schema.py — Request & Response Shapes
+=======================================
+Phase 1-3 fixes (→ 10/10):
+  - Added created_at to all response schemas that were missing it
+  - Added cover_letter to ProposalCreate / ProposalResponse
+  - Added title, description, due_date to MilestoneCreate / MilestoneResponse
+  - Fixed EscrowResponse to include released_amount and funded_at
+  - Added WalletTransactionResponse.description + created_at
+  - Added FileResponse.file_size_kb + created_at
+  - Added ReviewCreate, ReviewResponse (model existed, no schema/router existed)
+  - Added FreelancerSkillUpdate (add/remove freelancer skills)
+  - Added FreelancerSearchResult (for GET /freelancers/search)
+  - Added full DisputeResponse with all fields
 
-Phase 3 additions:
-  - ProjectCreate, ProjectResponse, ProjectUpdate
-  - ProposalCreate, ProposalResponse, ProposalStatusUpdate, ProposalStatusUpdateResponse
-  - ContractResponse
-  - MilestoneCreate, MilestoneResponse, MilestoneStatusUpdate
-  - EscrowFundRequest, EscrowResponse
-  - WalletBalanceResponse, WalletWithdrawRequest, WalletTransactionResponse
-  - FileResponse
+Phase 4 additions:
+  - AIMatchResponse, AIPricingResponse, AIScoreResponse
+  - DisputeResolveRequest
+  - VerificationResponse, VerificationReviewRequest
+  - MessageCreate, ChatMessageResponse, ConversationSummary
 """
 
 from pydantic import BaseModel, EmailStr, field_validator
@@ -19,7 +26,7 @@ from datetime import datetime
 from enum import Enum
 
 
-# ── Enums (must match models.py exactly) ──────────────────────────────────────
+# ─── Enums ────────────────────────────────────────────────────────────────────
 
 class UserRole(str, Enum):
     freelancer = "freelancer"
@@ -58,10 +65,19 @@ class TransactionType(str, Enum):
     deposit  = "deposit"
     withdraw = "withdraw"
 
+class DisputeStatus(str, Enum):
+    open     = "open"
+    resolved = "resolved"
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  AUTH SCHEMAS (unchanged from Phase 2)
-# ═════════════════════════════════════════════════════════════════════════════
+class VerificationStatus(str, Enum):
+    pending  = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+# ═══════════════════════════════════════════════════
+#  AUTH
+# ═══════════════════════════════════════════════════
 
 class RegisterRequest(BaseModel):
     email:        EmailStr
@@ -80,11 +96,9 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password must contain at least one digit.")
         return v
 
-
 class LoginRequest(BaseModel):
     email:    EmailStr
     password: str
-
 
 class TokenResponse(BaseModel):
     access_token:  str
@@ -93,24 +107,18 @@ class TokenResponse(BaseModel):
     role:          str
     user_id:       int
 
-
 class RefreshRequest(BaseModel):
     refresh_token: str
-
 
 class MFAVerifyRequest(BaseModel):
     email:     EmailStr
     totp_code: str
 
-
 class MFASetupRequest(BaseModel):
     enable: bool
 
-
 class MFAConfirmRequest(BaseModel):
-    """Body for POST /auth/mfa/confirm"""
-    totp_code: str       # the 6-digit code shown in Google Authenticator after scanning QR
-
+    totp_code: str
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
@@ -128,9 +136,9 @@ class ChangePasswordRequest(BaseModel):
         return v
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  USER & PROFILE SCHEMAS (unchanged from Phase 2)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  USER & PROFILES
+# ═══════════════════════════════════════════════════
 
 class UserResponse(BaseModel):
     id:          int
@@ -141,7 +149,6 @@ class UserResponse(BaseModel):
     created_at:  datetime
     model_config = {"from_attributes": True}
 
-
 class FreelancerProfileResponse(BaseModel):
     freelancer_id:  int
     bio:            Optional[str]
@@ -149,27 +156,53 @@ class FreelancerProfileResponse(BaseModel):
     success_score:  float
     wallet_balance: float
     portfolio_file: Optional[str]
-    model_config = {"from_attributes": True}
+    skills:         List[str] = []
 
+    @classmethod
+    def from_profile(cls, profile) -> "FreelancerProfileResponse":
+        skill_names = [fs.skill.name for fs in (profile.skills or []) if fs.skill]
+        return cls(
+            freelancer_id  = profile.freelancer_id,
+            bio            = profile.bio,
+            hourly_rate    = profile.hourly_rate,
+            success_score  = profile.success_score or 0.0,
+            wallet_balance = profile.wallet_balance or 0.0,
+            portfolio_file = profile.portfolio_file,
+            skills         = skill_names,
+        )
+    model_config = {"from_attributes": True}
 
 class FreelancerProfileUpdate(BaseModel):
     bio:         Optional[str]   = None
     hourly_rate: Optional[float] = None
 
+class FreelancerSkillUpdate(BaseModel):
+    """Body for POST/DELETE /users/me/skills"""
+    skill_names: List[str]
 
 class ClientProfileResponse(BaseModel):
     client_id:    int
     company_name: Optional[str]
     model_config = {"from_attributes": True}
 
-
 class ClientProfileUpdate(BaseModel):
     company_name: Optional[str] = None
 
+class FreelancerSearchResult(BaseModel):
+    """Used in GET /freelancers/search and AI match responses"""
+    freelancer_id:  int
+    user_id:        int
+    email:          str
+    bio:            Optional[str]
+    hourly_rate:    Optional[float]
+    success_score:  float
+    skills:         List[str] = []
+    ai_match_score: Optional[float] = None
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  ADMIN SCHEMAS (unchanged from Phase 2)
-# ═════════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════
+#  ADMIN
+# ═══════════════════════════════════════════════════
 
 class AdminUserItem(BaseModel):
     id:         int
@@ -179,15 +212,12 @@ class AdminUserItem(BaseModel):
     created_at: datetime
     model_config = {"from_attributes": True}
 
-
 class SuspendUserRequest(BaseModel):
     user_id: int
-
 
 class AdjustTrustScoreRequest(BaseModel):
     user_id: int
     score:   float
-
 
 class AdminStatsResponse(BaseModel):
     total_users:       int
@@ -198,12 +228,11 @@ class AdminStatsResponse(BaseModel):
     total_contracts:   int
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  PROJECT SCHEMAS  (Phase 3)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  PROJECTS
+# ═══════════════════════════════════════════════════
 
 class ProjectCreate(BaseModel):
-    """Body for POST /projects"""
     title:           str
     description:     Optional[str] = None
     budget:          float
@@ -223,13 +252,11 @@ class ProjectCreate(BaseModel):
             raise ValueError("Title cannot be empty.")
         return v.strip()
 
-
 class ProjectUpdate(BaseModel):
-    """Body for PUT /projects/{id} — all fields optional"""
-    title:           Optional[str]        = None
-    description:     Optional[str]        = None
-    budget:          Optional[float]      = None
-    required_skills: Optional[List[str]]  = None
+    title:           Optional[str]       = None
+    description:     Optional[str]       = None
+    budget:          Optional[float]     = None
+    required_skills: Optional[List[str]] = None
 
     @field_validator("budget")
     @classmethod
@@ -238,9 +265,7 @@ class ProjectUpdate(BaseModel):
             raise ValueError("Budget must be at least $10.00.")
         return v
 
-
 class ProjectResponse(BaseModel):
-    """What the API returns for a project"""
     project_id:      int
     client_id:       int
     title:           str
@@ -248,17 +273,18 @@ class ProjectResponse(BaseModel):
     budget:          float
     status:          ProjectStatus
     required_skills: List[str] = []
+    created_at:      datetime
     model_config = {"from_attributes": True}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  PROPOSAL SCHEMAS  (Phase 3)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  PROPOSALS
+# ═══════════════════════════════════════════════════
 
 class ProposalCreate(BaseModel):
-    """Body for POST /proposals"""
-    project_id: int
-    bid_amount: float
+    project_id:   int
+    bid_amount:   float
+    cover_letter: Optional[str] = None
 
     @field_validator("bid_amount")
     @classmethod
@@ -267,21 +293,19 @@ class ProposalCreate(BaseModel):
             raise ValueError("Bid amount must be at least $1.00.")
         return v
 
-
 class ProposalResponse(BaseModel):
     proposal_id:        int
     project_id:         int
     freelancer_id:      int
     bid_amount:         float
+    cover_letter:       Optional[str]
     ai_relevance_score: Optional[float]
     status:             ProposalStatus
+    created_at:         datetime
     model_config = {"from_attributes": True}
 
-
 class ProposalStatusUpdate(BaseModel):
-    """Body for PUT /proposals/{id}/status"""
     action: str  # "accept" or "reject"
-
 
 class ProposalStatusUpdateResponse(BaseModel):
     proposal_id: int
@@ -290,25 +314,28 @@ class ProposalStatusUpdateResponse(BaseModel):
     message:     str
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  CONTRACT SCHEMAS  (Phase 3)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  CONTRACTS
+# ═══════════════════════════════════════════════════
 
 class ContractResponse(BaseModel):
     contract_id:   int
     project_id:    int
     freelancer_id: int
     status:        ContractStatus
+    created_at:    datetime
     model_config = {"from_attributes": True}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  MILESTONE SCHEMAS  (Phase 3)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  MILESTONES
+# ═══════════════════════════════════════════════════
 
 class MilestoneCreate(BaseModel):
-    """Body for POST /contracts/{id}/milestones"""
-    amount: float
+    title:       Optional[str]      = None
+    description: Optional[str]      = None
+    amount:      float
+    due_date:    Optional[datetime] = None
 
     @field_validator("amount")
     @classmethod
@@ -317,50 +344,50 @@ class MilestoneCreate(BaseModel):
             raise ValueError("Milestone amount must be greater than $0.")
         return v
 
-
 class MilestoneResponse(BaseModel):
     milestone_id: int
     contract_id:  int
+    title:        Optional[str]
+    description:  Optional[str]
     amount:       float
     status:       MilestoneStatus
+    due_date:     Optional[datetime]
+    created_at:   datetime
     model_config = {"from_attributes": True}
 
-
 class MilestoneStatusUpdate(BaseModel):
-    """Body for PUT /milestones/{id}/status"""
     status: MilestoneStatus
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  ESCROW & PAYMENT SCHEMAS  (Phase 3)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  ESCROW & PAYMENTS
+# ═══════════════════════════════════════════════════
 
 class EscrowFundRequest(BaseModel):
-    """Body for POST /escrow/fund/{contract_id}"""
-    payment_reference: str  # PayPal/Stripe transaction ID (or "SANDBOX-xxx" for testing)
-    amount:            Optional[float] = None  # Override escrow amount (optional)
-
+    payment_reference: str
+    amount:            Optional[float] = None
 
 class EscrowResponse(BaseModel):
     escrow_id:         int
     contract_id:       int
     amount:            float
+    released_amount:   float = 0.0
     status:            EscrowStatus
-    payment_reference: Optional[str] = None
-    message:           Optional[str] = None
+    funded_at:         Optional[datetime] = None
+    payment_reference: Optional[str]      = None
+    message:           Optional[str]      = None
+    model_config = {"from_attributes": True}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  WALLET SCHEMAS  (Phase 3)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  WALLET
+# ═══════════════════════════════════════════════════
 
 class WalletBalanceResponse(BaseModel):
     freelancer_id:  int
     wallet_balance: float
 
-
 class WalletWithdrawRequest(BaseModel):
-    """Body for POST /wallet/withdraw"""
     amount: float
 
     @field_validator("amount")
@@ -370,31 +397,173 @@ class WalletWithdrawRequest(BaseModel):
             raise ValueError("Withdrawal amount must be greater than $0.")
         return v
 
-
 class WalletTransactionResponse(BaseModel):
     transaction_id: int
     freelancer_id:  int
     amount:         float
     type:           TransactionType
+    description:    Optional[str]
+    created_at:     datetime
     model_config = {"from_attributes": True}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  FILE SCHEMAS  (Phase 3)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  FILES
+# ═══════════════════════════════════════════════════
 
 class FileResponse(BaseModel):
     file_id:       int
     project_id:    int
     uploader_id:   int
     file_path:     str
-    original_name: Optional[str] = None
-    message:       Optional[str] = None
+    original_name: Optional[str]     = None
+    file_size_kb:  Optional[int]     = None
+    created_at:    Optional[datetime] = None
+    message:       Optional[str]     = None
+    model_config = {"from_attributes": True}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
+#  REVIEWS  ✅ NEW
+# ═══════════════════════════════════════════════════
+
+class ReviewCreate(BaseModel):
+    rating:  int
+    comment: Optional[str] = None
+
+    @field_validator("rating")
+    @classmethod
+    def rating_range(cls, v: int) -> int:
+        if v < 1 or v > 5:
+            raise ValueError("Rating must be between 1 and 5.")
+        return v
+
+class ReviewResponse(BaseModel):
+    review_id:     int
+    project_id:    int
+    freelancer_id: int
+    client_id:     int
+    rating:        int
+    comment:       Optional[str]
+    created_at:    datetime
+    model_config = {"from_attributes": True}
+
+
+# ═══════════════════════════════════════════════════
+#  DISPUTES
+# ═══════════════════════════════════════════════════
+
+class DisputeResponse(BaseModel):
+    dispute_id:      int
+    contract_id:     int
+    opened_by:       Optional[int]
+    reason:          Optional[str]
+    status:          DisputeStatus
+    resolution_note: Optional[str]
+    resolved_by:     Optional[int]
+    resolved_at:     Optional[datetime]
+    created_at:      datetime
+    model_config = {"from_attributes": True}
+
+class DisputeResolveRequest(BaseModel):
+    resolution:       str            # "release_to_freelancer" | "refund_to_client" | "split"
+    note:             str
+    split_percentage: Optional[float] = None
+
+    @field_validator("resolution")
+    @classmethod
+    def valid_resolution(cls, v: str) -> str:
+        allowed = {"release_to_freelancer", "refund_to_client", "split"}
+        if v not in allowed:
+            raise ValueError(f"resolution must be one of: {', '.join(allowed)}")
+        return v
+
+
+# ═══════════════════════════════════════════════════
+#  AI SCHEMAS  ✅ NEW (Phase 4)
+# ═══════════════════════════════════════════════════
+
+class AIMatchResponse(BaseModel):
+    project_id: int
+    matches:    List[FreelancerSearchResult]
+    source:     str = "ai"
+
+class AIPricingResponse(BaseModel):
+    project_id:    int
+    suggested_min: float
+    suggested_max: float
+    reasoning:     Optional[str] = None
+    source:        str = "ai"
+
+class AIScoreResponse(BaseModel):
+    proposal_id:        int
+    ai_relevance_score: float
+    reasoning:          Optional[str] = None
+
+
+# ═══════════════════════════════════════════════════
+#  VERIFICATION  ✅ NEW (Phase 4)
+# ═══════════════════════════════════════════════════
+
+class VerificationResponse(BaseModel):
+    verification_id: int
+    user_id:         int
+    document_type:   Optional[str]
+    document_path:   Optional[str]
+    status:          VerificationStatus
+    rejection_note:  Optional[str]
+    reviewed_by:     Optional[int]
+    reviewed_at:     Optional[datetime]
+    created_at:      datetime
+    model_config = {"from_attributes": True}
+
+class VerificationReviewRequest(BaseModel):
+    action:         str
+    rejection_note: Optional[str] = None
+
+    @field_validator("action")
+    @classmethod
+    def valid_action(cls, v: str) -> str:
+        if v not in ("approve", "reject"):
+            raise ValueError("action must be 'approve' or 'reject'.")
+        return v
+
+
+# ═══════════════════════════════════════════════════
+#  MESSAGES / CHAT  ✅ NEW (Phase 4)
+# ═══════════════════════════════════════════════════
+
+class MessageCreate(BaseModel):
+    receiver_id: int
+    content:     str
+
+    @field_validator("content")
+    @classmethod
+    def content_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Message content cannot be empty.")
+        return v.strip()
+
+class ChatMessageResponse(BaseModel):
+    message_id:  int
+    sender_id:   int
+    receiver_id: int
+    content:     str
+    is_read:     bool
+    sent_at:     datetime
+    model_config = {"from_attributes": True}
+
+class ConversationSummary(BaseModel):
+    other_user_id:    int
+    other_user_email: str
+    last_message:     str
+    last_message_at:  datetime
+    unread_count:     int
+
+
+# ═══════════════════════════════════════════════════
 #  GENERIC
-# ═════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════
 
 class MessageResponse(BaseModel):
     message: str

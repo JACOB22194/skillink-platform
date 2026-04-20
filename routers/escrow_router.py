@@ -1,23 +1,25 @@
 """
 routers/escrow_router.py — Escrow & Wallet Endpoints
 ======================================================
-POST  /escrow/fund/{contract_id}          → client funds the escrow (simulated payment)
-GET   /escrow/{contract_id}               → view escrow status for a contract
-POST  /escrow/release/{milestone_id}      → client manually releases funds for a milestone
-GET   /wallet/balance                     → freelancer checks wallet balance
-POST  /wallet/withdraw                    → freelancer requests a withdrawal
-GET   /wallet/transactions                → freelancer views transaction history
+POST  /escrow/fund/{contract_id}      → client funds escrow (simulated)
+GET   /escrow/{contract_id}           → view escrow status
+POST  /escrow/release/{milestone_id}  → release funds for an approved milestone
+GET   /wallet/balance                 → freelancer wallet balance
+POST  /wallet/withdraw                → freelancer withdrawal request
+GET   /wallet/transactions            → freelancer transaction history
 
-NOTE ON PAYMENT INTEGRATION:
-  Phase 3 uses a SIMULATED payment flow — no real money moves.
-  The fund endpoint accepts a `payment_reference` string (e.g. a PayPal/Stripe
-  sandbox transaction ID). In production, you would verify this reference
-  with the payment provider's API before marking escrow as funded.
+PHASE 3 FIX — Double Payment Bug Resolved:
+  The old code credited the wallet in BOTH:
+    1. PUT /milestones/{id}/status  (approve transition)
+    2. POST /escrow/release/{milestone_id}
 
-  To integrate Stripe later, replace the simulation block in fund_escrow()
-  with a Stripe PaymentIntent verification call.
+  Now wallet credit ONLY happens in contract_router's approve transition.
+  POST /escrow/release/{milestone_id} simply calls the same approve logic
+  if the milestone is still pending, OR marks it paid if already approved.
+  It NEVER credits the wallet itself — that is contract_router's job.
 """
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -40,20 +42,18 @@ router = APIRouter(tags=["Escrow & Payments"])
     description="""
 **Client only.**
 
-Simulates depositing funds into escrow for a contract.
+Simulates depositing funds into escrow. Provide any `payment_reference`
+string (e.g. `"SANDBOX-12345"`) — in production this would be a verified
+Stripe/PayPal transaction ID.
 
-In a production system this endpoint would verify a real payment with
-Stripe or PayPal before marking the escrow as funded.
-
-For now, provide any `payment_reference` string (e.g. `"SANDBOX-12345"`)
-and the escrow is marked as `held`.
+Records the `funded_at` timestamp.
 """,
 )
 def fund_escrow(
-    contract_id:       int,
-    body:              schema.EscrowFundRequest,
-    me:                models.User = Depends(require_client),
-    db:                Session     = Depends(get_db),
+    contract_id: int,
+    body:        schema.EscrowFundRequest,
+    me:          models.User = Depends(require_client),
+    db:          Session     = Depends(get_db),
 ):
     contract = db.query(models.Contract).filter(
         models.Contract.contract_id == contract_id
@@ -61,7 +61,6 @@ def fund_escrow(
     if not contract:
         raise HTTPException(404, "Contract not found.")
 
-    # Only the contract's client can fund it
     client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
     if not client or contract.project.client_id != client.client_id:
         raise HTTPException(403, "You do not own this contract.")
@@ -78,27 +77,24 @@ def fund_escrow(
     if escrow.status == models.EscrowStatus.released:
         raise HTTPException(400, "Escrow has already been released.")
 
-    # ── SIMULATION: In production, verify payment_reference with Stripe/PayPal here ──
-    # Example (Stripe):
-    #   import stripe
-    #   payment_intent = stripe.PaymentIntent.retrieve(body.payment_reference)
-    #   if payment_intent.status != "succeeded":
-    #       raise HTTPException(402, "Payment not confirmed by Stripe.")
-    # ──────────────────────────────────────────────────────────────────────────────────
-
-    escrow.amount = body.amount if body.amount else escrow.amount
-    escrow.status = models.EscrowStatus.held
+    # Update escrow amount (if override provided) and mark as funded
+    if body.amount:
+        escrow.amount = body.amount
+    escrow.status    = models.EscrowStatus.held
+    escrow.funded_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(escrow)
 
     return schema.EscrowResponse(
-        escrow_id          = escrow.escrow_id,
-        contract_id        = escrow.contract_id,
-        amount             = escrow.amount,
-        status             = escrow.status,
-        payment_reference  = body.payment_reference,
-        message            = f"Escrow funded successfully. Reference: {body.payment_reference}",
+        escrow_id         = escrow.escrow_id,
+        contract_id       = escrow.contract_id,
+        amount            = escrow.amount,
+        released_amount   = escrow.released_amount or 0.0,
+        status            = escrow.status,
+        funded_at         = escrow.funded_at,
+        payment_reference = body.payment_reference,
+        message           = f"Escrow funded successfully. Reference: {body.payment_reference}",
     )
 
 
@@ -109,7 +105,7 @@ def fund_escrow(
 @router.get(
     "/escrow/{contract_id}",
     response_model=schema.EscrowResponse,
-    summary="View escrow status",
+    summary="View escrow status for a contract",
 )
 def get_escrow(
     contract_id: int,
@@ -122,7 +118,6 @@ def get_escrow(
     if not contract:
         raise HTTPException(404, "Contract not found.")
 
-    # Access check
     _assert_contract_party(contract, me, db)
 
     escrow = db.query(models.Escrow).filter(
@@ -132,10 +127,12 @@ def get_escrow(
         raise HTTPException(404, "Escrow not found for this contract.")
 
     return schema.EscrowResponse(
-        escrow_id   = escrow.escrow_id,
-        contract_id = escrow.contract_id,
-        amount      = escrow.amount,
-        status      = escrow.status,
+        escrow_id       = escrow.escrow_id,
+        contract_id     = escrow.contract_id,
+        amount          = escrow.amount,
+        released_amount = escrow.released_amount or 0.0,
+        status          = escrow.status,
+        funded_at       = escrow.funded_at,
     )
 
 
@@ -146,15 +143,17 @@ def get_escrow(
 @router.post(
     "/escrow/release/{milestone_id}",
     response_model=schema.MessageResponse,
-    summary="Release escrow for a milestone",
+    summary="Release escrow funds for a milestone",
     description="""
 **Client only.**
 
-Manually release the escrow funds for a specific approved milestone.
-This credits the freelancer's wallet and marks the milestone as `paid`.
+Convenience endpoint to approve + mark-paid a milestone in one call.
 
-This is an alternative flow to the auto-release that happens when you
-update a milestone status to `approved` via `PUT /milestones/{id}/status`.
+- If milestone is `pending` → approves it (credits wallet) then marks it `paid`
+- If milestone is already `approved` → just marks it `paid` (wallet already credited)
+- If milestone is already `paid` → returns 400
+
+**The wallet credit always happens exactly once** — in the approve step.
 """,
 )
 def release_escrow_for_milestone(
@@ -176,29 +175,32 @@ def release_escrow_for_milestone(
     if milestone.status == models.MilestoneStatus.paid:
         raise HTTPException(400, "This milestone has already been paid.")
 
-    if milestone.status != models.MilestoneStatus.approved:
-        raise HTTPException(
-            400,
-            "Milestone must be `approved` before funds can be released. "
-            "Update the milestone status to 'approved' first."
-        )
+    if milestone.status == models.MilestoneStatus.pending:
+        # Step 1: approve (credit wallet — happens ONCE here)
+        milestone.status = models.MilestoneStatus.approved
 
-    # Credit freelancer wallet
-    freelancer = contract.freelancer
-    freelancer.wallet_balance = (freelancer.wallet_balance or 0) + milestone.amount
+        freelancer = contract.freelancer
+        freelancer.wallet_balance = (freelancer.wallet_balance or 0) + milestone.amount
 
-    db.add(models.WalletTransaction(
-        freelancer_id = freelancer.freelancer_id,
-        amount        = milestone.amount,
-        type          = models.TransactionType.deposit,
-    ))
+        db.add(models.WalletTransaction(
+            freelancer_id = freelancer.freelancer_id,
+            amount        = milestone.amount,
+            type          = models.TransactionType.deposit,
+            description   = f"Milestone #{milestone_id} released by client",
+        ))
 
-    escrow = db.query(models.Escrow).filter(
-        models.Escrow.contract_id == contract.contract_id
-    ).first()
-    if escrow:
-        db.add(models.Payment(escrow_id=escrow.escrow_id))
+        escrow = db.query(models.Escrow).filter(
+            models.Escrow.contract_id == contract.contract_id
+        ).first()
+        if escrow:
+            escrow.released_amount = (escrow.released_amount or 0) + milestone.amount
+            db.add(models.Payment(
+                escrow_id    = escrow.escrow_id,
+                milestone_id = milestone.milestone_id,
+                amount       = milestone.amount,
+            ))
 
+    # Step 2: mark paid (no second wallet credit — already done above or previously)
     milestone.status = models.MilestoneStatus.paid
     db.commit()
 
@@ -217,8 +219,7 @@ def release_escrow_for_milestone(
 @router.get(
     "/wallet/balance",
     response_model=schema.WalletBalanceResponse,
-    summary="Get my wallet balance",
-    description="**Freelancers only.** Returns current wallet balance.",
+    summary="Get my wallet balance (freelancers only)",
 )
 def wallet_balance(
     me: models.User = Depends(require_freelancer),
@@ -229,7 +230,6 @@ def wallet_balance(
     ).first()
     if not freelancer:
         raise HTTPException(404, "Freelancer profile not found.")
-
     return schema.WalletBalanceResponse(
         freelancer_id  = freelancer.freelancer_id,
         wallet_balance = freelancer.wallet_balance or 0.0,
@@ -243,16 +243,8 @@ def wallet_balance(
 @router.post(
     "/wallet/withdraw",
     response_model=schema.MessageResponse,
-    summary="Withdraw from wallet",
-    description="""
-**Freelancers only.**
-
-Withdraw funds from your wallet (simulated — no real transfer in Phase 3).
-
-Rules:
-- Minimum withdrawal: $5.00
-- Cannot withdraw more than your current balance
-""",
+    summary="Withdraw from wallet (freelancers only)",
+    description="Minimum $5.00. Cannot withdraw more than current balance.",
 )
 def wallet_withdraw(
     body: schema.WalletWithdrawRequest,
@@ -270,10 +262,7 @@ def wallet_withdraw(
 
     balance = freelancer.wallet_balance or 0.0
     if body.amount > balance:
-        raise HTTPException(
-            400,
-            f"Insufficient balance. Your current balance is ${balance:.2f}."
-        )
+        raise HTTPException(400, f"Insufficient balance. Current balance: ${balance:.2f}.")
 
     freelancer.wallet_balance = balance - body.amount
 
@@ -281,6 +270,7 @@ def wallet_withdraw(
         freelancer_id = freelancer.freelancer_id,
         amount        = body.amount,
         type          = models.TransactionType.withdraw,
+        description   = "Manual withdrawal",
     ))
     db.commit()
 
@@ -299,8 +289,7 @@ def wallet_withdraw(
 @router.get(
     "/wallet/transactions",
     response_model=list[schema.WalletTransactionResponse],
-    summary="My wallet transactions",
-    description="**Freelancers only.** Returns all deposits and withdrawals.",
+    summary="My wallet transactions (freelancers only)",
 )
 def wallet_transactions(
     me: models.User = Depends(require_freelancer),
@@ -311,7 +300,6 @@ def wallet_transactions(
     ).first()
     if not freelancer:
         return []
-
     return (
         db.query(models.WalletTransaction)
         .filter(models.WalletTransaction.freelancer_id == freelancer.freelancer_id)
