@@ -16,6 +16,8 @@ interface ThemeColors {
 interface AnalysisResult {
   label: string;
   score: number;
+  category: string;
+  alternatives: { sub_category: string; confidence: number }[];
 }
 
 interface FreelancerMatch {
@@ -78,7 +80,7 @@ const PostProjectPage: React.FC = () => {
   const colors = getColors(darkMode);
 
   // Workflow states
-  const [step, setStep] = useState<"input" | "analyzing" | "pricing" | "matching">("input");
+  const [step, setStep] = useState<"input" | "pricing" | "matching">("input");
   const [description, setDescription] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
 
@@ -93,37 +95,45 @@ const PostProjectPage: React.FC = () => {
     e.target.style.borderColor = colors.border;
   };
 
-  const startAnalysis = async () => {
-    if (!description.trim()) return;
-    setStep("analyzing");
-
-    try {
-      // Call local AI service
-      const res = await fetch("http://localhost:8001/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: description })
-      });
-      
-      const data = await res.json();
-      if (data.status === "success" && data.result) {
-        const resultItem = Array.isArray(data.result) ? data.result[0] : data.result;
-        setAnalysisResult({
-          label: resultItem?.label || "Unclassified",
-          score: resultItem?.score || 0
-        });
-      } else {
-        throw new Error("Invalid format");
-      }
-    } catch (err) {
-      console.error(err);
-      // Fallback if AI server is down
-      setAnalysisResult({ label: "Software Engineering", score: 0.85 });
+  // Real-time classification effect
+  useEffect(() => {
+    if (description.trim().length < 15) {
+      setAnalysisResult(null);
+      return;
     }
 
-    setTimeout(() => {
-      setStep("pricing");
-    }, 1500);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("http://localhost:8001/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            title: "", 
+            description: description,
+            top_k: 1
+          })
+        });
+        
+        const data = await res.json();
+        if (data.sub_category) {
+          setAnalysisResult({
+            label: data.sub_category,
+            score: (data.confidence || 0) / 100,
+            category: data.category || "General",
+            alternatives: data.top_alternatives || []
+          });
+        }
+      } catch (err) {
+        console.error("AI Service Error:", err);
+      }
+    }, 300); // 300ms debounce prevents spam
+
+    return () => clearTimeout(timer);
+  }, [description]);
+
+  const goToPricing = () => {
+    if (!description.trim()) return;
+    setStep("pricing");
   };
 
   const proceedToMatching = () => {
@@ -198,9 +208,15 @@ const PostProjectPage: React.FC = () => {
                   boxSizing: "border-box"
                 }}
               />
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, visibility: analysisResult ? "visible" : "hidden", animation: "fadeIn 0.3s ease" }}>
+                  <span style={{ fontSize: 13, color: colors.subtext }}>Predicted Category:</span>
+                  <span style={{ background: colors.primarySoft, color: colors.primary, padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 500 }}>
+                    {analysisResult?.category} &rarr; {analysisResult?.label} ({analysisResult ? (analysisResult.score * 100).toFixed(1) : 0}%)
+                  </span>
+                </div>
                 <button 
-                  onClick={startAnalysis}
+                  onClick={goToPricing}
                   disabled={!description.trim()}
                   style={{
                     background: description.trim() ? colors.primary : colors.border,
@@ -214,24 +230,13 @@ const PostProjectPage: React.FC = () => {
                     transition: "opacity 0.2s",
                   }}
                 >
-                  Analyze Project
+                  Next Step
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 2: Analyzing */}
-          {step === "analyzing" && (
-            <div style={{ textAlign: "center", padding: "4rem 2rem", animation: "fadeIn 0.5s ease" }}>
-               <div style={{ color: colors.primary, marginBottom: "1.5rem", display: "flex", justifyContent: "center" }}>
-                 {SPINNER}
-               </div>
-               <h2 style={{ fontSize: 24, fontWeight: 500, marginBottom: "0.5rem" }}>Analyzing your requirements</h2>
-               <p style={{ color: colors.subtext, fontSize: 15 }}>Running through our BERT classification model...</p>
-            </div>
-          )}
-
-          {/* STEP 3: Classification & Pricing */}
+          {/* STEP 2: Classification & Pricing */}
           {step === "pricing" && (
             <div style={{ animation: "fadeIn 0.5s ease" }}>
               <div style={{ display: "inline-block", fontSize: 12, padding: "4px 12px", borderRadius: 100, marginBottom: "1.5rem", background: colors.primarySoft, color: colors.primary }}>
@@ -244,13 +249,30 @@ const PostProjectPage: React.FC = () => {
                 Based on your description, we have automatically tagged your project and generated a dynamic fair-price estimate.
               </p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1rem", marginBottom: "2.5rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
                 <div style={{ background: colors.bg, padding: "1.5rem", borderRadius: 12, border: `0.5px solid ${colors.border}` }}>
-                   <div style={{ fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Category</div>
-                   <div style={{ fontSize: 20, fontWeight: 500, color: colors.text }}>{analysisResult ? analysisResult.label : "Loading..."}</div>
+                   <div style={{ fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Parent Category</div>
+                   <div style={{ fontSize: 20, fontWeight: 500, color: colors.text }}>{analysisResult?.category || "Loading..."}</div>
+                </div>
+                <div style={{ background: colors.bg, padding: "1.5rem", borderRadius: 12, border: `0.5px solid ${colors.border}` }}>
+                   <div style={{ fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Predicted Skill</div>
+                   <div style={{ fontSize: 20, fontWeight: 500, color: colors.text }}>{analysisResult?.label || "Loading..."}</div>
                    <div style={{ fontSize: 12, color: colors.primary, marginTop: "0.5rem" }}>Confidence: {analysisResult ? (analysisResult.score * 100).toFixed(1) : 0}%</div>
                 </div>
               </div>
+
+              {analysisResult?.alternatives && analysisResult.alternatives.length > 0 && (
+                <div style={{ marginBottom: "2.5rem" }}>
+                  <div style={{ fontSize: 13, color: colors.subtext, marginBottom: "0.75rem", fontWeight: 500 }}>Alternative Predictions</div>
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                    {analysisResult.alternatives.map((alt, i) => (
+                      <div key={i} style={{ border: `1px solid ${colors.border}`, display: "inline-flex", alignItems: "center", padding: "6px 12px", borderRadius: 100, fontSize: 13, background: colors.bg, color: colors.text }}>
+                        {alt.sub_category} <span style={{ color: colors.subtext, marginLeft: 6 }}>{alt.confidence.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <button 
