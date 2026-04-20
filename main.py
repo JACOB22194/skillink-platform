@@ -1,9 +1,18 @@
 """
 main.py — Application Entry Point
 ====================================
-Phase 4 Update:
-  - Registered: phase4_router (AI, disputes, verification, messaging)
-  - Registered: freelancer_router (search endpoint from user_router)
+Phase 5 Update:
+  - Registered: messaging_router  (REST messaging + WebSocket /ws/chat)
+  - Registered: notification_router (GET/PATCH/DELETE /notifications)
+  - Removed: messaging section from ai_router (now in messaging_router)
+  - notify() integrated throughout: proposals, contracts, disputes, verification
+
+ARCHITECTURE SUMMARY:
+  notification_service.py   — central notify() function + WebSocket manager singleton
+  routers/messaging_router.py   — /messages/* REST + WS /ws/chat
+  routers/notification_router.py — /notifications/* REST
+
+WebSocket endpoint: WS /ws/chat?token=<access_token>
 """
 
 import logging
@@ -18,16 +27,18 @@ from sqlalchemy.exc import OperationalError
 
 from db import engine, SessionLocal
 import models
-from routers.auth_router     import router as auth_router
-from routers.user_router     import router as user_router
-from routers.user_router     import freelancer_router
-from routers.admin_router    import router as admin_router
-from routers.project_router  import router as project_router
-from routers.proposal_router import router as proposal_router
-from routers.contract_router import router as contract_router
-from routers.escrow_router   import router as escrow_router
-from routers.file_router     import router as file_router
-from routers.ai_router       import router as phase4_router
+from routers.auth_router        import router as auth_router
+from routers.user_router        import router as user_router
+from routers.user_router        import freelancer_router
+from routers.admin_router       import router as admin_router
+from routers.project_router     import router as project_router
+from routers.proposal_router    import router as proposal_router
+from routers.contract_router    import router as contract_router
+from routers.escrow_router      import router as escrow_router
+from routers.file_router        import router as file_router
+from routers.ai_router          import router as ai_router
+from routers.messaging_router   import router as messaging_router
+from routers.notification_router import router as notification_router
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -57,11 +68,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     lifespan    = lifespan,
     title       = "SkillLink API",
-    version     = "3.0.0",
+    version     = "4.0.0",
     description = """
 ## SkillLink — AI-Powered Freelance Platform
 
-### Phase 4: AI Integration, Disputes, Verification & Messaging
+### Phase 5: Messaging, WebSocket Chat & Notifications
 
 **Authentication**
 - `POST /auth/register` — Create account
@@ -80,15 +91,15 @@ app = FastAPI(
 - `PUT /projects/{id}` — Edit project *(owner)*
 - `DELETE /projects/{id}` — Delete project *(owner/admin)*
 
-**AI Features** ✅ NEW
-- `GET /projects/{id}/ai-match` — AI-ranked freelancers for a project
-- `POST /projects/{id}/ai-pricing` — AI-suggested budget range
-- `POST /proposals/{id}/score` — AI relevance score for a proposal
+**AI Features**
+- `GET /projects/{id}/ai-match` — AI-ranked freelancers
+- `POST /projects/{id}/ai-pricing` — AI-suggested budget
+- `POST /proposals/{id}/score` — AI relevance score
 
 **Proposals**
 - `POST /proposals` — Submit proposal *(freelancer)*
 - `GET /proposals/project/{id}` — Proposals for a project *(owner)*
-- `GET /proposals/my` — My submitted proposals *(freelancer)*
+- `GET /proposals/my` — My proposals *(freelancer)*
 - `PUT /proposals/{id}/status` — Accept or reject *(client)*
 - `DELETE /proposals/{id}` — Withdraw *(freelancer)*
 
@@ -100,8 +111,8 @@ app = FastAPI(
 - `PUT /milestones/{id}/status` — Approve/pay milestone
 - `POST /contracts/{id}/complete` — Complete contract *(client)*
 - `POST /contracts/{id}/dispute` — Open dispute
-- `POST /contracts/{id}/review` — Submit review ✅ NEW
-- `GET /contracts/{id}/review` — Get review ✅ NEW
+- `POST /contracts/{id}/review` — Submit review
+- `GET /contracts/{id}/review` — Get review
 
 **Escrow & Wallet**
 - `POST /escrow/fund/{contract_id}` — Fund escrow *(client)*
@@ -119,30 +130,43 @@ app = FastAPI(
 
 **Users & Profiles**
 - `GET /users/me` — My account info
-- `GET /users/me/profile` — My profile (with skills)
+- `GET /users/me/profile` — My profile
 - `PUT /users/me/profile` — Edit profile
 - `POST /users/me/portfolio` — Upload portfolio *(freelancer)*
-- `POST /users/me/skills` — Add skills ✅ NEW
-- `DELETE /users/me/skills` — Remove skills ✅ NEW
-- `GET /freelancers/search` — Search freelancers ✅ NEW
+- `POST /users/me/skills` — Add skills
+- `DELETE /users/me/skills` — Remove skills
+- `GET /freelancers/search` — Search freelancers
 - `GET /users/{id}` — View any user
 
-**Disputes** ✅ NEW
+**Disputes**
 - `GET /admin/disputes` — List all disputes
 - `GET /admin/disputes/{id}` — Get one dispute
 - `POST /admin/disputes/{id}/resolve` — Resolve dispute
 
-**Verification** ✅ NEW
+**Verification**
 - `POST /verification/submit` — Submit identity document
 - `GET /verification/status` — My verification status
 - `GET /admin/verification` — All verifications *(admin)*
 - `PATCH /admin/verification/{id}` — Approve/reject *(admin)*
 
-**Messaging** ✅ NEW
+**Messaging ✅ Phase 5**
 - `POST /messages` — Send a message
 - `GET /messages/inbox` — Inbox (grouped by partner)
+- `GET /messages/unread-count` — Unread message count
 - `GET /messages/{user_id}` — Full conversation
 - `PATCH /messages/{user_id}/read` — Mark as read
+- `DELETE /messages/{message_id}` — Delete a message
+
+**WebSocket ✅ Phase 5**
+- `WS /ws/chat?token=<access_token>` — Real-time bidirectional chat
+
+**Notifications ✅ Phase 5**
+- `GET /notifications` — My notifications
+- `GET /notifications/unread-count` — Unread badge count
+- `PATCH /notifications/read` — Mark specific IDs as read
+- `PATCH /notifications/read-all` — Mark all as read
+- `DELETE /notifications/{id}` — Delete one notification
+- `DELETE /notifications` — Clear all my notifications
 
 **Admin**
 - `GET /admin/stats` — Platform statistics
@@ -156,13 +180,21 @@ app = FastAPI(
 
 ---
 ### Authenticate: Register → Login → copy `access_token` → click **Authorize** → paste token
+
+### WebSocket Testing
+Use any WS client (e.g. [websocat](https://github.com/vi/websocat)):
+```
+websocat "ws://localhost:8000/ws/chat?token=YOUR_ACCESS_TOKEN"
+{"type": "ping"}
+{"type": "chat_message", "payload": {"receiver_id": 2, "content": "Hello!"}}
+```
 """,
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = ["*"],   # In production, specify your frontend URL
+    allow_origins     = ["*"],   # In production: specify your frontend URL
     allow_credentials = True,
     allow_methods     = ["*"],
     allow_headers     = ["*"],
@@ -174,14 +206,16 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(user_router)
-app.include_router(freelancer_router)    # GET /freelancers/search
+app.include_router(freelancer_router)       # GET /freelancers/search
 app.include_router(admin_router)
 app.include_router(project_router)
 app.include_router(proposal_router)
 app.include_router(contract_router)
 app.include_router(escrow_router)
 app.include_router(file_router)
-app.include_router(phase4_router)        # Phase 4: AI, disputes, verification, messaging
+app.include_router(ai_router)               # Phase 4: AI, disputes, verification
+app.include_router(messaging_router)        # Phase 5: REST messaging + WS /ws/chat
+app.include_router(notification_router)     # Phase 5: /notifications/*
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -190,13 +224,33 @@ def root():
     return {
         "message": "SkillLink API is running!",
         "docs":    "Visit http://localhost:8000/docs to test the API",
-        "version": "3.0.0",
-        "phase":   "Phase 4 — AI Integration, Disputes, Verification & Messaging",
+        "version": "4.0.0",
+        "phase":   "Phase 5 — Messaging, WebSocket Chat & Notifications",
     }
 
 @app.get("/health", tags=["Health"])
 def health():
     return {"status": "ok"}
+
+@app.get("/health/detailed", tags=["Health"])
+def health_detailed():
+    """Checks DB connection and reports online WebSocket users."""
+    from notification_service import ws_manager
+    try:
+        db            = SessionLocal()
+        user_count    = db.query(models.User).count()
+        project_count = db.query(models.Project).count()
+        notif_count   = db.query(models.Notification).count()
+        db.close()
+        return {
+            "status":              "✅ Database connection successful",
+            "total_users":         user_count,
+            "total_projects":      project_count,
+            "total_notifications": notif_count,
+            "ws_online_users":     len(ws_manager.online_user_ids),
+        }
+    except Exception as e:
+        return {"status": "❌ Database connection failed", "error": str(e)}
 
 @app.get("/test-db", tags=["Health"])
 def test_database():

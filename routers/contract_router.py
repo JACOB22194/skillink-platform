@@ -1,23 +1,25 @@
 """
 routers/contract_router.py — Contract, Milestone & Review Endpoints
 =====================================================================
-GET    /contracts/{id}                  → get a contract (parties or admin)
-GET    /contracts/my                    → get my contracts
-POST   /contracts/{id}/milestones       → add a milestone (client)
-GET    /contracts/{id}/milestones       → list milestones
+GET    /contracts/{id}                   → get a contract (parties or admin)
+GET    /contracts/my                     → get my contracts
+POST   /contracts/{id}/milestones        → add a milestone (client)
+GET    /contracts/{id}/milestones        → list milestones
 PUT    /milestones/{milestone_id}/status → update milestone status
-                                          approve → credits wallet (SINGLE place, no double payment)
-POST   /contracts/{id}/complete         → mark contract as completed
-POST   /contracts/{id}/dispute          → open a dispute
-POST   /contracts/{id}/review           → client submits review after completion ✅ NEW
-GET    /contracts/{id}/review           → get review for a contract ✅ NEW
+                                           approve → credits wallet (SINGLE place, no double payment)
+POST   /contracts/{id}/complete          → mark contract as completed
+POST   /contracts/{id}/dispute           → open a dispute
+POST   /contracts/{id}/review            → client submits review after completion
+GET    /contracts/{id}/review            → get review for a contract
 
 PHASE 1-3 FIXES:
-  - FIXED double-payment bug: wallet credit now only happens in PUT /milestones/{id}/status
-    (approve). POST /escrow/release/{milestone_id} in escrow_router is now the SAME
-    action — it calls approve transition, not a separate credit. See escrow_router.py.
-  - Milestone create now saves title, description, due_date
-  - Dispute now stores opened_by and reason
+  - FIXED double-payment bug: wallet credit only in PUT /milestones/{id}/status approve
+  - Milestone create saves title, description, due_date
+  - Dispute stores opened_by and reason
+
+PHASE 5:
+  - notify() called for: contract creation, milestone approval/payment,
+    contract completion, dispute opening, review submitted
 """
 
 from datetime import datetime, timezone
@@ -28,6 +30,7 @@ from db import get_db
 import models
 import schema
 from auth import get_current_user, require_client
+from services.notification_service import notify
 
 router = APIRouter(tags=["Contracts & Milestones"])
 
@@ -107,10 +110,8 @@ def get_contract(
     summary="Add a milestone",
     description="""
 **Client or admin only.** Add a payment milestone to an active contract.
-
 - `amount` must be > 0 and not exceed remaining unfunded escrow balance
 - Optionally provide `title`, `description`, and `due_date`
-- Status starts as `pending`
 """,
 )
 def create_milestone(
@@ -136,7 +137,6 @@ def create_milestone(
         if not client or contract.project.client_id != client.client_id:
             raise HTTPException(403, "You do not own this contract.")
 
-    # Validate total milestones don't exceed escrow amount
     escrow = db.query(models.Escrow).filter(
         models.Escrow.contract_id == contract_id
     ).first()
@@ -160,6 +160,17 @@ def create_milestone(
     db.add(milestone)
     db.commit()
     db.refresh(milestone)
+
+    # Notify the freelancer about new milestone
+    notify(
+        db        = db,
+        user_id   = contract.freelancer.user_id,
+        type      = models.NotificationType.milestone,
+        title     = f"New milestone added to contract #{contract_id}",
+        body      = f"'{body.title or 'Milestone'}' — ${body.amount:.2f}",
+        entity_id = contract_id,
+    )
+
     return milestone
 
 
@@ -198,12 +209,10 @@ def list_milestones(
     summary="Update milestone status",
     description="""
 Allowed transitions:
-- `pending` → `approved`  (client approves deliverable, wallet credited HERE — single place)
+- `pending` → `approved`  (client approves deliverable — wallet credited HERE, single place)
 - `approved` → `paid`     (system/admin marks as paid)
 
 **This is the ONLY place that credits the freelancer wallet.**
-Do not use POST /escrow/release for the same milestone — that endpoint
-checks this transition to avoid double payment.
 """,
 )
 def update_milestone_status(
@@ -221,21 +230,16 @@ def update_milestone_status(
     contract = milestone.contract
     _assert_contract_access(contract, me, db)
 
+    current = milestone.status
+
+    # Validate transition
     if body.status == models.MilestoneStatus.approved:
-        if milestone.status != models.MilestoneStatus.pending:
-            raise HTTPException(400, "Only pending milestones can be approved.")
-
-        if me.role not in (models.UserRole.admin, models.UserRole.client):
-            raise HTTPException(403, "Only the client can approve milestones.")
-
-        if me.role == models.UserRole.client:
-            client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
-            if not client or contract.project.client_id != client.client_id:
-                raise HTTPException(403, "You do not own this contract.")
-
-        milestone.status = models.MilestoneStatus.approved
-
-        # ── SINGLE PLACE for wallet credit ──────────────────────────────────
+        if current != models.MilestoneStatus.pending:
+            raise HTTPException(
+                400,
+                f"Cannot approve a milestone with status '{current.value}'. Must be 'pending'."
+            )
+        # Credit wallet — SINGLE place
         freelancer = contract.freelancer
         freelancer.wallet_balance = (freelancer.wallet_balance or 0) + milestone.amount
 
@@ -243,10 +247,13 @@ def update_milestone_status(
             freelancer_id = freelancer.freelancer_id,
             amount        = milestone.amount,
             type          = models.TransactionType.deposit,
-            description   = f"Milestone #{milestone_id} approved",
+            description   = (
+                f"Milestone #{milestone_id} approved "
+                f"({milestone.title or 'no title'}) — ${milestone.amount:.2f}"
+            ),
         ))
 
-        # Track payment record + update escrow released amount
+        # Update escrow released_amount
         escrow = db.query(models.Escrow).filter(
             models.Escrow.contract_id == contract.contract_id
         ).first()
@@ -257,17 +264,45 @@ def update_milestone_status(
                 milestone_id = milestone.milestone_id,
                 amount       = milestone.amount,
             ))
-        # ────────────────────────────────────────────────────────────────────
+
+        milestone.status = models.MilestoneStatus.approved
+        db.commit()
+
+        # Notify freelancer: wallet credited
+        notify(
+            db        = db,
+            user_id   = freelancer.user_id,
+            type      = models.NotificationType.payment,
+            title     = f"Milestone approved — ${milestone.amount:.2f} credited",
+            body      = f"'{milestone.title or f'Milestone #{milestone_id}'}' was approved.",
+            entity_id = contract.contract_id,
+        )
 
     elif body.status == models.MilestoneStatus.paid:
-        if milestone.status != models.MilestoneStatus.approved:
-            raise HTTPException(400, "Only approved milestones can be marked as paid.")
+        if current != models.MilestoneStatus.approved:
+            raise HTTPException(
+                400,
+                f"Cannot mark paid a milestone with status '{current.value}'. Must be 'approved'."
+            )
         milestone.status = models.MilestoneStatus.paid
+        db.commit()
+
+        # Notify freelancer
+        notify(
+            db        = db,
+            user_id   = contract.freelancer.user_id,
+            type      = models.NotificationType.milestone,
+            title     = f"Milestone #{milestone_id} marked as paid",
+            body      = f"Amount: ${milestone.amount:.2f}",
+            entity_id = contract.contract_id,
+        )
 
     else:
-        raise HTTPException(400, "Invalid status. Use: approved or paid.")
+        raise HTTPException(
+            400,
+            f"Invalid status transition. Allowed: pending→approved or approved→paid."
+        )
 
-    db.commit()
     db.refresh(milestone)
     return milestone
 
@@ -319,6 +354,17 @@ def complete_contract(
         contract.escrow.status = models.EscrowStatus.released
 
     db.commit()
+
+    # Notify freelancer
+    notify(
+        db        = db,
+        user_id   = contract.freelancer.user_id,
+        type      = models.NotificationType.contract,
+        title     = f"Contract #{contract_id} completed 🎉",
+        body      = f"Project '{contract.project.title}' has been marked as completed.",
+        entity_id = contract_id,
+    )
+
     return {"message": f"Contract #{contract_id} marked as completed."}
 
 
@@ -330,14 +376,11 @@ def complete_contract(
     "/contracts/{contract_id}/dispute",
     response_model=schema.MessageResponse,
     summary="Open a dispute",
-    description="""
-Either party (client or freelancer) can open a dispute on an active contract.
-Provide a `reason` explaining why. Only one dispute per contract allowed.
-""",
+    description="Either party can open a dispute on an active contract. Only one dispute per contract.",
 )
 def open_dispute(
     contract_id: int,
-    reason:      schema.MessageResponse = None,   # optional reason body
+    reason:      schema.MessageResponse = None,
     me:          models.User = Depends(get_current_user),
     db:          Session     = Depends(get_db),
 ):
@@ -366,11 +409,37 @@ def open_dispute(
     ))
     contract.status = models.ContractStatus.disputed
     db.commit()
+
+    # Notify the other party
+    freelancer = contract.freelancer
+    client_user_id = contract.project.client.user_id
+
+    if me.id == freelancer.user_id:
+        # Freelancer opened it — notify client
+        notify(
+            db        = db,
+            user_id   = client_user_id,
+            type      = models.NotificationType.dispute,
+            title     = f"Dispute opened on contract #{contract_id}",
+            body      = reason.message if reason else "A dispute has been raised by the freelancer.",
+            entity_id = contract_id,
+        )
+    else:
+        # Client opened it — notify freelancer
+        notify(
+            db        = db,
+            user_id   = freelancer.user_id,
+            type      = models.NotificationType.dispute,
+            title     = f"Dispute opened on contract #{contract_id}",
+            body      = reason.message if reason else "A dispute has been raised by the client.",
+            entity_id = contract_id,
+        )
+
     return {"message": f"Dispute opened for contract #{contract_id}. An admin will review it."}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  POST /contracts/{contract_id}/review  ✅ NEW
+#  POST /contracts/{contract_id}/review
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.post(
@@ -380,8 +449,6 @@ def open_dispute(
     summary="Submit a review for a completed contract",
     description="""
 **Client only.** Submit a 1–5 star rating + optional comment for the freelancer.
-
-Rules:
 - Contract must be `completed`
 - Only one review per contract
 - Updates the freelancer's `success_score` (rolling average)
@@ -402,18 +469,15 @@ def submit_review(
     if contract.status != models.ContractStatus.completed:
         raise HTTPException(400, "You can only review completed contracts.")
 
-    # Only the client who owns the project can review
     if me.role != models.UserRole.admin:
         client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
         if not client or contract.project.client_id != client.client_id:
             raise HTTPException(403, "Only the client who hired the freelancer can submit a review.")
     else:
-        # Admin: get the client for logging purposes
         client = db.query(models.Client).filter(
             models.Client.client_id == contract.project.client_id
         ).first()
 
-    # One review per contract
     existing = db.query(models.Review).filter(
         models.Review.project_id    == contract.project_id,
         models.Review.freelancer_id == contract.freelancer_id,
@@ -421,7 +485,6 @@ def submit_review(
     if existing:
         raise HTTPException(409, "You have already reviewed this contract.")
 
-    # Create the review
     review = models.Review(
         project_id    = contract.project_id,
         freelancer_id = contract.freelancer_id,
@@ -432,9 +495,9 @@ def submit_review(
     db.add(review)
     db.flush()
 
-    # Update freelancer's success_score (rolling average of all ratings)
-    freelancer   = contract.freelancer
-    all_reviews  = db.query(models.Review).filter(
+    # Update success_score
+    freelancer  = contract.freelancer
+    all_reviews = db.query(models.Review).filter(
         models.Review.freelancer_id == freelancer.freelancer_id
     ).all()
     total_ratings = sum(r.rating for r in all_reviews)
@@ -442,11 +505,22 @@ def submit_review(
 
     db.commit()
     db.refresh(review)
+
+    # Notify freelancer
+    notify(
+        db        = db,
+        user_id   = freelancer.user_id,
+        type      = models.NotificationType.review,
+        title     = f"You received a {body.rating}★ review",
+        body      = body.comment[:80] if body.comment else f"{body.rating} out of 5 stars.",
+        entity_id = contract_id,
+    )
+
     return review
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /contracts/{contract_id}/review  ✅ NEW
+#  GET /contracts/{contract_id}/review
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get(

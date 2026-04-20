@@ -1,6 +1,10 @@
 """
-routers/phase4_router.py — Phase 4: AI Integration, Disputes, Verification & Messaging
-========================================================================================
+routers/ai_router.py — Phase 4: AI Integration, Disputes & Verification
+=========================================================================
+Phase 5 update:
+  - Messaging section REMOVED → lives in routers/messaging_router.py
+  - notify() calls added to dispute resolution and verification review
+    so users receive real-time notifications when these events happen
 
 AI ENDPOINTS:
   GET  /projects/{id}/ai-match        → AI ranks freelancers for a project
@@ -13,23 +17,17 @@ DISPUTE RESOLUTION (Admin):
   POST /admin/disputes/{id}/resolve   → resolve a dispute (release / refund / split)
 
 VERIFICATION:
-  POST /verification/submit           → user submits identity verification document
-  GET  /verification/status           → check your own verification status
-  GET  /admin/verification            → admin: list all pending verifications
+  POST  /verification/submit          → user submits identity verification document
+  GET   /verification/status          → check your own verification status
+  GET   /admin/verification           → admin: list all pending verifications
   PATCH /admin/verification/{id}      → admin: approve or reject verification
-
-MESSAGING:
-  POST /messages                      → send a message to another user
-  GET  /messages/inbox                → list all conversations (grouped by partner)
-  GET  /messages/{user_id}            → get full conversation with a user
-  PATCH /messages/{user_id}/read      → mark all messages from a user as read
 
 HOW AI CALLS WORK:
   The backend calls the AI service at AI_SERVICE_URL (set in docker-compose).
   If the AI service is down or times out, the backend falls back gracefully:
     - ai-match → returns freelancers sorted by success_score (database ranking)
     - ai-pricing → returns min=budget*0.6, max=budget*0.9 (simple heuristic)
-    - proposal scoring → sets ai_relevance_score to None (AI pending)
+    - proposal scoring → skill-overlap heuristic
 
   The AI service must expose these endpoints:
     POST /match       → { project_description, required_skills, freelancers[] }
@@ -43,21 +41,22 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
 
 from db import get_db
 import models
 import schema
 from auth import get_current_user, require_admin
+from services.notification_service import notify
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Phase 4"])
+router = APIRouter(tags=["Phase 4 — AI, Disputes & Verification"])
 
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://ai:8001")
-AI_TIMEOUT     = 10.0   # seconds — if AI takes longer, fall back gracefully
+AI_TIMEOUT     = 10.0
 UPLOAD_DIR     = os.getenv("UPLOAD_DIR", "uploads")
 
 
@@ -65,22 +64,14 @@ UPLOAD_DIR     = os.getenv("UPLOAD_DIR", "uploads")
 #  AI ENDPOINTS
 # ════════════════════════════════════════════════════════════════════
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /projects/{project_id}/ai-match
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @router.get(
     "/projects/{project_id}/ai-match",
     response_model=schema.AIMatchResponse,
     summary="AI-ranked freelancer matches for a project",
     description="""
 Calls the AI service to rank freelancers by how well they match this project.
-
 Returns up to 10 ranked freelancers with an `ai_match_score` (0–100).
-
-**Falls back gracefully** if AI service is unavailable: returns freelancers
-sorted by their platform success score instead. `source` field indicates
-`"ai"` or `"fallback"`.
+Falls back to success-score ranking if AI is unavailable.
 """,
 )
 def ai_match_freelancers(
@@ -94,7 +85,6 @@ def ai_match_freelancers(
     if not project:
         raise HTTPException(404, "Project not found.")
 
-    # Build freelancer list from DB
     freelancers = (
         db.query(models.Freelancer)
         .join(models.User, models.User.id == models.Freelancer.user_id)
@@ -104,7 +94,6 @@ def ai_match_freelancers(
 
     required_skills = [ps.skill.name for ps in project.skills if ps.skill]
 
-    # Build payload for AI service
     freelancer_payloads = []
     for f in freelancers:
         user        = db.query(models.User).filter(models.User.id == f.user_id).first()
@@ -119,24 +108,22 @@ def ai_match_freelancers(
             "skills":         skill_names,
         })
 
-    # Try AI service
     try:
         response = httpx.post(
             f"{AI_SERVICE_URL}/match",
             json={
-                "project_id":       project_id,
-                "title":            project.title,
-                "description":      project.description or "",
-                "required_skills":  required_skills,
-                "budget":           project.budget,
-                "freelancers":      freelancer_payloads,
+                "project_id":      project_id,
+                "title":           project.title,
+                "description":     project.description or "",
+                "required_skills": required_skills,
+                "budget":          project.budget,
+                "freelancers":     freelancer_payloads,
             },
             timeout=AI_TIMEOUT,
         )
         response.raise_for_status()
         ai_data = response.json()
 
-        # AI service returns ranked list with scores
         matches = [
             schema.FreelancerSearchResult(
                 freelancer_id  = m["freelancer_id"],
@@ -150,16 +137,11 @@ def ai_match_freelancers(
             )
             for m in ai_data.get("matches", [])
         ]
-        return schema.AIMatchResponse(
-            project_id = project_id,
-            matches    = matches,
-            source     = "ai",
-        )
+        return schema.AIMatchResponse(project_id=project_id, matches=matches, source="ai")
 
     except Exception as exc:
         logger.warning("AI service unavailable for /match, using fallback. Error: %s", exc)
 
-    # Fallback: sort by success_score
     fallback_matches = []
     for fp in sorted(freelancer_payloads, key=lambda x: x["success_score"], reverse=True)[:10]:
         fallback_matches.append(schema.FreelancerSearchResult(
@@ -172,29 +154,16 @@ def ai_match_freelancers(
             skills         = fp.get("skills", []),
             ai_match_score = None,
         ))
-    return schema.AIMatchResponse(
-        project_id = project_id,
-        matches    = fallback_matches,
-        source     = "fallback",
-    )
+    return schema.AIMatchResponse(project_id=project_id, matches=fallback_matches, source="fallback")
 
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  POST /projects/{project_id}/ai-pricing
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.post(
     "/projects/{project_id}/ai-pricing",
     response_model=schema.AIPricingResponse,
     summary="AI-suggested budget range for a project",
     description="""
-Calls the AI service to suggest a min/max budget for this project based on
-its title, description, required skills, and the client's stated budget.
-
-Saves the suggestion to the `ai_pricing` table. If called again, overwrites
-the previous suggestion.
-
-**Falls back gracefully** if AI is down: returns 60–90% of the stated budget.
+Calls the AI service to suggest a min/max budget. Saves to `ai_pricing` table.
+Falls back to 60–90% of stated budget if AI is unavailable.
 """,
 )
 def ai_suggest_pricing(
@@ -209,7 +178,6 @@ def ai_suggest_pricing(
         raise HTTPException(404, "Project not found.")
 
     required_skills = [ps.skill.name for ps in project.skills if ps.skill]
-
     suggested_min = None
     suggested_max = None
     reasoning     = None
@@ -240,7 +208,6 @@ def ai_suggest_pricing(
         reasoning     = "AI service unavailable. Using heuristic: 60–90% of stated budget."
         source        = "fallback"
 
-    # Save / update in DB
     existing = db.query(models.AIPricing).filter(
         models.AIPricing.project_id == project_id
     ).first()
@@ -264,21 +231,13 @@ def ai_suggest_pricing(
     )
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  POST /proposals/{proposal_id}/score
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @router.post(
     "/proposals/{proposal_id}/score",
     response_model=schema.AIScoreResponse,
     summary="AI relevance score for a proposal",
     description="""
 **Project owner (client) or admin only.**
-
-Calls the AI service to score how relevant a freelancer's proposal is
-to the project. Saves the score (0–100) to `proposals.ai_relevance_score`.
-
-Use this when reviewing proposals to get AI-assisted ranking.
+Scores a freelancer's proposal 0–100 by relevance. Saves to `proposals.ai_relevance_score`.
 """,
 )
 def ai_score_proposal(
@@ -292,18 +251,16 @@ def ai_score_proposal(
     if not proposal:
         raise HTTPException(404, "Proposal not found.")
 
-    # Only the project owner or admin
     if me.role != models.UserRole.admin:
         client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
         if not client or client.client_id != proposal.project.client_id:
             raise HTTPException(403, "You do not own this project.")
 
-    project    = proposal.project
-    freelancer = proposal.freelancer
+    project     = proposal.project
+    freelancer  = proposal.freelancer
     skill_names = [fs.skill.name for fs in freelancer.skills if fs.skill]
-
-    score     = None
-    reasoning = None
+    score       = None
+    reasoning   = None
 
     try:
         response = httpx.post(
@@ -328,14 +285,12 @@ def ai_score_proposal(
 
     except Exception as exc:
         logger.warning("AI service unavailable for /score. Error: %s", exc)
-        # Fallback: simple skill-overlap heuristic
         required = {ps.skill.name.lower() for ps in project.skills if ps.skill}
         has      = {s.lower() for s in skill_names}
         overlap  = len(required & has)
         score    = round((overlap / max(len(required), 1)) * 80 + 10, 1)
         reasoning = "AI service unavailable. Score based on skill overlap."
 
-    # Save to proposal
     proposal.ai_relevance_score = score
     db.commit()
 
@@ -349,10 +304,6 @@ def ai_score_proposal(
 # ════════════════════════════════════════════════════════════════════
 #  DISPUTE RESOLUTION
 # ════════════════════════════════════════════════════════════════════
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /admin/disputes
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get(
     "/admin/disputes",
@@ -376,10 +327,6 @@ def list_disputes(
     return q.order_by(models.Dispute.created_at.desc()).offset(skip).limit(limit).all()
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /admin/disputes/{dispute_id}
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @router.get(
     "/admin/disputes/{dispute_id}",
     response_model=schema.DisputeResponse,
@@ -398,26 +345,17 @@ def get_dispute(
     return dispute
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  POST /admin/disputes/{dispute_id}/resolve
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @router.post(
     "/admin/disputes/{dispute_id}/resolve",
     response_model=schema.MessageResponse,
     summary="Resolve a dispute (admin only)",
     description="""
 Three resolution options:
-
 - **`release_to_freelancer`** — freelancer keeps all escrowed funds
-- **`refund_to_client`** — client gets all escrowed funds back (wallet debit)
-- **`split`** — requires `split_percentage` (0–100); that % goes to freelancer, rest to client
+- **`refund_to_client`** — client gets a refund (simulated)
+- **`split`** — requires `split_percentage` (0–100)
 
-In all cases:
-- Dispute status → `resolved`
-- Contract status → `completed`
-- Escrow status → `released`
-- System log entry written
+Notifications are sent to both parties on resolution.
 """,
 )
 def resolve_dispute(
@@ -431,7 +369,6 @@ def resolve_dispute(
     ).first()
     if not dispute:
         raise HTTPException(404, "Dispute not found.")
-
     if dispute.status == models.DisputeStatus.resolved:
         raise HTTPException(400, "This dispute is already resolved.")
 
@@ -441,7 +378,6 @@ def resolve_dispute(
     escrow_amt = escrow.amount if escrow else 0.0
 
     if body.resolution == "release_to_freelancer":
-        # Credit entire escrow to freelancer
         if escrow_amt > 0:
             freelancer.wallet_balance = (freelancer.wallet_balance or 0) + escrow_amt
             db.add(models.WalletTransaction(
@@ -452,15 +388,13 @@ def resolve_dispute(
             ))
 
     elif body.resolution == "refund_to_client":
-        # No wallet credit — money goes back to client (simulated)
-        pass  # In production: trigger payment gateway refund here
+        pass  # Production: trigger payment gateway refund
 
     elif body.resolution == "split":
         if body.split_percentage is None:
             raise HTTPException(400, "split_percentage is required for 'split' resolution.")
         if not (0 <= body.split_percentage <= 100):
             raise HTTPException(400, "split_percentage must be between 0 and 100.")
-
         freelancer_share = round(escrow_amt * (body.split_percentage / 100), 2)
         if freelancer_share > 0:
             freelancer.wallet_balance = (freelancer.wallet_balance or 0) + freelancer_share
@@ -474,22 +408,16 @@ def resolve_dispute(
                 ),
             ))
 
-    # Update dispute
     dispute.status          = models.DisputeStatus.resolved
     dispute.resolution_note = body.note
     dispute.resolved_by     = admin.id
     dispute.resolved_at     = datetime.now(timezone.utc)
-
-    # Update contract and escrow
-    contract.status = models.ContractStatus.completed
+    contract.status         = models.ContractStatus.completed
+    contract.project.status = models.ProjectStatus.completed
     if escrow:
         escrow.status          = models.EscrowStatus.released
         escrow.released_amount = escrow_amt
 
-    # Update project
-    contract.project.status = models.ProjectStatus.completed
-
-    # Write system log
     db.add(models.SystemLog(
         action       = (
             f"Admin [{admin.email}] resolved dispute #{dispute_id} "
@@ -497,8 +425,28 @@ def resolve_dispute(
         ),
         performed_by = admin.id,
     ))
-
     db.commit()
+
+    # Notify freelancer
+    notify(
+        db        = db,
+        user_id   = freelancer.user_id,
+        type      = models.NotificationType.dispute,
+        title     = f"Dispute #{dispute_id} resolved",
+        body      = f"Resolution: {body.resolution}. {body.note}",
+        entity_id = contract.contract_id,
+    )
+    # Notify client
+    client_user_id = contract.project.client.user_id
+    notify(
+        db        = db,
+        user_id   = client_user_id,
+        type      = models.NotificationType.dispute,
+        title     = f"Dispute #{dispute_id} resolved",
+        body      = f"Resolution: {body.resolution}. {body.note}",
+        entity_id = contract.contract_id,
+    )
+
     return {
         "message": (
             f"Dispute #{dispute_id} resolved via '{body.resolution}'. "
@@ -511,10 +459,6 @@ def resolve_dispute(
 #  VERIFICATION
 # ════════════════════════════════════════════════════════════════════
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  POST /verification/submit
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @router.post(
     "/verification/submit",
     response_model=schema.VerificationResponse,
@@ -522,8 +466,7 @@ def resolve_dispute(
     summary="Submit identity verification document",
     description="""
 Upload an identity document (National ID, Passport, etc.) for review.
-Only one verification request per user. Resubmission overwrites a previous rejection.
-
+Only one verification per user. Resubmission overwrites a rejected one.
 Accepted: **PDF, JPEG, PNG** — max **5 MB**.
 """,
 )
@@ -541,19 +484,16 @@ async def submit_verification(
     if len(contents) > 5 * 1024 * 1024:
         raise HTTPException(400, "Document too large. Maximum is 5 MB.")
 
-    # Save file
     ext      = (file.filename or "doc").rsplit(".", 1)[-1].lower()
     filename = f"verify_{me.id}_{int(datetime.now().timestamp())}.{ext}"
     save_dir = os.path.join(UPLOAD_DIR, "verification")
     os.makedirs(save_dir, exist_ok=True)
 
-    import aiofiles
     async with aiofiles.open(os.path.join(save_dir, filename), "wb") as f:
         await f.write(contents)
 
     doc_path = f"/uploads/verification/{filename}"
 
-    # Upsert verification record
     existing = db.query(models.Verification).filter(
         models.Verification.user_id == me.id
     ).first()
@@ -582,10 +522,6 @@ async def submit_verification(
     return verification
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /verification/status
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @router.get(
     "/verification/status",
     response_model=schema.VerificationResponse,
@@ -602,10 +538,6 @@ def my_verification_status(
         raise HTTPException(404, "No verification request found. Submit one via POST /verification/submit.")
     return v
 
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /admin/verification
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get(
     "/admin/verification",
@@ -629,10 +561,6 @@ def list_verifications(
     return q.order_by(models.Verification.created_at.asc()).offset(skip).limit(limit).all()
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  PATCH /admin/verification/{verification_id}
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @router.patch(
     "/admin/verification/{verification_id}",
     response_model=schema.VerificationResponse,
@@ -649,7 +577,6 @@ def review_verification(
     ).first()
     if not v:
         raise HTTPException(404, "Verification not found.")
-
     if v.status != models.VerificationStatus.pending:
         raise HTTPException(400, f"Verification is already '{v.status.value}'.")
 
@@ -670,180 +597,25 @@ def review_verification(
     ))
     db.commit()
     db.refresh(v)
+
+    # ── Phase 5: notify the user about their verification outcome ──
+    if body.action == "approve":
+        notify(
+            db        = db,
+            user_id   = v.user_id,
+            type      = models.NotificationType.verification,
+            title     = "Identity verification approved ✓",
+            body      = "Your account is now verified.",
+            entity_id = v.verification_id,
+        )
+    else:
+        notify(
+            db        = db,
+            user_id   = v.user_id,
+            type      = models.NotificationType.verification,
+            title     = "Identity verification rejected",
+            body      = f"Reason: {body.rejection_note}. Please resubmit.",
+            entity_id = v.verification_id,
+        )
+
     return v
-
-
-# ════════════════════════════════════════════════════════════════════
-#  MESSAGING
-# ════════════════════════════════════════════════════════════════════
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  POST /messages
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-@router.post(
-    "/messages",
-    response_model=schema.ChatMessageResponse,
-    status_code=201,
-    summary="Send a message to another user",
-    description="Both users must be active. You cannot message yourself.",
-)
-def send_message(
-    body: schema.MessageCreate,
-    me:   models.User = Depends(get_current_user),
-    db:   Session     = Depends(get_db),
-):
-    if body.receiver_id == me.id:
-        raise HTTPException(400, "You cannot send a message to yourself.")
-
-    receiver = db.query(models.User).filter(
-        models.User.id     == body.receiver_id,
-        models.User.status == models.UserStatus.active,
-    ).first()
-    if not receiver:
-        raise HTTPException(404, "Recipient not found or is suspended.")
-
-    msg = models.Message(
-        sender_id   = me.id,
-        receiver_id = body.receiver_id,
-        content     = body.content,
-        is_read     = False,
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-    return msg
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /messages/inbox
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-@router.get(
-    "/messages/inbox",
-    response_model=list[schema.ConversationSummary],
-    summary="List all conversations (inbox view)",
-    description="Returns one summary per conversation partner, newest first.",
-)
-def get_inbox(
-    me: models.User = Depends(get_current_user),
-    db: Session     = Depends(get_db),
-):
-    # Get all messages involving this user
-    all_messages = (
-        db.query(models.Message)
-        .filter(
-            or_(
-                models.Message.sender_id   == me.id,
-                models.Message.receiver_id == me.id,
-            )
-        )
-        .order_by(models.Message.sent_at.desc())
-        .all()
-    )
-
-    # Group by conversation partner
-    seen_partners = {}
-    summaries     = []
-
-    for msg in all_messages:
-        other_id = msg.receiver_id if msg.sender_id == me.id else msg.sender_id
-        if other_id in seen_partners:
-            continue
-
-        seen_partners[other_id] = True
-        other_user = db.query(models.User).filter(models.User.id == other_id).first()
-
-        # Count unread from this partner
-        unread_count = (
-            db.query(models.Message)
-            .filter(
-                models.Message.sender_id   == other_id,
-                models.Message.receiver_id == me.id,
-                models.Message.is_read     == False,  # noqa: E712
-            )
-            .count()
-        )
-
-        summaries.append(schema.ConversationSummary(
-            other_user_id    = other_id,
-            other_user_email = other_user.email if other_user else "Unknown",
-            last_message     = msg.content[:80] + ("..." if len(msg.content) > 80 else ""),
-            last_message_at  = msg.sent_at,
-            unread_count     = unread_count,
-        ))
-
-    return summaries
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /messages/{other_user_id}
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-@router.get(
-    "/messages/{other_user_id}",
-    response_model=list[schema.ChatMessageResponse],
-    summary="Get full conversation with a user",
-    description="Returns all messages between you and the given user, oldest first.",
-)
-def get_conversation(
-    other_user_id: int,
-    me:            models.User = Depends(get_current_user),
-    db:            Session     = Depends(get_db),
-):
-    other = db.query(models.User).filter(models.User.id == other_user_id).first()
-    if not other:
-        raise HTTPException(404, "User not found.")
-
-    messages = (
-        db.query(models.Message)
-        .filter(
-            or_(
-                and_(
-                    models.Message.sender_id   == me.id,
-                    models.Message.receiver_id == other_user_id,
-                ),
-                and_(
-                    models.Message.sender_id   == other_user_id,
-                    models.Message.receiver_id == me.id,
-                ),
-            )
-        )
-        .order_by(models.Message.sent_at.asc())
-        .all()
-    )
-
-    # Auto-mark incoming messages as read
-    for msg in messages:
-        if msg.receiver_id == me.id and not msg.is_read:
-            msg.is_read = True
-    db.commit()
-
-    return messages
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  PATCH /messages/{other_user_id}/read
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-@router.patch(
-    "/messages/{other_user_id}/read",
-    response_model=schema.MessageResponse,
-    summary="Mark all messages from a user as read",
-)
-def mark_messages_read(
-    other_user_id: int,
-    me:            models.User = Depends(get_current_user),
-    db:            Session     = Depends(get_db),
-):
-    updated = (
-        db.query(models.Message)
-        .filter(
-            models.Message.sender_id   == other_user_id,
-            models.Message.receiver_id == me.id,
-            models.Message.is_read     == False,  # noqa: E712
-        )
-        .update({"is_read": True})
-    )
-    db.commit()
-    return {"message": f"Marked {updated} message(s) as read."}

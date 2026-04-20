@@ -18,10 +18,15 @@ Phase 4 additions:
   - DisputeResolveRequest
   - VerificationResponse, VerificationReviewRequest
   - MessageCreate, ChatMessageResponse, ConversationSummary
+
+Phase 5 additions:
+  - NotificationResponse, NotificationSummary
+  - NotificationPreferences (for future webhook/email config)
+  - WebSocket message envelopes (WSMessageOut, WSMessageIn)
 """
 
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 from enum import Enum
 
@@ -73,6 +78,17 @@ class VerificationStatus(str, Enum):
     pending  = "pending"
     approved = "approved"
     rejected = "rejected"
+
+class NotificationType(str, Enum):
+    message      = "message"
+    proposal     = "proposal"
+    contract     = "contract"
+    milestone    = "milestone"
+    dispute      = "dispute"
+    verification = "verification"
+    review       = "review"
+    payment      = "payment"
+    system       = "system"
 
 
 # ═══════════════════════════════════════════════════
@@ -273,7 +289,6 @@ class ProjectResponse(BaseModel):
     budget:          float
     status:          ProjectStatus
     required_skills: List[str] = []
-    created_at:      datetime
     model_config = {"from_attributes": True}
 
 
@@ -288,7 +303,7 @@ class ProposalCreate(BaseModel):
 
     @field_validator("bid_amount")
     @classmethod
-    def bid_minimum(cls, v: float) -> float:
+    def bid_positive(cls, v: float) -> float:
         if v < 1.0:
             raise ValueError("Bid amount must be at least $1.00.")
         return v
@@ -424,7 +439,7 @@ class FileResponse(BaseModel):
 
 
 # ═══════════════════════════════════════════════════
-#  REVIEWS  ✅ NEW
+#  REVIEWS
 # ═══════════════════════════════════════════════════
 
 class ReviewCreate(BaseModel):
@@ -480,7 +495,7 @@ class DisputeResolveRequest(BaseModel):
 
 
 # ═══════════════════════════════════════════════════
-#  AI SCHEMAS  ✅ NEW (Phase 4)
+#  AI SCHEMAS (Phase 4)
 # ═══════════════════════════════════════════════════
 
 class AIMatchResponse(BaseModel):
@@ -502,7 +517,7 @@ class AIScoreResponse(BaseModel):
 
 
 # ═══════════════════════════════════════════════════
-#  VERIFICATION  ✅ NEW (Phase 4)
+#  VERIFICATION (Phase 4)
 # ═══════════════════════════════════════════════════
 
 class VerificationResponse(BaseModel):
@@ -530,7 +545,7 @@ class VerificationReviewRequest(BaseModel):
 
 
 # ═══════════════════════════════════════════════════
-#  MESSAGES / CHAT  ✅ NEW (Phase 4)
+#  MESSAGES / CHAT (Phase 4 + Phase 5 enhancements)
 # ═══════════════════════════════════════════════════
 
 class MessageCreate(BaseModel):
@@ -559,6 +574,65 @@ class ConversationSummary(BaseModel):
     last_message:     str
     last_message_at:  datetime
     unread_count:     int
+
+
+# ═══════════════════════════════════════════════════
+#  NOTIFICATIONS  ✅ Phase 5
+# ═══════════════════════════════════════════════════
+
+class NotificationResponse(BaseModel):
+    """
+    Single notification returned from GET /notifications or pushed over WebSocket.
+    """
+    notification_id: int
+    user_id:         int
+    type:            NotificationType
+    title:           str
+    body:            Optional[str]
+    entity_id:       Optional[int]     # e.g. contract_id the notification relates to
+    is_read:         bool
+    created_at:      datetime
+    model_config = {"from_attributes": True}
+
+class NotificationSummary(BaseModel):
+    """
+    Returned by GET /notifications/unread-count — fast badge counter.
+    """
+    unread_count: int
+
+class NotificationMarkReadRequest(BaseModel):
+    """Body for PATCH /notifications/read — mark a list of IDs as read."""
+    notification_ids: List[int]
+
+
+# ═══════════════════════════════════════════════════
+#  WEBSOCKET MESSAGE ENVELOPES  ✅ Phase 5
+# ═══════════════════════════════════════════════════
+
+class WSIncomingMessage(BaseModel):
+    """
+    JSON envelope the CLIENT sends over the WebSocket.
+
+    Supported types:
+      - "ping"           → keepalive, server replies with "pong"
+      - "chat_message"   → send a chat message; payload = {"receiver_id": int, "content": str}
+      - "mark_read"      → mark messages read; payload = {"other_user_id": int}
+    """
+    type:    str
+    payload: Optional[Any] = None
+
+class WSOutgoingMessage(BaseModel):
+    """
+    JSON envelope the SERVER pushes to the client over WebSocket.
+
+    Supported types:
+      - "pong"              → keepalive reply
+      - "chat_message"      → new message delivered in real-time
+      - "notification"      → any new notification (proposal, contract, etc.)
+      - "error"             → error from a bad incoming message
+    """
+    type:    str
+    payload: Optional[Any] = None
 
 
 # ═══════════════════════════════════════════════════

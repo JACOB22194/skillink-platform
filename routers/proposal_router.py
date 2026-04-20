@@ -8,6 +8,10 @@ GET    /proposals/{proposal_id}         → get one proposal
 PUT    /proposals/{proposal_id}/status  → client accepts or rejects a proposal
                                           (accepting auto-creates a Contract + Escrow)
 DELETE /proposals/{proposal_id}         → freelancer withdraws a pending proposal
+
+PHASE 5:
+  - notify() called when proposal accepted or rejected
+  - notify() called when a new proposal lands on client's project
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +21,7 @@ from db import get_db
 import models
 import schema
 from auth import get_current_user, require_freelancer, require_client
+from services.notification_service import notify
 
 router = APIRouter(prefix="/proposals", tags=["Proposals"])
 
@@ -32,12 +37,9 @@ router = APIRouter(prefix="/proposals", tags=["Proposals"])
     summary="Submit a proposal",
     description="""
 **Freelancers only.**
-
 Submit a bid on an open project.
-
-Rules:
 - Project must be `open`
-- You cannot submit more than one proposal to the same project
+- Cannot submit more than one proposal to the same project
 - `bid_amount` must be at least $1.00
 """,
 )
@@ -46,7 +48,6 @@ def submit_proposal(
     me:   models.User = Depends(require_freelancer),
     db:   Session     = Depends(get_db),
 ):
-    # Check project exists and is open
     project = db.query(models.Project).filter(
         models.Project.project_id == body.project_id
     ).first()
@@ -55,14 +56,12 @@ def submit_proposal(
     if project.status != models.ProjectStatus.open:
         raise HTTPException(400, f"Project is '{project.status.value}', not accepting proposals.")
 
-    # Get freelancer profile
     freelancer = db.query(models.Freelancer).filter(
         models.Freelancer.user_id == me.id
     ).first()
     if not freelancer:
         raise HTTPException(404, "Freelancer profile not found.")
 
-    # No duplicate proposals
     existing = db.query(models.Proposal).filter(
         models.Proposal.project_id    == body.project_id,
         models.Proposal.freelancer_id == freelancer.freelancer_id,
@@ -70,7 +69,6 @@ def submit_proposal(
     if existing:
         raise HTTPException(409, "You have already submitted a proposal for this project.")
 
-    # Cannot bid on your own project (edge case: same person has both roles)
     client = db.query(models.Client).filter(
         models.Client.user_id   == me.id,
         models.Client.client_id == project.client_id,
@@ -82,12 +80,29 @@ def submit_proposal(
         project_id         = body.project_id,
         freelancer_id      = freelancer.freelancer_id,
         bid_amount         = body.bid_amount,
-        ai_relevance_score = None,  # AI service will fill this in Phase 4
+        cover_letter       = body.cover_letter,
+        ai_relevance_score = None,
         status             = models.ProposalStatus.pending,
     )
     db.add(proposal)
     db.commit()
     db.refresh(proposal)
+
+    # Notify the client that a new proposal arrived
+    client_user = db.query(models.User).join(
+        models.Client, models.Client.user_id == models.User.id
+    ).filter(models.Client.client_id == project.client_id).first()
+
+    if client_user:
+        notify(
+            db        = db,
+            user_id   = client_user.id,
+            type      = models.NotificationType.proposal,
+            title     = f"New proposal on '{project.title}'",
+            body      = f"{me.email} bid ${body.bid_amount:.2f}",
+            entity_id = body.project_id,
+        )
+
     return proposal
 
 
@@ -99,12 +114,7 @@ def submit_proposal(
     "/project/{project_id}",
     response_model=list[schema.ProposalResponse],
     summary="List proposals for a project",
-    description="""
-**Project owner (client) or admin only.**
-
-Returns all proposals submitted for a specific project,
-sorted by bid amount (lowest first).
-""",
+    description="**Project owner (client) or admin only.** Sorted by bid amount.",
 )
 def list_proposals_for_project(
     project_id: int,
@@ -117,23 +127,21 @@ def list_proposals_for_project(
     if not project:
         raise HTTPException(404, "Project not found.")
 
-    # Only the owning client or admin can see all proposals
     if me.role != models.UserRole.admin:
         client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
         if not client or client.client_id != project.client_id:
             raise HTTPException(403, "You do not own this project.")
 
-    proposals = (
+    return (
         db.query(models.Proposal)
         .filter(models.Proposal.project_id == project_id)
         .order_by(models.Proposal.bid_amount.asc())
         .all()
     )
-    return proposals
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /proposals/my  — My proposals
+#  GET /proposals/my
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get(
@@ -161,7 +169,7 @@ def my_proposals(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /proposals/{proposal_id}  — One proposal
+#  GET /proposals/{proposal_id}
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get(
@@ -180,7 +188,6 @@ def get_proposal(
     if not proposal:
         raise HTTPException(404, "Proposal not found.")
 
-    # Only the freelancer who submitted, the project owner, or admin can view
     if me.role == models.UserRole.admin:
         return proposal
 
@@ -207,18 +214,12 @@ def get_proposal(
     summary="Accept or reject a proposal",
     description="""
 **Project owner (client) or admin only.**
-
 - `action`: `accept` or `reject`
 
 **When you accept:**
-1. Proposal status → `accepted`
-2. All other proposals for the same project → `rejected`
-3. Project status → `in_progress`
-4. A **Contract** is automatically created
-5. An **Escrow** record is created (status: `held`, amount = bid_amount)
-
-The client must then call `POST /escrow/fund/{contract_id}` to actually
-transfer funds into escrow (payment integration step).
+1. Proposal → `accepted`, others → `rejected`
+2. Project → `in_progress`
+3. Contract + Escrow created automatically
 """,
 )
 def update_proposal_status(
@@ -239,7 +240,6 @@ def update_proposal_status(
             f"Proposal is already '{proposal.status.value}' and cannot be changed."
         )
 
-    # Permission check
     if me.role != models.UserRole.admin:
         client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
         if not client or client.client_id != proposal.project.client_id:
@@ -249,21 +249,20 @@ def update_proposal_status(
         raise HTTPException(400, "action must be 'accept' or 'reject'.")
 
     contract = None
+    freelancer_user_id = proposal.freelancer.user_id
 
     if body.action == "accept":
         proposal.status = models.ProposalStatus.accepted
 
-        # Reject all other pending proposals for this project
+        # Reject all other pending proposals
         db.query(models.Proposal).filter(
             models.Proposal.project_id  == proposal.project_id,
             models.Proposal.proposal_id != proposal_id,
             models.Proposal.status      == models.ProposalStatus.pending,
         ).update({"status": models.ProposalStatus.rejected})
 
-        # Move project to in_progress
         proposal.project.status = models.ProjectStatus.in_progress
 
-        # Create the contract
         contract = models.Contract(
             project_id    = proposal.project_id,
             freelancer_id = proposal.freelancer_id,
@@ -272,7 +271,6 @@ def update_proposal_status(
         db.add(contract)
         db.flush()
 
-        # Create the escrow record
         db.add(models.Escrow(
             contract_id = contract.contract_id,
             amount      = proposal.bid_amount,
@@ -283,6 +281,26 @@ def update_proposal_status(
         proposal.status = models.ProposalStatus.rejected
 
     db.commit()
+
+    # Notify the freelancer
+    if body.action == "accept":
+        notify(
+            db        = db,
+            user_id   = freelancer_user_id,
+            type      = models.NotificationType.contract,
+            title     = f"Proposal accepted — contract created! 🎉",
+            body      = f"Your proposal on '{proposal.project.title}' was accepted. Contract #{contract.contract_id} is now active.",
+            entity_id = contract.contract_id,
+        )
+    else:
+        notify(
+            db        = db,
+            user_id   = freelancer_user_id,
+            type      = models.NotificationType.proposal,
+            title     = f"Proposal rejected",
+            body      = f"Your proposal on '{proposal.project.title}' was not selected.",
+            entity_id = proposal.project_id,
+        )
 
     return schema.ProposalStatusUpdateResponse(
         proposal_id  = proposal.proposal_id,

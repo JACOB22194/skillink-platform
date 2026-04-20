@@ -16,6 +16,10 @@ Phase fixes (1-3 → 10/10):
   - Added released_amount to Escrow (track partial releases)
   - Added original_name to File (store the original filename)
   - Added WalletTransaction created_at
+
+Phase 5 additions:
+  - Notification table (in-app notifications with type, title, body, read flag)
+  - WebSocket connection tracking is stateful (in-memory), not stored in DB
 """
 
 from sqlalchemy import (
@@ -78,6 +82,20 @@ class TransactionType(str, enum.Enum):
     deposit  = "deposit"
     withdraw = "withdraw"
 
+class NotificationType(str, enum.Enum):
+    """
+    Categorises every notification so the frontend can render the right icon.
+    """
+    message          = "message"           # New chat message received
+    proposal         = "proposal"          # New proposal on your project / your proposal was accepted/rejected
+    contract         = "contract"          # Contract created / completed / disputed
+    milestone        = "milestone"         # Milestone approved or paid
+    dispute          = "dispute"           # Dispute opened or resolved
+    verification     = "verification"      # Your verification was approved/rejected
+    review           = "review"            # You received a new review
+    payment          = "payment"           # Wallet credited
+    system           = "system"            # Generic platform announcements
+
 
 # ─────────────────────────────────────────
 #  TABLE: users
@@ -95,15 +113,17 @@ class User(Base):
     mfa_secret  = Column(String(64), nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-    freelancer        = relationship("Freelancer",   back_populates="user", uselist=False)
-    client            = relationship("Client",       back_populates="user", uselist=False)
-    trust_scores      = relationship("TrustScore",   back_populates="user")
-    verification      = relationship("Verification", back_populates="user", uselist=False)
-    system_logs       = relationship("SystemLog",    back_populates="performed_by_user")
-    sent_messages     = relationship("Message", foreign_keys="Message.sender_id",
+    freelancer        = relationship("Freelancer",    back_populates="user", uselist=False)
+    client            = relationship("Client",        back_populates="user", uselist=False)
+    trust_scores      = relationship("TrustScore",    back_populates="user")
+    verification      = relationship("Verification",  back_populates="user", uselist=False)
+    system_logs       = relationship("SystemLog",     back_populates="performed_by_user")
+    sent_messages     = relationship("Message",       foreign_keys="Message.sender_id",
                                      back_populates="sender")
-    received_messages = relationship("Message", foreign_keys="Message.receiver_id",
+    received_messages = relationship("Message",       foreign_keys="Message.receiver_id",
                                      back_populates="receiver")
+    notifications     = relationship("Notification",  back_populates="user",    # ✅ Phase 5
+                                     foreign_keys="Notification.user_id")
 
 
 # ─────────────────────────────────────────
@@ -234,7 +254,7 @@ class Proposal(Base):
     project_id         = Column(Integer, ForeignKey("projects.project_id"),       nullable=False, index=True)
     freelancer_id      = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)
     bid_amount         = Column(Float, index=True)
-    cover_letter       = Column(Text, nullable=True)          # ✅ NEW: freelancer pitch text
+    cover_letter       = Column(Text, nullable=True)
     ai_relevance_score = Column(Float, nullable=True, index=True)
     status             = Column(Enum(ProposalStatus), default=ProposalStatus.pending, index=True)
     created_at         = Column(DateTime(timezone=True), server_default=func.now(), index=True)
@@ -254,7 +274,7 @@ class Contract(Base):
     project_id    = Column(Integer, ForeignKey("projects.project_id"),       nullable=False, index=True)
     freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)
     status        = Column(Enum(ContractStatus), default=ContractStatus.active, index=True)
-    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     project    = relationship("Project",    back_populates="contracts")
     freelancer = relationship("Freelancer", back_populates="contracts")
@@ -272,12 +292,12 @@ class Milestone(Base):
 
     milestone_id = Column(Integer, primary_key=True, index=True)
     contract_id  = Column(Integer, ForeignKey("contracts.contract_id"), nullable=False, index=True)
-    title        = Column(String(255), nullable=True)   # ✅ NEW: what this milestone is for
-    description  = Column(Text, nullable=True)          # ✅ NEW: detailed deliverable description
+    title        = Column(String(255), nullable=True)
+    description  = Column(Text, nullable=True)
     amount       = Column(Float)
     status       = Column(Enum(MilestoneStatus), default=MilestoneStatus.pending, index=True)
-    due_date     = Column(DateTime(timezone=True), nullable=True)   # ✅ NEW: optional deadline
-    created_at   = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    due_date     = Column(DateTime(timezone=True), nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     contract = relationship("Contract", back_populates="milestones")
 
@@ -292,10 +312,10 @@ class Escrow(Base):
     escrow_id         = Column(Integer, primary_key=True, index=True)
     contract_id       = Column(Integer, ForeignKey("contracts.contract_id"), unique=True, nullable=False, index=True)
     amount            = Column(Float)
-    released_amount   = Column(Float, default=0.0)   # ✅ NEW: track how much has been released
+    released_amount   = Column(Float, default=0.0)
     status            = Column(Enum(EscrowStatus), default=EscrowStatus.held, index=True)
-    funded_at         = Column(DateTime(timezone=True), nullable=True)   # ✅ NEW: when client funded it
-    created_at        = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    funded_at         = Column(DateTime(timezone=True), nullable=True)
+    created_at        = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     contract = relationship("Contract", back_populates="escrow")
     payments = relationship("Payment",  back_populates="escrow")
@@ -310,8 +330,8 @@ class Payment(Base):
 
     payment_id    = Column(Integer, primary_key=True, index=True)
     escrow_id     = Column(Integer, ForeignKey("escrow.escrow_id"), nullable=False, index=True)
-    milestone_id  = Column(Integer, ForeignKey("milestones.milestone_id"), nullable=True, index=True)  # ✅ NEW: link payment to milestone
-    amount        = Column(Float, nullable=True)   # ✅ NEW: record exact amount paid
+    milestone_id  = Column(Integer, ForeignKey("milestones.milestone_id"), nullable=True, index=True)
+    amount        = Column(Float, nullable=True)
     payment_date  = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     escrow = relationship("Escrow", back_populates="payments")
@@ -327,10 +347,10 @@ class Review(Base):
     review_id     = Column(Integer, primary_key=True, index=True)
     project_id    = Column(Integer, ForeignKey("projects.project_id"),       nullable=False, index=True)
     freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)
-    client_id     = Column(Integer, ForeignKey("clients.client_id"),         nullable=False, index=True)  # ✅ NEW: who wrote it
+    client_id     = Column(Integer, ForeignKey("clients.client_id"),         nullable=False, index=True)
     rating        = Column(Integer, index=True)   # 1–5
     comment       = Column(Text)
-    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     project    = relationship("Project",    back_populates="reviews")
     freelancer = relationship("Freelancer", back_populates="reviews")
@@ -348,7 +368,7 @@ class AIPricing(Base):
     project_id    = Column(Integer, ForeignKey("projects.project_id"), unique=True, nullable=False, index=True)
     suggested_min = Column(Float)
     suggested_max = Column(Float)
-    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     project = relationship("Project", back_populates="ai_pricing")
 
@@ -379,11 +399,44 @@ class Message(Base):
     sender_id   = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     content     = Column(Text)
-    is_read     = Column(Boolean, default=False, index=True)   # ✅ NEW: unread tracking
+    is_read     = Column(Boolean, default=False, index=True)
     sent_at     = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     sender   = relationship("User", foreign_keys=[sender_id],   back_populates="sent_messages")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
+
+
+# ─────────────────────────────────────────
+#  TABLE: notifications  ✅ Phase 5
+# ─────────────────────────────────────────
+
+class Notification(Base):
+    """
+    Stores in-app notifications for every user.
+
+    The `type` field tells the frontend which icon/colour to show.
+    The `entity_id` is an optional FK-equivalent so the frontend can link
+    directly to the related object (e.g. contract_id, message_id, etc.).
+
+    Design decisions:
+      - Notifications are NEVER deleted automatically — the user can clear them.
+      - `is_read` is flipped to True when the user calls GET /notifications
+        (auto-mark-read) or PATCH /notifications/{id}/read.
+      - WebSocket delivery is best-effort: the notification is always written
+        to this table first, then pushed over WS if the user is connected.
+    """
+    __tablename__ = "notifications"
+
+    notification_id = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    type            = Column(Enum(NotificationType), nullable=False, index=True)
+    title           = Column(String(255), nullable=False)
+    body            = Column(Text, nullable=True)
+    entity_id       = Column(Integer, nullable=True)     # e.g. contract_id, message_id
+    is_read         = Column(Boolean, default=False, index=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    user = relationship("User", back_populates="notifications", foreign_keys=[user_id])
 
 
 # ─────────────────────────────────────────
@@ -395,13 +448,13 @@ class Dispute(Base):
 
     dispute_id      = Column(Integer, primary_key=True, index=True)
     contract_id     = Column(Integer, ForeignKey("contracts.contract_id"), unique=True, nullable=False, index=True)
-    opened_by       = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # ✅ NEW: who opened it
-    reason          = Column(Text, nullable=True)             # ✅ NEW: why dispute was opened
+    opened_by       = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reason          = Column(Text, nullable=True)
     status          = Column(Enum(DisputeStatus), default=DisputeStatus.open, index=True)
-    resolution_note = Column(Text, nullable=True)             # ✅ NEW: admin resolution explanation
-    resolved_by     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # ✅ NEW
-    resolved_at     = Column(DateTime(timezone=True), nullable=True, index=True)           # ✅ NEW
-    created_at      = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    resolution_note = Column(Text, nullable=True)
+    resolved_by     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    resolved_at     = Column(DateTime(timezone=True), nullable=True, index=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     contract = relationship("Contract", back_populates="dispute")
 
@@ -416,12 +469,12 @@ class Verification(Base):
     verification_id = Column(Integer, primary_key=True, index=True)
     user_id         = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
     document_type   = Column(String(100))
-    document_path   = Column(String(500), nullable=True)   # ✅ NEW: path to uploaded doc
+    document_path   = Column(String(500), nullable=True)
     status          = Column(Enum(VerificationStatus), default=VerificationStatus.pending, index=True)
-    rejection_note  = Column(Text, nullable=True)          # ✅ NEW: why admin rejected
-    reviewed_by     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # ✅ NEW
-    reviewed_at     = Column(DateTime(timezone=True), nullable=True)                       # ✅ NEW
-    created_at      = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    rejection_note  = Column(Text, nullable=True)
+    reviewed_by     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reviewed_at     = Column(DateTime(timezone=True), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     user = relationship("User", back_populates="verification", foreign_keys=[user_id])
 
@@ -437,8 +490,8 @@ class WalletTransaction(Base):
     freelancer_id  = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)
     amount         = Column(Float)
     type           = Column(Enum(TransactionType), index=True)
-    description    = Column(String(255), nullable=True)   # ✅ NEW: e.g. "Milestone #3 payment"
-    created_at     = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    description    = Column(String(255), nullable=True)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     freelancer = relationship("Freelancer", back_populates="wallet_transactions")
 
@@ -454,9 +507,9 @@ class File(Base):
     project_id    = Column(Integer, ForeignKey("projects.project_id"), nullable=False, index=True)
     uploader_id   = Column(Integer, ForeignKey("users.id"),            nullable=False, index=True)
     file_path     = Column(String(500))
-    original_name = Column(String(255), nullable=True)   # ✅ NEW: preserve original filename
-    file_size_kb  = Column(Integer, nullable=True)       # ✅ NEW: store size for display
-    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)  # ✅ NEW
+    original_name = Column(String(255), nullable=True)
+    file_size_kb  = Column(Integer, nullable=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     project = relationship("Project", back_populates="files")
 
