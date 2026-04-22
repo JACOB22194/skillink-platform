@@ -60,11 +60,13 @@ def create_project(
 
     # Create project
     project = models.Project(
-        client_id   = client.client_id,
-        title       = body.title,
-        description = body.description,
-        budget      = body.budget,
-        status      = models.ProjectStatus.open,
+        client_id    = client.client_id,
+        title        = body.title,
+        description  = body.description,
+        budget       = body.budget,
+        sub_category = body.sub_category,
+        category     = body.category,
+        status       = models.ProjectStatus.open,
     )
     db.add(project)
     db.flush()  # get project_id
@@ -238,9 +240,11 @@ def update_project(
             "Only open projects can be edited."
         )
 
-    if body.title       is not None: project.title       = body.title
-    if body.description is not None: project.description = body.description
-    if body.budget      is not None: project.budget      = body.budget
+    if body.title        is not None: project.title        = body.title
+    if body.description  is not None: project.description  = body.description
+    if body.budget       is not None: project.budget       = body.budget
+    if body.sub_category is not None: project.sub_category = body.sub_category
+    if body.category     is not None: project.category     = body.category
 
     # Replace skills if provided
     if body.required_skills is not None:
@@ -312,12 +316,14 @@ def _project_to_response(project: models.Project) -> schema.ProjectResponse:
     """Converts a Project ORM object to a ProjectResponse, including skill names."""
     skill_names = [ps.skill.name for ps in project.skills if ps.skill]
     return schema.ProjectResponse(
-        project_id    = project.project_id,
-        client_id     = project.client_id,
-        title         = project.title,
-        description   = project.description,
-        budget        = project.budget,
-        status        = project.status,
+        project_id      = project.project_id,
+        client_id       = project.client_id,
+        title           = project.title,
+        description     = project.description,
+        budget          = project.budget,
+        sub_category    = project.sub_category,
+        category        = project.category,
+        status          = project.status,
         required_skills = skill_names,
     )
 

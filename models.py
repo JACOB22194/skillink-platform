@@ -116,7 +116,8 @@ class User(Base):
     freelancer        = relationship("Freelancer",    back_populates="user", uselist=False)
     client            = relationship("Client",        back_populates="user", uselist=False)
     trust_scores      = relationship("TrustScore",    back_populates="user")
-    verification      = relationship("Verification",  back_populates="user", uselist=False)
+    verification      = relationship("Verification",  back_populates="user", uselist=False,
+                                      foreign_keys="Verification.user_id")
     system_logs       = relationship("SystemLog",     back_populates="performed_by_user")
     sent_messages     = relationship("Message",       foreign_keys="Message.sender_id",
                                      back_populates="sender")
@@ -212,13 +213,15 @@ class FreelancerSkill(Base):
 class Project(Base):
     __tablename__ = "projects"
 
-    project_id  = Column(Integer, primary_key=True, index=True)
-    client_id   = Column(Integer, ForeignKey("clients.client_id"), nullable=False, index=True)
-    title       = Column(String(255), nullable=False)
-    description = Column(Text)
-    budget      = Column(Float, index=True)
-    status      = Column(Enum(ProjectStatus), default=ProjectStatus.open, index=True)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    project_id   = Column(Integer, primary_key=True, index=True)
+    client_id    = Column(Integer, ForeignKey("clients.client_id"), nullable=False, index=True)
+    title        = Column(String(255), nullable=False)
+    description  = Column(Text)
+    budget       = Column(Float, index=True)
+    sub_category = Column(String(150), nullable=True, index=True)   # AI primary output (e.g. "Logo Design")
+    category     = Column(String(150), nullable=True, index=True)   # AI secondary output via sub_to_cat lookup (e.g. "Design")
+    status       = Column(Enum(ProjectStatus), default=ProjectStatus.open, index=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     client     = relationship("Client",       back_populates="projects")
     proposals  = relationship("Proposal",     back_populates="project")

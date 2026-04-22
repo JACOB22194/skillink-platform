@@ -253,6 +253,8 @@ class ProjectCreate(BaseModel):
     description:     Optional[str] = None
     budget:          float
     required_skills: Optional[List[str]] = None
+    sub_category:    Optional[str] = None   # AI primary output (e.g. "Logo Design")
+    category:        Optional[str] = None   # AI secondary output (e.g. "Design")
 
     @field_validator("budget")
     @classmethod
@@ -273,6 +275,8 @@ class ProjectUpdate(BaseModel):
     description:     Optional[str]       = None
     budget:          Optional[float]     = None
     required_skills: Optional[List[str]] = None
+    sub_category:    Optional[str]       = None
+    category:        Optional[str]       = None
 
     @field_validator("budget")
     @classmethod
@@ -287,6 +291,8 @@ class ProjectResponse(BaseModel):
     title:           str
     description:     Optional[str]
     budget:          float
+    sub_category:    Optional[str] = None
+    category:        Optional[str] = None
     status:          ProjectStatus
     required_skills: List[str] = []
     model_config = {"from_attributes": True}
