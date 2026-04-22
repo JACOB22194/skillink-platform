@@ -76,11 +76,15 @@ const PostProjectPage: React.FC = () => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
   });
-  
+
   const colors = getColors(darkMode);
 
   // Workflow states
   const [step, setStep] = useState<"input" | "pricing" | "matching">("input");
+  
+  // Data state
+  const [title, setTitle] = useState("");
+  const [budget, setBudget] = useState("");
   const [description, setDescription] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
 
@@ -95,9 +99,10 @@ const PostProjectPage: React.FC = () => {
     e.target.style.borderColor = colors.border;
   };
 
-  // Real-time classification effect
+  // Real-time classification effect — sends Title + Description to ensemble model
   useEffect(() => {
-    if (description.trim().length < 15) {
+    const hasEnoughInput = description.trim().length >= 15 || title.trim().length >= 5;
+    if (!hasEnoughInput) {
       setAnalysisResult(null);
       return;
     }
@@ -107,13 +112,13 @@ const PostProjectPage: React.FC = () => {
         const res = await fetch("http://localhost:8001/predict", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            title: "", 
-            description: description,
-            top_k: 1
+          body: JSON.stringify({
+            title: title.trim(),
+            description: description.trim(),
+            top_k: 5
           })
         });
-        
+
         const data = await res.json();
         if (data.sub_category) {
           setAnalysisResult({
@@ -129,7 +134,7 @@ const PostProjectPage: React.FC = () => {
     }, 300); // 300ms debounce prevents spam
 
     return () => clearTimeout(timer);
-  }, [description]);
+  }, [title, description]);
 
   const goToPricing = () => {
     if (!description.trim()) return;
@@ -140,8 +145,44 @@ const PostProjectPage: React.FC = () => {
     setStep("matching");
   };
 
-  const finish = () => {
-    navigate("/dashboard/client");
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const finish = async () => {
+    setIsSaving(true);
+    setErrorMsg("");
+    
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) throw new Error("Auth token missing! Please login again.");
+      
+      const res = await fetch("http://localhost:8000/projects", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          budget: parseFloat(budget),
+          required_skills: analysisResult?.label ? [analysisResult.label] : [],
+          sub_category: analysisResult?.label || null,
+          category: analysisResult?.category || null,
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || "Failed to save project");
+      }
+      
+      navigate("/client");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Network Error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -156,7 +197,7 @@ const PostProjectPage: React.FC = () => {
             style={{ background: "transparent", border: `0.5px solid ${colors.border}`, color: colors.text, padding: "8px 12px", borderRadius: 8, cursor: "pointer", fontSize: 16 }}
             onClick={() => setDarkMode(!darkMode)}
           >
-             {darkMode ? "☀️" : "🌙"}
+            {darkMode ? "☀️" : "🌙"}
           </button>
           <button
             style={{ background: "transparent", border: "none", color: colors.subtext, cursor: "pointer", fontSize: 14 }}
@@ -170,7 +211,7 @@ const PostProjectPage: React.FC = () => {
       {/* ── Main Content Container ── */}
       <main style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", padding: "2rem" }}>
         <div style={{ width: "100%", maxWidth: 680, background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 16, padding: "3rem", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
-          
+
           {/* STEP 1: Description Input */}
           {step === "input" && (
             <div style={{ animation: "fadeIn 0.5s ease" }}>
@@ -181,10 +222,30 @@ const PostProjectPage: React.FC = () => {
                 What are you looking to <em style={{ fontStyle: "normal", color: colors.primary }}>build</em>?
               </h1>
               <p style={{ fontSize: 15, color: colors.subtext, marginBottom: "2rem", lineHeight: 1.6 }}>
-                Describe your project, the features you need, and any technical requirements. Our AI will automatically categorize it and find the perfect talent.
+                Give your project a title and describe what you need. Our AI will classify it in real time as you type.
               </p>
 
-              <textarea 
+              <input
+                  type="text"
+                  placeholder="Project Title (e.g. Build a Fintech Dashboard)"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "1rem",
+                    fontSize: 15,
+                    background: colors.bg,
+                    color: colors.text,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 12,
+                    outline: "none",
+                    fontFamily: "inherit",
+                    marginBottom: "1rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+
+              <textarea
                 placeholder="e.g. I need a modern React application with a dark mode, Stripe integration, and..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -204,29 +265,52 @@ const PostProjectPage: React.FC = () => {
                   fontFamily: "inherit",
                   lineHeight: 1.6,
                   transition: "border-color 0.2s",
-                  marginBottom: "1.5rem",
+                  marginBottom: "1rem",
                   boxSizing: "border-box"
                 }}
               />
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, visibility: analysisResult ? "visible" : "hidden", animation: "fadeIn 0.3s ease" }}>
-                  <span style={{ fontSize: 13, color: colors.subtext }}>Predicted Category:</span>
-                  <span style={{ background: colors.primarySoft, color: colors.primary, padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 500 }}>
-                    {analysisResult?.category} &rarr; {analysisResult?.label} ({analysisResult ? (analysisResult.score * 100).toFixed(1) : 0}%)
-                  </span>
+
+              {/* Real-time AI prediction badges — appear separately as user types */}
+              {analysisResult && (
+                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1.5rem", animation: "fadeIn 0.3s ease" }}>
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: 8,
+                    background: colors.primarySoft, padding: "8px 16px", borderRadius: 100,
+                    border: `1px solid ${colors.primary}30`,
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: colors.primary, animation: "pulse 2s ease-in-out infinite" }} />
+                    <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>
+                      {analysisResult.label}
+                    </span>
+                    <span style={{ fontSize: 11, color: colors.subtext }}>
+                      {(analysisResult.score * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: 8,
+                    background: colors.bg, padding: "8px 16px", borderRadius: 100,
+                    border: `1px solid ${colors.border}`,
+                  }}>
+                    <span style={{ fontSize: 13, color: colors.text, fontWeight: 500 }}>
+                      {analysisResult.category}
+                    </span>
+                  </div>
                 </div>
-                <button 
+              )}
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+                <button
                   onClick={goToPricing}
-                  disabled={!description.trim()}
+                  disabled={!description.trim() || !title.trim()}
                   style={{
-                    background: description.trim() ? colors.primary : colors.border,
+                    background: (description.trim() && title.trim()) ? colors.primary : colors.border,
                     color: "#fff",
                     border: "none",
                     padding: "12px 28px",
                     borderRadius: 8,
                     fontSize: 15,
                     fontWeight: 500,
-                    cursor: description.trim() ? "pointer" : "not-allowed",
+                    cursor: (description.trim() && title.trim()) ? "pointer" : "not-allowed",
                     transition: "opacity 0.2s",
                   }}
                 >
@@ -246,18 +330,21 @@ const PostProjectPage: React.FC = () => {
                 AI Analysis <em style={{ fontStyle: "normal", color: colors.primary }}>Complete</em>
               </h1>
               <p style={{ fontSize: 15, color: colors.subtext, marginBottom: "2.5rem", lineHeight: 1.6 }}>
-                Based on your description, we have automatically tagged your project and generated a dynamic fair-price estimate.
+                Our ensemble model (LR×2 + LinearSVC) analyzed your title and description to classify the project. The category is deterministically derived from the predicted sub-category.
               </p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
+              {/* Classification result cards — shows the sub→cat lookup flow */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "0.75rem", marginBottom: "1.5rem", alignItems: "center" }}>
                 <div style={{ background: colors.bg, padding: "1.5rem", borderRadius: 12, border: `0.5px solid ${colors.border}` }}>
-                   <div style={{ fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Parent Category</div>
-                   <div style={{ fontSize: 20, fontWeight: 500, color: colors.text }}>{analysisResult?.category || "Loading..."}</div>
+                  <div style={{ fontSize: 11, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Sub Category</div>
+                  <div style={{ fontSize: 20, fontWeight: 500, color: colors.primary }}>{analysisResult?.label || "Loading..."}</div>
+                  <div style={{ fontSize: 12, color: colors.subtext, marginTop: "0.5rem" }}>Confidence: {analysisResult ? (analysisResult.score * 100).toFixed(1) : 0}%</div>
                 </div>
+                <div style={{ fontSize: 20, color: colors.subtext }}>→</div>
                 <div style={{ background: colors.bg, padding: "1.5rem", borderRadius: 12, border: `0.5px solid ${colors.border}` }}>
-                   <div style={{ fontSize: 12, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Predicted Skill</div>
-                   <div style={{ fontSize: 20, fontWeight: 500, color: colors.text }}>{analysisResult?.label || "Loading..."}</div>
-                   <div style={{ fontSize: 12, color: colors.primary, marginTop: "0.5rem" }}>Confidence: {analysisResult ? (analysisResult.score * 100).toFixed(1) : 0}%</div>
+                  <div style={{ fontSize: 11, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Category</div>
+                  <div style={{ fontSize: 20, fontWeight: 500, color: colors.text }}>{analysisResult?.category || "Loading..."}</div>
+                  <div style={{ fontSize: 11, color: colors.subtext, marginTop: "0.5rem" }}>Derived from sub-category lookup</div>
                 </div>
               </div>
 
@@ -275,13 +362,13 @@ const PostProjectPage: React.FC = () => {
               )}
 
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <button 
+                <button
                   onClick={() => setStep("input")}
                   style={{ background: "transparent", color: colors.subtext, border: "none", padding: "12px", cursor: "pointer", fontSize: 15 }}
                 >
                   Edit description
                 </button>
-                <button 
+                <button
                   onClick={proceedToMatching}
                   style={{ background: colors.primary, color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: "pointer" }}
                 >
@@ -294,7 +381,7 @@ const PostProjectPage: React.FC = () => {
           {/* STEP 4: Matching Freelancers */}
           {step === "matching" && (
             <div style={{ animation: "fadeIn 0.5s ease" }}>
-               <div style={{ display: "inline-block", fontSize: 12, padding: "4px 12px", borderRadius: 100, marginBottom: "1.5rem", background: colors.primarySoft, color: colors.primary }}>
+              <div style={{ display: "inline-block", fontSize: 12, padding: "4px 12px", borderRadius: 100, marginBottom: "1.5rem", background: colors.primarySoft, color: colors.primary }}>
                 Step 3 of 3
               </div>
               <h1 style={{ fontSize: 36, fontWeight: 500, lineHeight: 1.15, letterSpacing: "-1px", marginBottom: "1rem" }}>
@@ -322,12 +409,18 @@ const PostProjectPage: React.FC = () => {
                 ))}
               </div>
 
+              {errorMsg && (
+                <div style={{ background: "rgba(239,68,68,.1)", color: "#ef4444", padding: "12px 16px", borderRadius: 8, fontSize: 14, marginBottom: "1.5rem", border: "1px solid rgba(239,68,68,.2)" }}>
+                  ❌ {errorMsg}
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button 
+                <button
                   onClick={finish}
-                  style={{ background: colors.primary, color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: "pointer" }}
+                  disabled={isSaving}
+                  style={{ background: isSaving ? colors.border : colors.primary, color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.7 : 1 }}
                 >
-                  Save & Go to Dashboard
+                  {isSaving ? "Saving to Database..." : "Save & Post to Marketplace"}
                 </button>
               </div>
             </div>
@@ -340,6 +433,10 @@ const PostProjectPage: React.FC = () => {
           @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
           }
         `}
       </style>
