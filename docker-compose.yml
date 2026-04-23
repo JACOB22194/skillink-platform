@@ -6,3 +6,5 @@ services:
       - "8001:8000"
     environment:
       HF_TOKEN: ${HF_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
