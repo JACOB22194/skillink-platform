@@ -205,10 +205,10 @@ class ClientProfileUpdate(BaseModel):
     company_name: Optional[str] = None
 
 class UserSearchResult(BaseModel):
-    user_id: int
+    user_id: int = Field(validation_alias="id")
     email:   str
     role:    UserRole
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 class FreelancerSearchResult(BaseModel):
     """Used in GET /freelancers/search and AI match responses"""
