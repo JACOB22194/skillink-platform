@@ -9,6 +9,7 @@ import RequireRole from './shared/RequireRole';
 import MFASetupPage from './pages/MFASetupPage';
 import PostProjectPage from './pages/PostProjectPage';
 import ProfileSettingsPage from './pages/ProfileSettingsPage';
+import MessagingPage from './pages/MessagingPage';
 
 const App = () => {
   return (
@@ -67,6 +68,14 @@ const App = () => {
     element={
       <RequireRole role="freelancer">
         <ProfileSettingsPage />
+      </RequireRole>
+    }
+  />
+  <Route
+    path="/messages"
+    element={
+      <RequireRole role={["freelancer", "client", "admin"]}>
+        <MessagingPage />
       </RequireRole>
     }
   />

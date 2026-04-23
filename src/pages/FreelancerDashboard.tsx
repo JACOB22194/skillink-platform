@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,9 +85,9 @@ const getColors = (dark: boolean): ThemeColors =>
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | string; icon: React.ReactNode; colors: ThemeColors }> =
-  ({ label, active, badge, icon, colors }) => (
-    <div style={{
+const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | string; icon: React.ReactNode; colors: ThemeColors; onClick?: () => void }> =
+  ({ label, active, badge, icon, colors, onClick }) => (
+    <div onClick={onClick} style={{
       display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
       color: active ? colors.primary : colors.subtext,
       borderLeft: `2px solid ${active ? colors.primary : "transparent"}`,
@@ -136,6 +137,7 @@ const IconTeam = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="non
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const FreelancerDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
@@ -207,7 +209,7 @@ const FreelancerDashboard: React.FC = () => {
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Main</div>
           <NavItem label="Dashboard" active icon={<IconGrid />} colors={c} />
           <NavItem label="Profile" icon={<IconUser />} colors={c} />
-          <NavItem label="Messages" badge={4} icon={<IconMsg />} colors={c} />
+          <NavItem label="Messages" badge={4} icon={<IconMsg />} colors={c} onClick={() => navigate("/messages")} />
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Skillink</div>
           <NavItem label="AI Matches" badge={12} icon={<IconBulb />} colors={c} />
           <NavItem label="Verification" icon={<IconShield />} colors={c} />
