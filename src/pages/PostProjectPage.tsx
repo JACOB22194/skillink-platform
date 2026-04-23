@@ -87,6 +87,7 @@ const PostProjectPage: React.FC = () => {
   const [budget, setBudget] = useState("");
   const [description, setDescription] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [extraLabels, setExtraLabels] = useState<string[]>([]);
 
   useEffect(() => {
     localStorage.setItem("skilllink-darkMode", JSON.stringify(darkMode));
@@ -99,10 +100,9 @@ const PostProjectPage: React.FC = () => {
     e.target.style.borderColor = colors.border;
   };
 
-  // Real-time classification effect — sends Title + Description to ensemble model
+  // Real-time classification — only fires after description reaches 200+ characters
   useEffect(() => {
-    const hasEnoughInput = description.trim().length >= 15 || title.trim().length >= 5;
-    if (!hasEnoughInput) {
+    if (description.trim().length < 125) {
       setAnalysisResult(null);
       return;
     }
@@ -131,17 +131,13 @@ const PostProjectPage: React.FC = () => {
       } catch (err) {
         console.error("AI Service Error:", err);
       }
-    }, 300); // 300ms debounce prevents spam
+    }, 400);
 
     return () => clearTimeout(timer);
   }, [title, description]);
 
-  const goToPricing = () => {
+  const goToMatching = () => {
     if (!description.trim()) return;
-    setStep("pricing");
-  };
-
-  const proceedToMatching = () => {
     setStep("matching");
   };
 
@@ -166,7 +162,7 @@ const PostProjectPage: React.FC = () => {
           title: title.trim(),
           description: description.trim(),
           budget: parseFloat(budget),
-          required_skills: analysisResult?.label ? [analysisResult.label] : [],
+          required_skills: analysisResult?.label ? [analysisResult.label, ...extraLabels] : extraLabels,
           sub_category: analysisResult?.label || null,
           category: analysisResult?.category || null,
         })
@@ -216,13 +212,13 @@ const PostProjectPage: React.FC = () => {
           {step === "input" && (
             <div style={{ animation: "fadeIn 0.5s ease" }}>
               <div style={{ display: "inline-block", fontSize: 12, padding: "4px 12px", borderRadius: 100, marginBottom: "1.5rem", background: colors.primarySoft, color: colors.primary }}>
-                Step 1 of 3
+                Step 1 of 2
               </div>
               <h1 style={{ fontSize: 36, fontWeight: 500, lineHeight: 1.15, letterSpacing: "-1px", marginBottom: "1rem" }}>
                 What are you looking to <em style={{ fontStyle: "normal", color: colors.primary }}>build</em>?
               </h1>
               <p style={{ fontSize: 15, color: colors.subtext, marginBottom: "2rem", lineHeight: 1.6 }}>
-                Give your project a title and describe what you need. Our AI will classify it in real time as you type.
+                Give your project a title and describe what you need.
               </p>
 
               <input
@@ -246,7 +242,7 @@ const PostProjectPage: React.FC = () => {
                 />
 
               <textarea
-                placeholder="e.g. I need a modern React application with a dark mode, Stripe integration, and..."
+                placeholder="Describe your project requirements in detail (minimum 125 characters for AI classification)..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 onFocus={handleFocus}
@@ -265,42 +261,87 @@ const PostProjectPage: React.FC = () => {
                   fontFamily: "inherit",
                   lineHeight: 1.6,
                   transition: "border-color 0.2s",
-                  marginBottom: "1rem",
+                  marginBottom: "0.5rem",
                   boxSizing: "border-box"
                 }}
               />
+              <div style={{ fontSize: 12, color: description.trim().length >= 125 ? colors.primary : colors.subtext, marginBottom: "1rem", textAlign: "right" }}>
+                {description.trim().length} / 125
+              </div>
 
-              {/* Real-time AI prediction badges — appear separately as user types */}
+              {/* Real-time AI prediction badges + extras — no bullet dot */}
               {analysisResult && (
-                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1.5rem", animation: "fadeIn 0.3s ease" }}>
-                  <div style={{
-                    display: "inline-flex", alignItems: "center", gap: 8,
-                    background: colors.primarySoft, padding: "8px 16px", borderRadius: 100,
-                    border: `1px solid ${colors.primary}30`,
-                  }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: colors.primary, animation: "pulse 2s ease-in-out infinite" }} />
-                    <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>
-                      {analysisResult.label}
-                    </span>
-                    <span style={{ fontSize: 11, color: colors.subtext }}>
-                      {(analysisResult.score * 100).toFixed(0)}%
-                    </span>
+                <div style={{ animation: "fadeIn 0.3s ease", marginBottom: "1rem" }}>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                    {/* Primary predictions */}
+                    <div style={{
+                      display: "inline-flex", alignItems: "center",
+                      background: colors.primarySoft, padding: "8px 16px", borderRadius: 100,
+                      border: `1px solid ${colors.primary}30`,
+                    }}>
+                      <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>
+                        {analysisResult.label}
+                      </span>
+                    </div>
+                    <div style={{
+                      display: "inline-flex", alignItems: "center",
+                      background: colors.primarySoft, padding: "8px 16px", borderRadius: 100,
+                      border: `1px solid ${colors.primary}30`,
+                    }}>
+                      <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>
+                        {analysisResult.category}
+                      </span>
+                    </div>
+                    {/* Extra labels added from alternatives */}
+                    {extraLabels.map((lbl, i) => (
+                      <div key={`extra-${i}`} style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        background: colors.primarySoft, padding: "8px 16px", borderRadius: 100,
+                        border: `1px solid ${colors.primary}30`,
+                      }}>
+                        <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>{lbl}</span>
+                        <span
+                          onClick={() => setExtraLabels(extraLabels.filter((_, j) => j !== i))}
+                          style={{ fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2 }}
+                        >×</span>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{
-                    display: "inline-flex", alignItems: "center", gap: 8,
-                    background: colors.bg, padding: "8px 16px", borderRadius: 100,
-                    border: `1px solid ${colors.border}`,
-                  }}>
-                    <span style={{ fontSize: 13, color: colors.text, fontWeight: 500 }}>
-                      {analysisResult.category}
-                    </span>
-                  </div>
+
+                  {/* Alternative predictions — clickable to ADD */}
+                  {analysisResult.alternatives && analysisResult.alternatives.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 12, color: colors.subtext, marginBottom: "0.5rem" }}>Alternatives — click to add</div>
+                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                        {analysisResult.alternatives
+                          .filter(alt => alt.sub_category !== analysisResult.label && !extraLabels.includes(alt.sub_category))
+                          .map((alt, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setExtraLabels([...extraLabels, alt.sub_category])}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              display: "inline-flex", alignItems: "center",
+                              padding: "6px 14px", borderRadius: 100, fontSize: 12,
+                              background: colors.bg, color: colors.subtext,
+                              cursor: "pointer", fontWeight: 500,
+                              transition: "all 0.15s ease",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = colors.primary; e.currentTarget.style.color = colors.primary; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.subtext; }}
+                          >
+                            + {alt.sub_category}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
                 <button
-                  onClick={goToPricing}
+                  onClick={goToMatching}
                   disabled={!description.trim() || !title.trim()}
                   style={{
                     background: (description.trim() && title.trim()) ? colors.primary : colors.border,
@@ -320,69 +361,13 @@ const PostProjectPage: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 2: Classification & Pricing */}
-          {step === "pricing" && (
-            <div style={{ animation: "fadeIn 0.5s ease" }}>
-              <div style={{ display: "inline-block", fontSize: 12, padding: "4px 12px", borderRadius: 100, marginBottom: "1.5rem", background: colors.primarySoft, color: colors.primary }}>
-                Step 2 of 3
-              </div>
-              <h1 style={{ fontSize: 36, fontWeight: 500, lineHeight: 1.15, letterSpacing: "-1px", marginBottom: "1rem" }}>
-                AI Analysis <em style={{ fontStyle: "normal", color: colors.primary }}>Complete</em>
-              </h1>
-              <p style={{ fontSize: 15, color: colors.subtext, marginBottom: "2.5rem", lineHeight: 1.6 }}>
-                Our ensemble model (LR×2 + LinearSVC) analyzed your title and description to classify the project. The category is deterministically derived from the predicted sub-category.
-              </p>
+          {/* Old Step 2 removed — labels and alternatives are now in Step 1 */}
 
-              {/* Classification result cards — shows the sub→cat lookup flow */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "0.75rem", marginBottom: "1.5rem", alignItems: "center" }}>
-                <div style={{ background: colors.bg, padding: "1.5rem", borderRadius: 12, border: `0.5px solid ${colors.border}` }}>
-                  <div style={{ fontSize: 11, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Sub Category</div>
-                  <div style={{ fontSize: 20, fontWeight: 500, color: colors.primary }}>{analysisResult?.label || "Loading..."}</div>
-                  <div style={{ fontSize: 12, color: colors.subtext, marginTop: "0.5rem" }}>Confidence: {analysisResult ? (analysisResult.score * 100).toFixed(1) : 0}%</div>
-                </div>
-                <div style={{ fontSize: 20, color: colors.subtext }}>→</div>
-                <div style={{ background: colors.bg, padding: "1.5rem", borderRadius: 12, border: `0.5px solid ${colors.border}` }}>
-                  <div style={{ fontSize: 11, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.5rem" }}>Category</div>
-                  <div style={{ fontSize: 20, fontWeight: 500, color: colors.text }}>{analysisResult?.category || "Loading..."}</div>
-                  <div style={{ fontSize: 11, color: colors.subtext, marginTop: "0.5rem" }}>Derived from sub-category lookup</div>
-                </div>
-              </div>
-
-              {analysisResult?.alternatives && analysisResult.alternatives.length > 0 && (
-                <div style={{ marginBottom: "2.5rem" }}>
-                  <div style={{ fontSize: 13, color: colors.subtext, marginBottom: "0.75rem", fontWeight: 500 }}>Alternative Predictions</div>
-                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                    {analysisResult.alternatives.map((alt, i) => (
-                      <div key={i} style={{ border: `1px solid ${colors.border}`, display: "inline-flex", alignItems: "center", padding: "6px 12px", borderRadius: 100, fontSize: 13, background: colors.bg, color: colors.text }}>
-                        {alt.sub_category} <span style={{ color: colors.subtext, marginLeft: 6 }}>{alt.confidence.toFixed(1)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <button
-                  onClick={() => setStep("input")}
-                  style={{ background: "transparent", color: colors.subtext, border: "none", padding: "12px", cursor: "pointer", fontSize: 15 }}
-                >
-                  Edit description
-                </button>
-                <button
-                  onClick={proceedToMatching}
-                  style={{ background: colors.primary, color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: "pointer" }}
-                >
-                  Find Talent
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: Matching Freelancers */}
+          {/* STEP 2: Matching Freelancers */}
           {step === "matching" && (
             <div style={{ animation: "fadeIn 0.5s ease" }}>
               <div style={{ display: "inline-block", fontSize: 12, padding: "4px 12px", borderRadius: 100, marginBottom: "1.5rem", background: colors.primarySoft, color: colors.primary }}>
-                Step 3 of 3
+                Step 2 of 2
               </div>
               <h1 style={{ fontSize: 36, fontWeight: 500, lineHeight: 1.15, letterSpacing: "-1px", marginBottom: "1rem" }}>
                 Top matched <em style={{ fontStyle: "normal", color: colors.primary }}>freelancers</em>
