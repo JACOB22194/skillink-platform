@@ -204,6 +204,12 @@ class ClientProfileResponse(BaseModel):
 class ClientProfileUpdate(BaseModel):
     company_name: Optional[str] = None
 
+class UserSearchResult(BaseModel):
+    user_id: int
+    email:   str
+    role:    UserRole
+    model_config = {"from_attributes": True}
+
 class FreelancerSearchResult(BaseModel):
     """Used in GET /freelancers/search and AI match responses"""
     freelancer_id:  int

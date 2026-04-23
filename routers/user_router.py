@@ -269,6 +269,33 @@ async def upload_portfolio(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /users/search?q=  — must be before /{user_id}
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/search",
+    response_model=list[schema.UserSearchResult],
+    summary="Search users by email (for starting a new conversation)",
+)
+def search_users(
+    q:  str         = Query(..., min_length=1, description="Partial email match"),
+    me: models.User = Depends(get_current_user),
+    db: Session     = Depends(get_db),
+):
+    users = (
+        db.query(models.User)
+        .filter(
+            models.User.id     != me.id,
+            models.User.status == models.UserStatus.active,
+            models.User.email.ilike(f"%{q}%"),
+        )
+        .limit(10)
+        .all()
+    )
+    return users
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  GET /users/{user_id}
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
