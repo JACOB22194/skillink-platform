@@ -39,6 +39,7 @@ from routers.file_router        import router as file_router
 from routers.ai_router          import router as ai_router
 from routers.messaging_router   import router as messaging_router
 from routers.notification_router import router as notification_router
+from routers.github_router       import router as github_router
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -216,6 +217,7 @@ app.include_router(file_router)
 app.include_router(ai_router)               # Phase 4: AI, disputes, verification
 app.include_router(messaging_router)        # Phase 5: REST messaging + WS /ws/chat
 app.include_router(notification_router)     # Phase 5: /notifications/*
+app.include_router(github_router)           # POST /github/parse
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

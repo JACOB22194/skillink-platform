@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://skillink_user:password123@db:5432/skillink_db}
-      - AI_SERVICE_URL=${AI_SERVICE_URL:-http://ai:8001}
+      - AI_SERVICE_URL=${AI_SERVICE_URL:-http://skillink-ai:8001}
       - SECRET_KEY=${SECRET_KEY:-skillink-super-secret-jwt-key-2026-abcdef123xyz789102004}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-7}
