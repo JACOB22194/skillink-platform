@@ -12,10 +12,12 @@ export interface User {
 
 export interface FreelancerProfile {
   freelancer_id: number;
-  bio: string;
-  hourly_rate: number;
+  bio: string | null;
+  hourly_rate: number | null;
   success_score: number;
   wallet_balance: number;
+  portfolio_file: string | null;
+  skills: string[];
 }
 
 export interface ClientProfile {

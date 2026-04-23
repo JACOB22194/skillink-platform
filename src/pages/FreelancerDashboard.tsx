@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../shared/useAuth";
+import type { FreelancerProfile } from "../shared/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,12 +140,17 @@ const IconTeam = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="non
 
 const FreelancerDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user, profile } = useAuth<FreelancerProfile>("/users/me/profile");
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
   });
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
   const c = getColors(darkMode);
+
+  const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
+  const displayName = user?.email ?? "…";
+  const firstName = user?.email ? user.email.split("@")[0] : "…";
 
   const toggleTheme = () => {
     setDarkMode((d) => {
@@ -169,11 +176,11 @@ const FreelancerDashboard: React.FC = () => {
       <div
         onClick={() => setDropdownOpen((v) => !v)}
         style={{ width: 28, height: 28, borderRadius: "50%", background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 500, border: `0.5px solid ${c.border}`, cursor: "pointer" }}
-      >HJ</div>
+      >{initials}</div>
       {dropdownOpen && (
         <div style={{ position: "absolute", right: 0, top: 36, background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "6px 0", minWidth: 180, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,.15)" }}>
           <div style={{ padding: "6px 14px 8px", borderBottom: `0.5px solid ${c.border}`, marginBottom: 4 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>Hugh Jordan</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{displayName}</div>
             <div style={{ fontSize: 11, color: c.subtext }}>Freelancer</div>
           </div>
           <a href="/settings/profile" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: c.text, textDecoration: "none", cursor: "pointer" }}
@@ -227,7 +234,7 @@ const FreelancerDashboard: React.FC = () => {
           {/* Header */}
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Dashboard</div>
-            <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Welcome back, Hugh — your AI match engine is active</div>
+            <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Welcome back, {firstName} — your AI match engine is active</div>
           </div>
 
           {/* Metric cards */}
@@ -322,12 +329,16 @@ const FreelancerDashboard: React.FC = () => {
         <aside style={{ width: 220, borderLeft: `0.5px solid ${c.border}`, background: c.surface, padding: 16, overflowY: "auto", flexShrink: 0 }}>
           {/* Profile */}
           <div style={{ textAlign: "center", paddingBottom: 12, borderBottom: `0.5px solid ${c.border}`, marginBottom: 16 }}>
-            <div style={{ width: 40, height: 40, borderRadius: "50%", background: c.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 500, margin: "0 auto 8px" }}>HJ</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>Hugh Jordan</div>
-            <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Senior ML Engineer</div>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: c.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 500, margin: "0 auto 8px" }}>{initials}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{displayName}</div>
+            <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>{profile?.bio ? profile.bio.slice(0, 28) : "Freelancer"}</div>
             <Badge bg={c.primarySoft} color={c.primary} border="rgba(127,119,221,.2)">✓ AI Gate Verified</Badge>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6, marginTop: 12 }}>
-              {[{ val: "94", label: "MATCH", color: c.primary }, { val: "27", label: "DONE", color: "#22c55e" }, { val: "4.9", label: "TRUST", color: c.text }].map((s) => (
+              {[
+                { val: profile?.success_score?.toFixed(1) ?? "—", label: "SCORE", color: c.primary },
+                { val: profile?.hourly_rate ? `$${profile.hourly_rate}` : "—", label: "RATE", color: "#22c55e" },
+                { val: profile?.wallet_balance != null ? `$${profile.wallet_balance.toFixed(0)}` : "—", label: "WALLET", color: c.text },
+              ].map((s) => (
                 <div key={s.label} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 4px", textAlign: "center" }}>
                   <div style={{ fontSize: 16, fontWeight: 500, color: s.color }}>{s.val}</div>
                   <div style={{ fontSize: 9, color: c.subtext }}>{s.label}</div>
