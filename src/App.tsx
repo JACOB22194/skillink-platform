@@ -8,6 +8,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import RequireRole from './shared/RequireRole';
 import MFASetupPage from './pages/MFASetupPage';
 import PostProjectPage from './pages/PostProjectPage';
+import ProfileSettingsPage from './pages/ProfileSettingsPage';
 
 const App = () => {
   return (
@@ -58,6 +59,14 @@ const App = () => {
     element={
       <RequireRole role={["freelancer", "client", "admin"]}>
         <MFASetupPage />
+      </RequireRole>
+    }
+  />
+  <Route
+    path="/settings/profile"
+    element={
+      <RequireRole role="freelancer">
+        <ProfileSettingsPage />
       </RequireRole>
     }
   />

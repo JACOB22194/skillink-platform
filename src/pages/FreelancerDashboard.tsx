@@ -174,6 +174,12 @@ const FreelancerDashboard: React.FC = () => {
             <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>Hugh Jordan</div>
             <div style={{ fontSize: 11, color: c.subtext }}>Freelancer</div>
           </div>
+          <a href="/settings/profile" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: c.text, textDecoration: "none", cursor: "pointer" }}
+            onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >
+            👤 Profile settings
+          </a>
           <a href="/settings/mfa" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: c.text, textDecoration: "none", cursor: "pointer" }}
             onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
