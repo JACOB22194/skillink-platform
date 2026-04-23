@@ -25,7 +25,7 @@ Phase 5 additions:
   - WebSocket message envelopes (WSMessageOut, WSMessageIn)
 """
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List, Any
 from datetime import datetime
 from enum import Enum
@@ -157,13 +157,13 @@ class ChangePasswordRequest(BaseModel):
 # ═══════════════════════════════════════════════════
 
 class UserResponse(BaseModel):
-    id:          int
+    user_id:     int = Field(validation_alias="id")
     email:       str
     role:        UserRole
     status:      UserStatus
     mfa_enabled: bool
     created_at:  datetime
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 class FreelancerProfileResponse(BaseModel):
     freelancer_id:  int
