@@ -60,6 +60,7 @@ const MessagingPage: React.FC = () => {
   const [loadingInbox, setLoadingInbox] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
   const [wsReady, setWsReady] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Compose state
   const [composing, setComposing] = useState(false);
@@ -87,7 +88,10 @@ const MessagingPage: React.FC = () => {
       if (res.data.length > 0 && activeUserIdRef.current === null) {
         setActiveUserId(res.data[0].other_user_id);
       }
-    } catch { /* ignore */ } finally {
+    } catch (err: any) { 
+      console.error("Inbox fetch error:", err);
+      setErrorMsg("Failed to load inbox.");
+    } finally {
       setLoadingInbox(false);
     }
   }, []);
@@ -100,8 +104,8 @@ const MessagingPage: React.FC = () => {
     setLoadingThread(true);
     axios
       .get<ChatMessage[]>(`${API_BASE_URL}/messages/${activeUserId}`, getAuthHeaders())
-      .then((res) => setMessages(res.data))
-      .catch(() => setMessages([]))
+      .then((res) => { setMessages(res.data); setErrorMsg(null); })
+      .catch((err) => { console.error("Thread fetch error:", err); setMessages([]); setErrorMsg("Failed to load thread."); })
       .finally(() => setLoadingThread(false));
     setConversations((prev) =>
       prev.map((conv) => conv.other_user_id === activeUserId ? { ...conv, unread_count: 0 } : conv)
@@ -192,7 +196,7 @@ const MessagingPage: React.FC = () => {
       axios
         .post<ChatMessage>(`${API_BASE_URL}/messages`, { receiver_id: activeUserId, content: text }, getAuthHeaders())
         .then((res) => setMessages((prev) => [...prev, res.data]))
-        .catch(() => {});
+        .catch((err) => { console.error("Send message error:", err); setErrorMsg("Failed to send message."); });
     }
     // Update last_message preview in inbox
     setConversations((prev) =>
@@ -383,8 +387,13 @@ const MessagingPage: React.FC = () => {
 
               {/* Messages */}
               <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+                {errorMsg && (
+                  <div style={{ background: c.errorBg || "#ffebee", color: c.errorText || "#c62828", padding: "8px 12px", borderRadius: 8, fontSize: 12, textAlign: "center", marginBottom: 8 }}>
+                    {errorMsg}
+                  </div>
+                )}
                 {loadingThread && <div style={{ color: c.subtext, textAlign: "center" }}>Loading…</div>}
-                {!loadingThread && messages.length === 0 && (
+                {!loadingThread && messages.length === 0 && !errorMsg && (
                   <div style={{ color: c.subtext, textAlign: "center", fontSize: 12, marginTop: 40 }}>No messages yet. Say hi!</div>
                 )}
                 {messages.map((msg) => {

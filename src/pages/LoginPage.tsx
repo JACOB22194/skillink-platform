@@ -218,6 +218,19 @@ const LoginPage: React.FC = () => {
 
       const token = data as TokenResponse;
       storeTokens(token);
+      
+      if (token.role === "freelancer") {
+        try {
+          const profileRes = await axios.get(`${API_BASE_URL}/users/me/profile`, {
+            headers: { Authorization: `Bearer ${token.access_token}` }
+          });
+          if (!profileRes.data.skills || profileRes.data.skills.length === 0) {
+            window.location.href = "/profile-setup";
+            return;
+          }
+        } catch { /* ignore and use default */ }
+      }
+      
       window.location.href = REDIRECT_MAP[token.role];
     } catch (err) {
       const e = err as AxiosError<ApiError>;
@@ -241,6 +254,19 @@ const LoginPage: React.FC = () => {
       const body: MFAVerifyRequest = { email: mfaEmail, totp_code: mfaCode.replace(/\D/g, "") };
       const { data } = await axios.post<TokenResponse>(`${API_BASE_URL}/auth/verify-mfa`, body);
       storeTokens(data);
+
+      if (data.role === "freelancer") {
+        try {
+          const profileRes = await axios.get(`${API_BASE_URL}/users/me/profile`, {
+            headers: { Authorization: `Bearer ${data.access_token}` }
+          });
+          if (!profileRes.data.skills || profileRes.data.skills.length === 0) {
+            window.location.href = "/profile-setup";
+            return;
+          }
+        } catch { /* ignore */ }
+      }
+
       window.location.href = REDIRECT_MAP[data.role];
     } catch (err) {
       const e = err as AxiosError<ApiError>;

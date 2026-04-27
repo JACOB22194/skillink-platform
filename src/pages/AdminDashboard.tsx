@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { API_BASE_URL, getAuthHeaders } from "../shared/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,14 +50,41 @@ interface Workroom {
 
 interface PlatformStat {
   label: string;
-  value: string;
+  value: string | number;
   color?: string;
+}
+
+interface AdminStats {
+  total_users: number;
+  total_freelancers: number;
+  total_clients: number;
+  total_projects: number;
+  total_proposals: number;
+  total_contracts: number;
 }
 
 interface RecentAction {
   title: string;
   meta: string;
   color: string;
+}
+
+interface AdminUserItem {
+  id: number;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+}
+
+interface AdminVerification {
+  id: number;
+  user_id: number;
+  email: string;
+  document_type: string;
+  document_url: string;
+  status: string;
+  submitted_at: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -127,9 +155,9 @@ const Badge: React.FC<{ bg: string; color: string; border: string; children: Rea
     </span>
   );
 
-const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | string; icon: React.ReactNode; colors: ThemeColors }> =
-  ({ label, active, badge, icon, colors }) => (
-    <div style={{
+const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | string; icon: React.ReactNode; colors: ThemeColors; onClick?: () => void }> =
+  ({ label, active, badge, icon, colors, onClick }) => (
+    <div onClick={onClick} style={{
       display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
       color: active ? colors.primary : colors.subtext,
       borderLeft: `2px solid ${active ? colors.primary : "transparent"}`,
@@ -163,7 +191,64 @@ const AdminDashboard: React.FC = () => {
     return saved !== null ? JSON.parse(saved) : true;
   });
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("Overview");
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [users, setUsers] = useState<AdminUserItem[]>([]);
+  const [verifications, setVerifications] = useState<AdminVerification[]>([]);
+  
   const c = getColors(darkMode);
+
+  useEffect(() => {
+    if (activeTab === "Overview") {
+      fetch(`${API_BASE_URL}/admin/stats`, getAuthHeaders())
+        .then(res => res.json())
+        .then(data => setStats(data))
+        .catch(err => console.error("Failed to fetch stats", err));
+    } else if (activeTab === "Users") {
+      fetchUsers();
+    } else if (activeTab === "Vetting Gate") {
+      fetchVerifications();
+    }
+  }, [activeTab]);
+
+  const fetchUsers = () => {
+    fetch(`${API_BASE_URL}/admin/users?limit=100`, getAuthHeaders())
+      .then(res => res.json())
+      .then(data => setUsers(data))
+      .catch(err => console.error("Failed to fetch users", err));
+  };
+
+  const toggleUserStatus = async (userId: number, currentStatus: string) => {
+    const endpoint = currentStatus === "suspended" ? "activate" : "suspend";
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/${endpoint}`, {
+        method: "PATCH",
+        ...getAuthHeaders()
+      });
+      if (res.ok) fetchUsers();
+    } catch (err) {
+      console.error("Failed to toggle status", err);
+    }
+  };
+
+  const fetchVerifications = () => {
+    fetch(`${API_BASE_URL}/admin/verifications`, getAuthHeaders())
+      .then(res => res.json())
+      .then(data => setVerifications(data))
+      .catch(err => console.error("Failed to fetch verifications", err));
+  };
+
+  const processVerification = async (vId: number, action: "approve" | "reject") => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/verifications/${vId}/${action}`, {
+        method: "PATCH",
+        ...getAuthHeaders()
+      });
+      if (res.ok) fetchVerifications();
+    } catch (err) {
+      console.error(`Failed to ${action} verification`, err);
+    }
+  };
 
   const toggleTheme = () => {
     setDarkMode((d) => {
@@ -225,24 +310,26 @@ const AdminDashboard: React.FC = () => {
         {/* ── Sidebar ── */}
         <aside style={{ width: 200, borderRight: `0.5px solid ${c.border}`, background: c.surface, display: "flex", flexDirection: "column", padding: "16px 0", flexShrink: 0 }}>
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Platform</div>
-          <NavItem label="Overview" active icon={<IconGrid />} colors={c} />
-          <NavItem label="Users" badge={2418} icon={<IconUsers />} colors={c} />
-          <NavItem label="Projects" icon={<IconClip />} colors={c} />
+          <NavItem label="Overview" active={activeTab === "Overview"} onClick={() => setActiveTab("Overview")} icon={<IconGrid />} colors={c} />
+          <NavItem label="Users" active={activeTab === "Users"} onClick={() => setActiveTab("Users")} badge={stats ? stats.total_users : undefined} icon={<IconUsers />} colors={c} />
+          <NavItem label="Projects" active={activeTab === "Projects"} onClick={() => setActiveTab("Projects")} badge={stats ? stats.total_projects : undefined} icon={<IconClip />} colors={c} />
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>AI Systems</div>
-          <NavItem label="Match Engine" icon={<IconBulb />} colors={c} />
-          <NavItem label="Vetting Gate" badge={18} icon={<IconShield />} colors={c} />
-          <NavItem label="Audit Logs" icon={<IconList />} colors={c} />
+          <NavItem label="Match Engine" active={activeTab === "Match Engine"} onClick={() => setActiveTab("Match Engine")} icon={<IconBulb />} colors={c} />
+          <NavItem label="Vetting Gate" active={activeTab === "Vetting Gate"} onClick={() => setActiveTab("Vetting Gate")} badge={18} icon={<IconShield />} colors={c} />
+          <NavItem label="Audit Logs" active={activeTab === "Audit Logs"} onClick={() => setActiveTab("Audit Logs")} icon={<IconList />} colors={c} />
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Finance</div>
-          <NavItem label="Revenue" icon={<IconDollar />} colors={c} />
-          <NavItem label="Disputes" badge={3} icon={<IconAlert />} colors={c} />
+          <NavItem label="Revenue" active={activeTab === "Revenue"} onClick={() => setActiveTab("Revenue")} icon={<IconDollar />} colors={c} />
+          <NavItem label="Disputes" active={activeTab === "Disputes"} onClick={() => setActiveTab("Disputes")} badge={3} icon={<IconAlert />} colors={c} />
           <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Switch theme</div>
+            <div onClick={toggleTheme} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Switch theme</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Contact us</div>
           </div>
         </aside>
 
         {/* ── Main ── */}
         <main style={{ flex: 1, overflowY: "auto", padding: 20, background: c.bg }}>
+          {activeTab === "Overview" && (
+            <>
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
             <div>
@@ -257,10 +344,10 @@ const AdminDashboard: React.FC = () => {
           {/* Metric cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
             {[
-              { label: "Total Users",      val: "2,418", sub: "1,604 freelancers · 814 clients", badge: <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">↑ +124 this month</Badge> },
-              { label: "Active Projects",  val: "341",   sub: "across 189 workrooms",            badge: <Badge bg="#2a2640" color="#7F77DD" border="rgba(127,119,221,.2)">↑ +28 vs last week</Badge> },
-              { label: "Platform Revenue", val: "$82.4k",sub: "this month (12% fee)",            badge: <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">↑ +18% MoM</Badge> },
-              { label: "Pending Vetting",  val: <span style={{ color: "#f59e0b" }}>18</span>, sub: "awaiting AI Gate review", badge: <Badge bg="rgba(245,158,11,.1)" color="#f59e0b" border="rgba(245,158,11,.2)">3 flagged</Badge> },
+              { label: "Total Users",      val: stats ? stats.total_users.toLocaleString() : "...", sub: stats ? `${stats.total_freelancers} freelancers · ${stats.total_clients} clients` : "Loading...", badge: <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">Live</Badge> },
+              { label: "Active Projects",  val: stats ? stats.total_projects.toLocaleString() : "...",   sub: "Across the platform", badge: <Badge bg="#2a2640" color="#7F77DD" border="rgba(127,119,221,.2)">Active</Badge> },
+              { label: "Contracts",        val: stats ? stats.total_contracts.toLocaleString() : "...",sub: "Total signed contracts", badge: <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">Active</Badge> },
+              { label: "Pending Vetting",  val: <span style={{ color: "#f59e0b" }}>18</span>, sub: "awaiting AI Gate review", badge: <Badge bg="rgba(245,158,11,.1)" color="#f59e0b" border="rgba(245,158,11,.2)">Action needed</Badge> },
             ].map((m, i) => (
               <div key={i} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
                 <div style={{ fontSize: 10, color: c.subtext, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>{m.label}</div>
@@ -376,6 +463,73 @@ const AdminDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+          </>
+          )}
+          
+          {activeTab === "Users" && (
+            <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, marginBottom: 16 }}>User Management</div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{["ID", "Email", "Role", "Status", "Joined", "Action"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {users.map((u) => {
+                    const isSuspended = u.status === "suspended";
+                    return (
+                      <tr key={u.id}>
+                        <td style={tdStyle}>{u.id}</td>
+                        <td style={tdStyle}>{u.email}</td>
+                        <td style={tdStyle}>
+                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: u.role === "client" ? "rgba(59,130,246,.15)" : c.primarySoft, color: u.role === "client" ? "#3b82f6" : c.primary }}>{u.role}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <Badge bg={isSuspended ? "rgba(239,68,68,.1)" : "rgba(34,197,94,.12)"} color={isSuspended ? "#ef4444" : "#22c55e"} border={isSuspended ? "rgba(239,68,68,.2)" : "rgba(34,197,94,.2)"} style={{ margin: 0 }}>
+                            {u.status}
+                          </Badge>
+                        </td>
+                        <td style={tdStyle}>{new Date(u.created_at).toLocaleDateString()}</td>
+                        <td style={tdStyle}>
+                          {u.role !== "admin" && (
+                            <button onClick={() => toggleUserStatus(u.id, u.status)} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", color: isSuspended ? c.text : "#ef4444", border: `0.5px solid ${isSuspended ? c.border : "rgba(239,68,68,.4)"}`, borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
+                              {isSuspended ? "Activate" : "Suspend"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {users.length === 0 && <tr><td colSpan={6} style={{...tdStyle, textAlign: "center", color: c.subtext}}>Loading users...</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+          
+          {activeTab === "Vetting Gate" && (
+            <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, marginBottom: 16 }}>Vetting Gate: Identity Verifications</div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{["User", "Document Type", "Link", "Submitted", "Actions"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {verifications.map((v) => (
+                    <tr key={v.id}>
+                      <td style={tdStyle}>{v.email}</td>
+                      <td style={tdStyle}>{v.document_type}</td>
+                      <td style={tdStyle}>
+                        <a href={v.document_url} target="_blank" rel="noopener noreferrer" style={{ color: c.primary, fontSize: 11 }}>View Document</a>
+                      </td>
+                      <td style={tdStyle}>{new Date(v.submitted_at).toLocaleDateString()}</td>
+                      <td style={tdStyle}>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => processVerification(v.id, "approve")} style={{ fontSize: 10, padding: "4px 10px", background: "#22c55e", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>Approve</button>
+                          <button onClick={() => processVerification(v.id, "reject")} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", color: "#ef4444", border: "0.5px solid rgba(239,68,68,.4)", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>Reject</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {verifications.length === 0 && <tr><td colSpan={5} style={{...tdStyle, textAlign: "center", color: c.subtext}}>No pending verifications found.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
         </main>
 
         {/* ── Right Panel ── */}
@@ -387,7 +541,7 @@ const AdminDashboard: React.FC = () => {
             <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>SkillLink Platform</div>
             <Badge bg={c.primarySoft} color={c.primary} border="rgba(127,119,221,.2)" style={{ marginTop: 8 }}>Super Admin</Badge>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6, marginTop: 12 }}>
-              {[{ val: "2.4k", label: "USERS", color: c.text }, { val: "$82k", label: "REVENUE", color: "#22c55e" }].map((s) => (
+              {[{ val: stats ? stats.total_users.toLocaleString() : "...", label: "USERS", color: c.text }, { val: stats ? stats.total_projects.toLocaleString() : "...", label: "PROJECTS", color: "#22c55e" }].map((s) => (
                 <div key={s.label} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 4px", textAlign: "center" }}>
                   <div style={{ fontSize: 15, fontWeight: 500, color: s.color }}>{s.val}</div>
                   <div style={{ fontSize: 9, color: c.subtext }}>{s.label}</div>

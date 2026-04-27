@@ -10,6 +10,8 @@ import MFASetupPage from './pages/MFASetupPage';
 import PostProjectPage from './pages/PostProjectPage';
 import ProfileSettingsPage from './pages/ProfileSettingsPage';
 import MessagingPage from './pages/MessagingPage';
+import ActivatePage from './pages/ActivatePage';
+import ProfileSetupPage from './pages/ProfileSetupPage';
 
 const App = () => {
   return (
@@ -21,6 +23,7 @@ const App = () => {
         {/* The "/login" URL will show your dark-mode Login screen */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/activate" element={<ActivatePage />} />
 
         {/* Dashboard routes */}
         <Route
@@ -68,6 +71,14 @@ const App = () => {
     element={
       <RequireRole role="freelancer">
         <ProfileSettingsPage />
+      </RequireRole>
+    }
+  />
+  <Route
+    path="/profile-setup"
+    element={
+      <RequireRole role="freelancer">
+        <ProfileSetupPage />
       </RequireRole>
     }
   />

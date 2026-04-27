@@ -138,6 +138,7 @@ const RegisterPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const c = getColors(darkMode);
@@ -193,12 +194,10 @@ const RegisterPage: React.FC = () => {
     }
 
     try {
-      const { data } = await axios.post<TokenResponse>(`${API_BASE_URL}/auth/register`, payload);
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
-      localStorage.setItem("role", data.role);
-      localStorage.setItem("user_id", String(data.user_id));
-      window.location.href = REDIRECT_MAP[data.role];
+      await axios.post(`${API_BASE_URL}/auth/register`, payload);
+      setSuccessMsg("Account created! Please check your email to activate your account.");
+      setForm({ email: "", password: "", role: "freelancer", company_name: "" });
+      setConfirmPassword("");
     } catch (err) {
       const e = err as AxiosError<ApiError>;
       if (e.response?.status === 409) {
@@ -234,10 +233,15 @@ const RegisterPage: React.FC = () => {
         <h1 style={{ fontSize: 22, fontWeight: 500, color: c.text, textAlign: "center", margin: "0 0 6px" }}>Create your account</h1>
         <p style={{ fontSize: 14, color: c.subtext, textAlign: "center", marginBottom: "2rem" }}>Join SkillLink and start today</p>
 
-        {/* Global error */}
+        {/* Global error / success */}
         {error && (
           <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.25rem" }}>
             {error}
+          </div>
+        )}
+        {successMsg && (
+          <div style={{ background: "#f0fff4", border: "0.5px solid #c6f5d5", color: "#1a7a3c", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.25rem" }}>
+            {successMsg}
           </div>
         )}
 

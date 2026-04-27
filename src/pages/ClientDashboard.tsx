@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL, getAuthHeaders } from "../shared/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,32 @@ interface RecommendedTalent {
   color: string;
 }
 
+interface MatchedFreelancer {
+  freelancer_id: number;
+  name: string;
+  professional_title: string;
+  github_url: string;
+  hourly_rate: number;
+  github_score: number;
+  match_score: number;
+  matched_skills: string[];
+  explanation: string;
+  text_score: number;
+  skill_score: number;
+  quality_score: number;
+  activity_score: number;
+  classifier_weight: number;
+  matched_on: string;
+}
+
+interface ProjectInfo {
+  project_id: number;
+  title: string;
+  description: string;
+  budget: number;
+  status: string;
+}
+
 interface Invoice {
   id: string;
   freelancer: string;
@@ -53,12 +80,19 @@ const ACTIVE_PROJECTS: ActiveProject[] = [
   { name: "Vector DB Integration", freelancer: "Priya Nair · LLM Ops", status: "Delayed", pct: 22, color: "#ef4444" },
 ];
 
-const TALENT: RecommendedTalent[] = [
-  { initials: "HJ", name: "Hugh Jordan", sub: "ML Engineering · ✓ Verified", score: 96, bg: "#2a2640", color: "#7F77DD" },
-  { initials: "LM", name: "Lena Müller", sub: "Data Science · ✓ Verified", score: 93, bg: "rgba(34,197,94,.12)", color: "#22c55e" },
-  { initials: "KO", name: "Kwame Osei", sub: "Frontend TS · ✓ Verified", score: 91, bg: "rgba(59,130,246,.15)", color: "#3b82f6" },
-  { initials: "PN", name: "Priya Nair", sub: "LLM Ops · ✓ Verified", score: 88, bg: "rgba(245,158,11,.1)", color: "#f59e0b" },
+const MATCH_PALETTE = [
+  { bg: "#2a2640", color: "#7F77DD" },
+  { bg: "rgba(34,197,94,.12)", color: "#22c55e" },
+  { bg: "rgba(59,130,246,.15)", color: "#3b82f6" },
+  { bg: "rgba(245,158,11,.1)", color: "#f59e0b" },
+  { bg: "rgba(239,68,68,.1)", color: "#ef4444" },
 ];
+
+const getInitials = (name: string): string => {
+  const parts = name.split(/[@.\s]+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+};
 
 const INVOICES: Invoice[] = [
   { id: "#INV-0041", freelancer: "Hugh Jordan", project: "ML Inference API", amount: "$4,200", due: "Apr 15", status: "Pending" },
@@ -223,6 +257,158 @@ const StubView: React.FC<{ colors: ThemeColors; title: string }> = ({ colors, ti
   </div>
 );
 
+// ─── Find Talent View ─────────────────────────────────────────────────────────
+
+const FindTalentView: React.FC<{ colors: ThemeColors }> = ({ colors }) => {
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [matches, setMatches] = useState<MatchedFreelancer[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [latency, setLatency] = useState(0);
+  const [projLoading, setProjLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/projects/my`, getAuthHeaders());
+        if (res.ok) {
+          const data: ProjectInfo[] = await res.json();
+          setProjects(data);
+          if (data.length > 0) setSelectedId(data[0].project_id);
+        }
+      } catch { /* ignore */ }
+      finally { setProjLoading(false); }
+    })();
+  }, []);
+
+  const runMatch = async () => {
+    if (!selectedId) return;
+    setLoading(true);
+    setError("");
+    setMatches([]);
+    try {
+      const res = await fetch(`${API_BASE_URL}/recommend/job/${selectedId}?top_k=10`, {
+        method: "POST",
+        headers: { ...getAuthHeaders().headers, "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError(err.detail || "Failed to get recommendations.");
+        return;
+      }
+      const data = await res.json();
+      setMatches(data.matches || []);
+      setLatency(data.latency_ms || 0);
+    } catch {
+      setError("Could not reach the recommendation service.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (projLoading) return <div style={{ padding: 20, color: colors.subtext }}>Loading projects...</div>;
+
+  return (
+    <div style={{ animation: "fadeIn 0.5s ease" }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: colors.text }}>Find Talent</div>
+        <div style={{ fontSize: 12, color: colors.subtext, marginTop: 3 }}>Select a project and run AI matching to find the best freelancers.</div>
+      </div>
+
+      {projects.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "3rem 0", color: colors.subtext }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+          <div style={{ fontSize: 16, fontWeight: 500, color: colors.text, marginBottom: 6 }}>No projects yet</div>
+          <div style={{ fontSize: 13 }}>Post a project first to find matching freelancers.</div>
+        </div>
+      ) : (
+        <>
+          {/* Project selector + Run button */}
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 20 }}>
+            <select
+              value={selectedId ?? ""}
+              onChange={(e) => setSelectedId(Number(e.target.value))}
+              style={{ flex: 1, maxWidth: 400, padding: "10px 14px", fontSize: 13, background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, outline: "none" }}
+            >
+              {projects.map(p => <option key={p.project_id} value={p.project_id}>{p.title} — ${p.budget}</option>)}
+            </select>
+            <button
+              onClick={runMatch}
+              disabled={loading || !selectedId}
+              style={{ background: colors.primary, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}
+            >
+              {loading ? "Scoring..." : "🔍 Run AI Match"}
+            </button>
+          </div>
+
+          {error && <div style={{ background: "rgba(239,68,68,.08)", color: "#ef4444", padding: "12px 16px", borderRadius: 10, fontSize: 13, marginBottom: 16, border: "1px solid rgba(239,68,68,.15)" }}>⚠ {error}</div>}
+
+          {loading && (
+            <div style={{ textAlign: "center", padding: "3rem 0", color: colors.subtext }}>
+              <div style={{ fontSize: 14, marginBottom: 8 }}>Scoring freelancer profiles...</div>
+              <div style={{ fontSize: 11, opacity: 0.6 }}>TF-IDF · skill overlap · GitHub quality · activity</div>
+            </div>
+          )}
+
+          {!loading && matches.length > 0 && (
+            <>
+              <div style={{ fontSize: 12, color: colors.subtext, marginBottom: 12 }}>
+                Found <strong style={{ color: colors.text }}>{matches.length}</strong> matches in <strong style={{ color: colors.primary }}>{latency.toFixed(0)}ms</strong>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {matches.map((f, i) => {
+                  const pal = MATCH_PALETTE[i % MATCH_PALETTE.length];
+                  const pct = Math.round(f.match_score * 100);
+                  return (
+                    <div key={f.freelancer_id} style={{ display: "flex", alignItems: "flex-start", padding: 16, border: `0.5px solid ${i === 0 ? colors.primary + "40" : colors.border}`, borderRadius: 12, background: i === 0 ? colors.primarySoft + "20" : colors.surface }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: pal.bg, color: pal.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, flexShrink: 0, marginRight: 14 }}>{getInitials(f.name)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: colors.text }}>{f.name}</span>
+                          {i === 0 && <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 20, background: colors.primary, color: "#fff", fontWeight: 600 }}>BEST</span>}
+                          {f.classifier_weight < 0.3 && f.matched_on && (
+                            <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 20, background: "rgba(168, 85, 247, 0.1)", color: colors.primary, fontWeight: 500, marginLeft: i === 0 ? 0 : 8 }}>
+                              via {f.matched_on}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: colors.subtext, marginBottom: 5 }}>
+                          {f.professional_title || "Freelancer"}
+                          {f.hourly_rate > 0 && <> · <strong style={{ color: colors.text }}>${f.hourly_rate}/hr</strong></>}
+                          {f.github_url && <> · <a href={f.github_url} target="_blank" rel="noreferrer" style={{ color: colors.primary, textDecoration: "none" }}>GitHub ↗</a></>}
+                        </div>
+                        <div style={{ fontSize: 11, color: colors.subtext, lineHeight: 1.5, marginBottom: 6, opacity: 0.85 }}>{f.explanation}</div>
+                        {f.matched_skills.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                            {f.matched_skills.map(s => <span key={s} style={{ fontSize: 9, padding: "2px 8px", borderRadius: 20, background: colors.primarySoft, color: colors.primary, fontWeight: 500 }}>{s}</span>)}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+                        <div style={{ fontSize: 20, fontWeight: 600, color: pct >= 50 ? colors.primary : colors.subtext, lineHeight: 1 }}>{pct}%</div>
+                        <div style={{ fontSize: 9, color: colors.subtext, marginTop: 3 }}>match</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {!loading && !error && matches.length === 0 && latency > 0 && (
+            <div style={{ textAlign: "center", padding: "3rem 0", color: colors.subtext }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: colors.text, marginBottom: 6 }}>No matches found</div>
+              <div style={{ fontSize: 13 }}>No freelancers have connected their GitHub profiles yet.</div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const ClientDashboard: React.FC = () => {
@@ -382,20 +568,11 @@ const ClientDashboard: React.FC = () => {
             {/* Recommended Talent */}
             {card(
               <>
-                {sectionHeader("AI Recommended Talent", <span style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>Browse all →</span>)}
-                {TALENT.map((t) => (
-                  <div key={t.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `0.5px solid ${c.border}` }}>
-                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: t.bg, color: t.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, flexShrink: 0 }}>{t.initials}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{t.name}</div>
-                      <div style={{ fontSize: 11, color: c.subtext }}>{t.sub}</div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: c.primary }}>{t.score}%</div>
-                      <button style={{ fontSize: 10, padding: "3px 8px", marginTop: 4, background: "transparent", color: c.text, border: `0.5px solid ${c.border}`, borderRadius: 8, cursor: "pointer", fontFamily: "inherit", display: "block" }}>Invite</button>
-                    </div>
-                  </div>
-                ))}
+                {sectionHeader("AI Recommended Talent", <span onClick={() => setActiveView("Find Talent")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>Run matching →</span>)}
+                <div style={{ textAlign: "center", padding: "1.5rem 0", color: c.subtext }}>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}>Select a project from <strong style={{ color: c.text, cursor: "pointer" }} onClick={() => setActiveView("Find Talent")}>Find Talent</strong> to see AI-matched freelancers.</div>
+                  <div style={{ fontSize: 11, opacity: 0.6 }}>Powered by TF-IDF + skill overlap + GitHub quality scoring</div>
+                </div>
               </>
             )}
           </div>
@@ -429,7 +606,8 @@ const ClientDashboard: React.FC = () => {
             </div>
           )}
           {activeView === "Company Profile" && <CompanyProfileView colors={c} />}
-          {["Messages", "Find Talent", "Active Projects", "Workrooms", "Invoices"].includes(activeView) && <StubView colors={c} title={activeView} />}
+          {activeView === "Find Talent" && <FindTalentView colors={c} />}
+          {["Messages", "Active Projects", "Workrooms", "Invoices"].includes(activeView) && <StubView colors={c} title={activeView} />}
         </main>
 
         {/* ── Right Panel ── */}

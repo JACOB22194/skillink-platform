@@ -196,8 +196,15 @@ const MFASetupPage: React.FC = () => {
     return saved !== null ? JSON.parse(saved) : true;
   });
 
-  // Current MFA state (in a real app, fetch from GET /users/me)
   const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [initLoading, setInitLoading] = useState(true);
+
+  React.useEffect(() => {
+    axios.get(`${API_BASE_URL}/users/me`, { headers: getAuthHeaders() })
+      .then(res => setMfaEnabled(res.data.mfa_enabled))
+      .catch(() => {})
+      .finally(() => setInitLoading(false));
+  }, []);
 
   /**
    * step 1 = intro / "enable" CTA
@@ -271,7 +278,7 @@ const MFASetupPage: React.FC = () => {
     try {
       await axios.post<{ message: string }>(
         `${API_BASE_URL}/auth/mfa/verify`,
-        { totp_code: otpCode, email: localStorage.getItem("email") ?? "" },
+        { totp_code: otpCode },
         { headers: getAuthHeaders() }
       );
       setMfaEnabled(true);
@@ -325,8 +332,11 @@ const MFASetupPage: React.FC = () => {
 
   return (
     <div style={{ minHeight: "100vh", background: c.bg, fontFamily: "sans-serif", color: c.text }}>
-
-      {/* Top bar */}
+      {initLoading ? (
+        <div style={{ padding: 40, textAlign: "center", color: c.subtext }}>Loading...</div>
+      ) : (
+        <>
+          {/* Top bar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", borderBottom: `0.5px solid ${c.border}`, background: c.surface }}>
         <a href="/" style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, textDecoration: "none" }}>
           Skill<span style={{ color: c.primary }}>Link</span>
@@ -510,6 +520,8 @@ const MFASetupPage: React.FC = () => {
         )}
 
       </div>
+        </>
+      )}
     </div>
   );
 };
