@@ -255,3 +255,87 @@ def delete_user(
     db.delete(user)
     db.commit()
     return {"message": f"User '{user.email}' has been permanently deleted."}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /admin/verifications
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/verifications",
+    summary="List pending verifications",
+    description="Returns all identity verifications that are pending admin approval.",
+)
+def get_pending_verifications(
+    db:    Session     = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    verifications = (
+        db.query(models.Verification)
+        .filter(models.Verification.status == models.VerificationStatus.pending)
+        .all()
+    )
+    
+    return [
+        {
+            "id": v.id,
+            "user_id": v.user_id,
+            "email": v.user.email if v.user else "",
+            "document_type": v.document_type,
+            "document_url": v.document_url,
+            "status": v.status,
+            "submitted_at": v.created_at
+        }
+        for v in verifications
+    ]
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  PATCH /admin/verifications/{id}/approve
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.patch(
+    "/verifications/{verification_id}/approve",
+    summary="Approve verification",
+)
+def approve_verification(
+    verification_id: int,
+    db:      Session     = Depends(get_db),
+    admin:   models.User = Depends(require_admin),
+):
+    v = db.query(models.Verification).filter(models.Verification.id == verification_id).first()
+    if not v:
+        raise HTTPException(404, "Verification not found.")
+        
+    v.status = models.VerificationStatus.approved
+    
+    db.add(models.SystemLog(
+        action       = f"Admin [{admin.email}] approved verification [{verification_id}] for user [{v.user_id}]",
+        performed_by = admin.id,
+    ))
+    db.commit()
+    return {"message": "Verification approved."}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  PATCH /admin/verifications/{id}/reject
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.patch(
+    "/verifications/{verification_id}/reject",
+    summary="Reject verification",
+)
+def reject_verification(
+    verification_id: int,
+    db:      Session     = Depends(get_db),
+    admin:   models.User = Depends(require_admin),
+):
+    v = db.query(models.Verification).filter(models.Verification.id == verification_id).first()
+    if not v:
+        raise HTTPException(404, "Verification not found.")
+        
+    v.status = models.VerificationStatus.rejected
+    
+    db.add(models.SystemLog(
+        action       = f"Admin [{admin.email}] rejected verification [{verification_id}] for user [{v.user_id}]",
+        performed_by = admin.id,
+    ))
+    db.commit()
+    return {"message": "Verification rejected."}

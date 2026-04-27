@@ -39,6 +39,7 @@ class UserRole(str, Enum):
     admin      = "admin"
 
 class UserStatus(str, Enum):
+    unverified = "unverified"
     active    = "active"
     suspended = "suspended"
 

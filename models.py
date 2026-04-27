@@ -23,7 +23,7 @@ Phase 5 additions:
 """
 
 from sqlalchemy import (
-    Column, Integer, String, Text,
+    Column, Integer, SmallInteger, String, Text,
     Float, DateTime, Enum, ForeignKey, Boolean, Index
 )
 from sqlalchemy.orm import relationship, declarative_base
@@ -42,6 +42,7 @@ class UserRole(str, enum.Enum):
     admin      = "admin"
 
 class UserStatus(str, enum.Enum):
+    unverified = "unverified"
     active    = "active"
     suspended = "suspended"
 
@@ -134,13 +135,21 @@ class User(Base):
 class Freelancer(Base):
     __tablename__ = "freelancers"
 
-    freelancer_id  = Column(Integer, primary_key=True, index=True)
-    user_id        = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
-    bio            = Column(Text)
-    hourly_rate    = Column(Float, index=True)
-    success_score  = Column(Float, default=0.0, index=True)
-    wallet_balance = Column(Float, default=0.0)
-    portfolio_file = Column(String(500), nullable=True)
+    freelancer_id      = Column(Integer, primary_key=True, index=True)
+    user_id            = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    bio                = Column(Text)
+    hourly_rate        = Column(Float, index=True)
+    success_score      = Column(Float, default=0.0, index=True)
+    wallet_balance     = Column(Float, default=0.0)
+    portfolio_file     = Column(String(500), nullable=True)
+    # Recommender fields (populated by POST /github/parse)
+    professional_title = Column(String(120), nullable=True)
+    github_score       = Column(SmallInteger, default=0, index=True)
+    github_url         = Column(String(255), nullable=True)
+    top_languages      = Column(Text, nullable=True)   # JSON list
+    github_stats       = Column(Text, nullable=True)   # JSON object
+    profile_text       = Column(Text, nullable=True)   # TF-IDF document
+    sub_category_tags  = Column(Text, nullable=True)   # JSON list
 
     user                = relationship("User",              back_populates="freelancer")
     proposals           = relationship("Proposal",          back_populates="freelancer")
@@ -148,6 +157,7 @@ class Freelancer(Base):
     reviews             = relationship("Review",            back_populates="freelancer")
     skills              = relationship("FreelancerSkill",   back_populates="freelancer")
     wallet_transactions = relationship("WalletTransaction", back_populates="freelancer")
+    recommendations     = relationship("Recommendation",    back_populates="freelancer")
 
 
 # ─────────────────────────────────────────
@@ -223,13 +233,14 @@ class Project(Base):
     status       = Column(Enum(ProjectStatus), default=ProjectStatus.open, index=True)
     created_at   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-    client     = relationship("Client",       back_populates="projects")
-    proposals  = relationship("Proposal",     back_populates="project")
-    contracts  = relationship("Contract",     back_populates="project")
-    skills     = relationship("ProjectSkill", back_populates="project")
-    files      = relationship("File",         back_populates="project")
-    reviews    = relationship("Review",       back_populates="project")
-    ai_pricing = relationship("AIPricing",    back_populates="project", uselist=False)
+    client          = relationship("Client",         back_populates="projects")
+    proposals       = relationship("Proposal",       back_populates="project")
+    contracts       = relationship("Contract",       back_populates="project")
+    skills          = relationship("ProjectSkill",   back_populates="project")
+    files           = relationship("File",           back_populates="project")
+    reviews         = relationship("Review",         back_populates="project")
+    ai_pricing      = relationship("AIPricing",      back_populates="project", uselist=False)
+    recommendations = relationship("Recommendation", back_populates="project")
 
 
 # ─────────────────────────────────────────
@@ -279,11 +290,11 @@ class Contract(Base):
     status        = Column(Enum(ContractStatus), default=ContractStatus.active, index=True)
     created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-    project    = relationship("Project",    back_populates="contracts")
-    freelancer = relationship("Freelancer", back_populates="contracts")
-    milestones = relationship("Milestone",  back_populates="contract")
-    escrow     = relationship("Escrow",     back_populates="contract", uselist=False)
-    dispute    = relationship("Dispute",    back_populates="contract", uselist=False)
+    project         = relationship("Project",    back_populates="contracts")
+    freelancer      = relationship("Freelancer", back_populates="contracts")
+    milestones      = relationship("Milestone",  back_populates="contract")
+    escrow          = relationship("Escrow",     back_populates="contract", uselist=False)
+    dispute         = relationship("Dispute",    back_populates="contract", uselist=False)
 
 
 # ─────────────────────────────────────────
@@ -530,3 +541,24 @@ class SystemLog(Base):
     timestamp    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     performed_by_user = relationship("User", back_populates="system_logs")
+
+
+# ─────────────────────────────────────────
+#  TABLE: recommendations  (AI match cache)
+# ─────────────────────────────────────────
+
+class Recommendation(Base):
+    __tablename__ = "recommendations"
+
+    recommendation_id = Column(Integer, primary_key=True, index=True)
+    project_id        = Column(Integer, ForeignKey("projects.project_id",   ondelete="CASCADE"), nullable=False, index=True)
+    freelancer_id     = Column(Integer, ForeignKey("freelancers.freelancer_id", ondelete="CASCADE"), nullable=False, index=True)
+    match_score       = Column(Float, nullable=False, index=True)
+    text_score        = Column(Float, nullable=False, default=0.0)
+    skill_score       = Column(Float, nullable=False, default=0.0)
+    quality_score     = Column(Float, nullable=False, default=0.0)
+    matched_skills    = Column(Text, nullable=True)   # JSON list
+    created_at        = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    project    = relationship("Project",    back_populates="recommendations")
+    freelancer = relationship("Freelancer", back_populates="recommendations")

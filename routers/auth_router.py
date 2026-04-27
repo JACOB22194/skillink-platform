@@ -69,6 +69,7 @@ def register(body: schema.RegisterRequest, db: Session = Depends(get_db)):
         email       = body.email,
         password    = hash_password(body.password),
         role        = body.role,
+        status      = models.UserStatus.unverified,
         mfa_enabled = False,
         mfa_secret  = None,
     )
@@ -86,7 +87,35 @@ def register(body: schema.RegisterRequest, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(user)
+    
+    # Simulate Email Send
+    activation_token = create_access_token(user.id, user.role.value)
+    print(f"\n\n{'='*50}\n[SIMULATED EMAIL] To: {user.email}\nSubject: Verify your SkillLink account\nClick here to activate: http://localhost:5173/activate?token={activation_token}\n{'='*50}\n\n")
+
     return user
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /auth/activate/{token}
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get("/activate/{token}", summary="Activate an unverified account")
+def activate_account(token: str, db: Session = Depends(get_db)):
+    try:
+        payload = decode_token(token)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid or expired activation link.")
+    
+    user = db.query(models.User).filter(models.User.id == int(payload["sub"])).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    if user.status == models.UserStatus.active:
+        return {"message": "Account is already activated."}
+        
+    user.status = models.UserStatus.active
+    db.commit()
+    return {"message": "Account successfully activated."}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -115,6 +144,9 @@ def login(body: schema.LoginRequest, db: Session = Depends(get_db)):
 
     if user.status == models.UserStatus.suspended:
         raise HTTPException(status_code=403, detail="Your account is suspended. Contact support.")
+        
+    if user.status == models.UserStatus.unverified:
+        raise HTTPException(status_code=403, detail="Please verify your email before logging in. Check your inbox.")
 
     # If MFA is enabled, stop here — user must prove the TOTP code first
     if user.mfa_enabled:
