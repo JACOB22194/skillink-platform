@@ -90,7 +90,7 @@ def register(body: schema.RegisterRequest, db: Session = Depends(get_db)):
     
     # Simulate Email Send
     activation_token = create_access_token(user.id, user.role.value)
-    print(f"\n\n{'='*50}\n[SIMULATED EMAIL] To: {user.email}\nSubject: Verify your SkillLink account\nClick here to activate: http://localhost:5173/activate?token={activation_token}\n{'='*50}\n\n")
+    print(f"\n\n{'='*50}\n[SIMULATED EMAIL] To: {user.email}\nSubject: Verify your SkillLink account\nClick here to activate: http://localhost:3000/activate?token={activation_token}\n{'='*50}\n\n")
 
     return user
 
