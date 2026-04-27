@@ -193,10 +193,31 @@ Return this exact JSON schema:
 }}
 """
 
-    response = _gemini_client().models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-    )
+    import time
+    client = _gemini_client()
+    
+    max_retries = 3
+    response = None
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemma-4-31b-it",
+                contents=prompt,
+            )
+            break
+        except Exception as e:
+            last_error = e
+            if "503" in str(e) or "429" in str(e):
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # 1s, 2s
+                    continue
+            raise e
+            
+    if not response:
+        raise last_error
+
     raw = response.text.strip()
     raw = re.sub(r"^```json\s*|^```\s*|```$", "", raw, flags=re.MULTILINE).strip()
 

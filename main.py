@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 from parse_github import parse_github
+from ai_match_endpoint import router as match_router
 
 # ── Load model artefacts once at startup ─────────────────────────────────────
 MODEL_DIR = Path("./skillink_model")
@@ -147,6 +148,13 @@ def predict(req: PredictRequest):
         raise HTTPException(status_code=422, detail="title or description must be non-empty")
     return PredictResponse(**_predict(req.title, req.description, req.category_hint, req.top_k))
 
+@app.post("/classify")
+def classify(req: PredictRequest):
+    """Alias for /predict — used by the backend recommend_router."""
+    if not req.title.strip() and not req.description.strip():
+        raise HTTPException(status_code=422, detail="title or description must be non-empty")
+    return PredictResponse(**_predict(req.title, req.description, req.category_hint, req.top_k))
+
 @app.post("/predict/batch")
 def predict_batch(jobs: list[PredictRequest]):
     if len(jobs) > 100:
@@ -162,6 +170,9 @@ def parse_github_endpoint(req: GitHubRequest):
         return parse_github(req.url)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+app.include_router(match_router)            # POST /match
 
 
 if __name__ == "__main__":
