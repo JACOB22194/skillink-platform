@@ -1,72 +1,88 @@
 """
 parse_github.py
 ───────────────
-Pulls a freelancer's top 7 GitHub repos, reads READMEs and language
-stats, then uses Gemini to synthesise everything into a rich profile.
+Pulls a freelancer's top 7 non-forked GitHub repos, reads READMEs and
+language stats, then uses Gemini to synthesise everything into a rich profile.
+
+All GitHub API calls are made concurrently via asyncio so the total
+network time is bounded by the slowest single call, not the sum.
 """
 
-import os, re, base64, httpx
+import os, re, base64, json, asyncio, httpx
 from google import genai
 
 
-def _gemini_client():
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY environment variable is not set")
-    return genai.Client(api_key=api_key)
+# ── GitHub async client ───────────────────────────────────────────────────────
 
+class GitHubClient:
+    def __init__(self):
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            raise RuntimeError("GITHUB_TOKEN environment variable is not set")
+        self.headers = {
+            "Authorization": f"token {token}",
+            "Accept":        "application/vnd.github+json",
+        }
 
-def _github_headers():
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        raise RuntimeError("GITHUB_TOKEN environment variable is not set")
-    return {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github+json",
-    }
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def extract_username(url: str) -> str:
-    """Accept full URL or bare username."""
-    url = url.strip().rstrip("/")
-    match = re.search(r"github\.com/([^/]+)", url)
-    return match.group(1) if match else url
-
-
-def gh_get(path: str) -> dict | list:
-    url = f"https://api.github.com{path}"
-    with httpx.Client(timeout=15) as client:
-        r = client.get(url, headers=_github_headers())
+    async def _get(self, client: httpx.AsyncClient, path: str) -> dict | list:
+        r = await client.get(f"https://api.github.com{path}", headers=self.headers)
         r.raise_for_status()
         return r.json()
 
+    async def _repo_details(self, client: httpx.AsyncClient, username: str, repo: dict) -> dict:
+        name = repo["name"]
 
-def fetch_readme(owner: str, repo: str) -> str:
-    try:
-        data = gh_get(f"/repos/{owner}/{repo}/readme")
-        content = base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
-        # Trim to first 600 chars to stay within Gemini token budget
-        return content[:600].strip()
-    except Exception:
-        return ""
+        async def readme():
+            try:
+                data = await self._get(client, f"/repos/{username}/{name}/readme")
+                raw = base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
+                # strip control chars, trim for token budget
+                cleaned = re.sub(r"[\x00-\x1F\x7F]", "", raw)
+                return cleaned[:600].strip()
+            except Exception:
+                return ""
 
+        async def languages():
+            try:
+                langs = await self._get(client, f"/repos/{username}/{name}/languages")
+                return list(langs.keys())
+            except Exception:
+                return []
 
-def fetch_languages(owner: str, repo: str) -> list[str]:
-    try:
-        langs = gh_get(f"/repos/{owner}/{repo}/languages")
-        return list(langs.keys())
-    except Exception:
-        return []
+        readme_text, lang_list = await asyncio.gather(readme(), languages())
+
+        return {
+            "name":        name,
+            "description": repo.get("description") or "",
+            "stars":       repo.get("stargazers_count", 0),
+            "languages":   lang_list,
+            "topics":      repo.get("topics", []),
+            "updated_at":  repo.get("updated_at", "")[:10],
+            "url":         repo.get("html_url", ""),
+            "readme":      readme_text,
+        }
+
+    async def fetch_all(self, username: str) -> tuple[dict, list[dict]]:
+        """Fetch user profile and top-7 own repos (with readme+languages) concurrently."""
+        async with httpx.AsyncClient(timeout=30) as client:
+            user, repos_raw = await asyncio.gather(
+                self._get(client, f"/users/{username}"),
+                self._get(client, f"/users/{username}/repos?sort=stars&per_page=20"),
+            )
+            own_repos = [r for r in repos_raw if not r.get("fork")][:7]
+            repos_detail = await asyncio.gather(
+                *[self._repo_details(client, username, r) for r in own_repos]
+            )
+        return user, list(repos_detail)
 
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
-def score_profile(profile: dict, stats: dict) -> dict:
-    skills_score      = min(len(profile.get("skills", [])) * 4, 30)       # max 30
-    experience_score  = min(len(profile.get("experience", [])) * 10, 40)  # max 40
-    stars_score       = min(stats.get("total_stars", 0) // 10, 15)        # max 15
-    activity_score    = min(stats.get("public_repos", 0) // 2, 15)        # max 15
+def _score(profile: dict, stats: dict) -> dict:
+    skills_score     = min(len(profile.get("skills",     [])) * 4,  30)
+    experience_score = min(len(profile.get("experience", [])) * 10, 40)
+    stars_score      = min(stats.get("total_stars",  0) // 10, 15)
+    activity_score   = min(stats.get("public_repos", 0) // 2,  15)
     total = skills_score + experience_score + stars_score + activity_score
 
     suggestions = []
@@ -84,73 +100,24 @@ def score_profile(profile: dict, stats: dict) -> dict:
     return {"score": total, "suggestions": suggestions}
 
 
-# ── Main parser ───────────────────────────────────────────────────────────────
+# ── Gemini generation ─────────────────────────────────────────────────────────
 
-def parse_github(github_url: str) -> dict:
-    username = extract_username(github_url)
+def _generate(user: dict, repos_detail: list[dict], github_stats: dict) -> dict:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY environment variable is not set")
 
-    # 1. Fetch user profile
-    user = gh_get(f"/users/{username}")
+    username = github_stats["username"]
 
-    # 2. Fetch repos sorted by stars, take top 7
-    repos_raw = gh_get(f"/users/{username}/repos?sort=stars&per_page=7")
-
-    # 3. Deep-fetch each repo
-    repos_detail = []
-    all_languages = {}
-    total_stars = 0
-
-    for repo in repos_raw:
-        if repo.get("fork"):
-            continue  # skip forked repos — not original work
-
-        readme    = fetch_readme(username, repo["name"])
-        languages = fetch_languages(username, repo["name"])
-        stars     = repo.get("stargazers_count", 0)
-        total_stars += stars
-
-        for lang in languages:
-            all_languages[lang] = all_languages.get(lang, 0) + 1
-
-        repos_detail.append({
-            "name":        repo["name"],
-            "description": repo.get("description") or "",
-            "stars":       stars,
-            "languages":   languages,
-            "topics":      repo.get("topics", []),
-            "updated_at":  repo.get("updated_at", "")[:10],
-            "url":         repo.get("html_url", ""),
-            "readme":      readme,
-        })
-
-    # Sort languages by frequency
-    top_languages = sorted(all_languages, key=all_languages.get, reverse=True)
-
-    github_stats = {
-        "username":    username,
-        "public_repos": user.get("public_repos", 0),
-        "followers":   user.get("followers", 0),
-        "total_stars": total_stars,
-        "top_languages": top_languages[:8],
-        "account_created": user.get("created_at", "")[:10],
-        "profile_url": f"https://github.com/{username}",
-    }
-
-    # 4. Build Gemini prompt
-    repos_text = ""
-    for r in repos_detail:
-        repos_text += f"""
----
-Project: {r['name']}
-Stars: {r['stars']}
-Languages: {', '.join(r['languages']) or 'N/A'}
-Topics: {', '.join(r['topics']) or 'N/A'}
-Description: {r['description'] or 'No description'}
-README excerpt:
-{r['readme'] or 'No README available'}
-Last updated: {r['updated_at']}
-URL: {r['url']}
-"""
+    repos_text = "".join(
+        f"\n---\nProject: {r['name']}\nStars: {r['stars']}\n"
+        f"Languages: {', '.join(r['languages']) or 'N/A'}\n"
+        f"Topics: {', '.join(r['topics']) or 'N/A'}\n"
+        f"Description: {r['description'] or 'No description'}\n"
+        f"README excerpt:\n{r['readme'] or 'No README available'}\n"
+        f"Last updated: {r['updated_at']}\nURL: {r['url']}\n"
+        for r in repos_detail
+    )
 
     prompt = f"""
 You are a professional technical profile writer for a freelance platform.
@@ -164,7 +131,7 @@ GitHub User:
   Website: {user.get('blog') or ''}
   Public Repos: {user.get('public_repos', 0)}
   Followers: {user.get('followers', 0)}
-  Top Languages: {', '.join(top_languages[:8])}
+  Top Languages: {', '.join(github_stats['top_languages'])}
 
 Top Projects:
 {repos_text}
@@ -193,41 +160,53 @@ Return this exact JSON schema:
 }}
 """
 
-    import time
-    client = _gemini_client()
-    
-    max_retries = 3
-    response = None
-    last_error = None
-    
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model="gemma-4-31b-it",
-                contents=prompt,
-            )
-            break
-        except Exception as e:
-            last_error = e
-            if "503" in str(e) or "429" in str(e):
-                if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)  # 1s, 2s
-                    continue
-            raise e
-            
-    if not response:
-        raise last_error
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    raw = re.sub(r"^```json\s*|^```\s*|```$", "", response.text.strip(), flags=re.MULTILINE).strip()
+    return json.loads(raw)
 
-    raw = response.text.strip()
-    raw = re.sub(r"^```json\s*|^```\s*|```$", "", raw, flags=re.MULTILINE).strip()
 
-    import json
-    parsed = json.loads(raw)
+# ── Public entry point ────────────────────────────────────────────────────────
 
-    # 5. Scoring
-    scoring = score_profile(parsed, github_stats)
-    parsed["score"]        = scoring["score"]
-    parsed["suggestions"]  = scoring["suggestions"]
-    parsed["github_stats"] = github_stats
+def parse_github(github_url: str) -> dict:
+    url = github_url.strip().rstrip("/")
+    match = re.search(r"github\.com/([^/]+)", url)
+    username = match.group(1) if match else url
 
-    return parsed
+    # Run async GitHub fetching in its own event loop (safe in sync FastAPI thread)
+    gh = GitHubClient()
+    user, repos_detail = asyncio.run(gh.fetch_all(username))
+
+    # Aggregate stats
+    all_langs: dict[str, int] = {}
+    total_stars = 0
+    for r in repos_detail:
+        total_stars += r["stars"]
+        for lang in r["languages"]:
+            all_langs[lang] = all_langs.get(lang, 0) + 1
+
+    top_languages = sorted(all_langs, key=all_langs.get, reverse=True)[:8]  # type: ignore[arg-type]
+
+    github_stats = {
+        "username":       username,
+        "public_repos":   user.get("public_repos", 0),
+        "followers":      user.get("followers",    0),
+        "total_stars":    total_stars,
+        "top_languages":  top_languages,
+        "account_created":user.get("created_at", "")[:10],
+        "profile_url":    f"https://github.com/{username}",
+        "avatar_url":     user.get("avatar_url", ""),
+        "name":           user.get("name") or username,
+        "location":       user.get("location") or "",
+        "website":        user.get("blog") or "",
+    }
+
+    # Generate AI profile + score
+    profile  = _generate(user, repos_detail, github_stats)
+    scoring  = _score(profile, github_stats)
+
+    profile["score"]        = scoring["score"]
+    profile["suggestions"]  = scoring["suggestions"]
+    profile["github_stats"] = github_stats
+
+    return profile
