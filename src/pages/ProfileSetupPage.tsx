@@ -5,6 +5,8 @@ import { useAuth } from "../shared/useAuth";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface ExperienceItem {
   title: string;
   company: string;
@@ -31,20 +33,87 @@ interface GithubParseResponse {
   };
 }
 
+interface ThemeColors {
+  bg: string;
+  surface: string;
+  border: string;
+  text: string;
+  subtext: string;
+  primary: string;
+  primarySoft: string;
+  primaryBorder: string;
+  inputBg: string;
+  inputBorder: string;
+  errorBg: string;
+  errorBorder: string;
+  errorText: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const getColors = (dark: boolean): ThemeColors =>
+  dark
+    ? {
+        bg: "#0f0f0f", surface: "#1a1a1a", border: "#333333",
+        text: "#ffffff", subtext: "#b0b0b0", primary: "#7F77DD",
+        primarySoft: "#2a2640", primaryBorder: "#534AB7",
+        inputBg: "#262626", inputBorder: "#404040",
+        errorBg: "#2a1a1a", errorBorder: "#5c2e2e", errorText: "#ff6b6b",
+      }
+    : {
+        bg: "#f9f9f9", surface: "#ffffff", border: "#e5e5e5",
+        text: "#1a1a1a", subtext: "#888888", primary: "#7F77DD",
+        primarySoft: "#EEEDFE", primaryBorder: "#AFA9EC",
+        inputBg: "#ffffff", inputBorder: "#dddddd",
+        errorBg: "#fff0f0", errorBorder: "#f5c6c6", errorText: "#c0392b",
+      };
+
+// ─── Score Bar ────────────────────────────────────────────────────────────────
+
+const ScoreBar: React.FC<{ score: number; c: ThemeColors }> = ({ score, c }) => {
+  const color = score >= 70 ? "#22c55e" : score >= 40 ? "#f59e0b" : "#ef4444";
+  const label = score >= 70 ? "Strong" : score >= 40 ? "Good" : "Needs work";
+  return (
+    <div style={{ marginBottom: "1.25rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>GitHub Score</span>
+        <span style={{ fontSize: 13, fontWeight: 500, color }}>{score} / 100 · {label}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 20, background: c.inputBorder }}>
+        <div style={{ height: "100%", width: `${score}%`, borderRadius: 20, background: color, transition: "width .4s" }} />
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 const ProfileSetupPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem("skilllink-darkMode");
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const [step, setStep] = useState<1 | 2>(1);
   const [githubUrl, setGithubUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Parsed data
   const [parsedData, setParsedData] = useState<GithubParseResponse | null>(null);
   const [bio, setBio] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
   const [hourlyRate, setHourlyRate] = useState("50");
+
+  const c = getColors(darkMode);
+
+  const toggleTheme = () => {
+    setDarkMode((d) => {
+      localStorage.setItem("skilllink-darkMode", JSON.stringify(!d));
+      return !d;
+    });
+  };
 
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
@@ -55,7 +124,6 @@ const ProfileSetupPage: React.FC = () => {
       setError("Please enter a valid GitHub URL.");
       return;
     }
-
     setLoading(true);
     setError(null);
     try {
@@ -82,21 +150,14 @@ const ProfileSetupPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Update Bio and Hourly Rate
-      // Backend uses PUT with query params (not a JSON body)
       await axios.put(
         `${API_BASE_URL}/users/me/profile`,
         null,
         {
           ...getAuthHeaders(),
-          params: {
-            bio: bio,
-            hourly_rate: parseFloat(hourlyRate) || 0,
-          },
+          params: { bio, hourly_rate: parseFloat(hourlyRate) || 0 },
         }
       );
-
-      // 2. Add Skills
       if (skills.length > 0) {
         await axios.post(
           `${API_BASE_URL}/users/me/skills`,
@@ -104,7 +165,6 @@ const ProfileSetupPage: React.FC = () => {
           getAuthHeaders()
         );
       }
-
       navigate("/dashboard/freelancer");
     } catch (err: any) {
       setError(err.response?.data?.detail || "Failed to save profile.");
@@ -115,136 +175,94 @@ const ProfileSetupPage: React.FC = () => {
 
   if (!user || user.role !== "freelancer") {
     return (
-      <div style={{ padding: 40, textAlign: "center" }}>
+      <div style={{ padding: 40, textAlign: "center", color: c.subtext, fontFamily: "sans-serif" }}>
         Only freelancers can set up a profile.
       </div>
     );
   }
 
-  const bg = "#f9f9f9";
-  const surface = "#fff";
-  const text = "#1a1a1a";
-  const subtext = "#888";
-  const primary = "#7F77DD";
-  const border = "#e5e5e5";
+  const labelStyle: React.CSSProperties = {
+    display: "block", fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 6,
+  };
+  const inputBase: React.CSSProperties = {
+    width: "100%", padding: "10px 12px", fontSize: 14,
+    border: `0.5px solid ${c.inputBorder}`, borderRadius: 8,
+    background: c.inputBg, color: c.text, fontFamily: "inherit",
+    outline: "none", boxSizing: "border-box",
+  };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: bg,
-        fontFamily: "sans-serif",
-        padding: "2rem",
-      }}
-    >
-      <div
-        style={{
-          background: surface,
-          borderRadius: 16,
-          padding: "3rem",
-          width: "100%",
-          maxWidth: 600,
-          boxShadow: "0 10px 40px rgba(0,0,0,0.05)",
-          border: `0.5px solid ${border}`,
-        }}
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, fontFamily: "sans-serif", padding: "2rem", position: "relative" }}>
+
+      {/* Theme toggle */}
+      <button
+        onClick={toggleTheme}
+        style={{ position: "absolute", top: "2rem", right: "2rem", padding: "8px 12px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.surface, color: c.text, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }}
       >
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <h1
-            style={{
-              fontSize: 24,
-              fontWeight: 500,
-              color: text,
-              margin: "0 0 8px",
-            }}
-          >
-            Set up your Freelancer Profile
-          </h1>
-          <p style={{ color: subtext, fontSize: 14 }}>
-            Let's import your experience so clients can find you.
-          </p>
+        {darkMode ? "☀️" : "🌙"}
+      </button>
+
+      <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 16, padding: "2.5rem 2rem", width: "100%", maxWidth: 560 }}>
+
+        {/* Logo */}
+        <div style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, textAlign: "center", marginBottom: "2rem" }}>
+          Skill<span style={{ color: c.primary }}>Link</span>
         </div>
 
+        {/* Title */}
+        <h1 style={{ fontSize: 22, fontWeight: 500, color: c.text, textAlign: "center", margin: "0 0 6px" }}>
+          {step === 1 ? "Set up your profile" : "Review your profile"}
+        </h1>
+        <p style={{ fontSize: 14, color: c.subtext, textAlign: "center", marginBottom: "2rem" }}>
+          {step === 1
+            ? "Import your experience from GitHub so clients can find you."
+            : "AI-generated from your GitHub. Edit anything before saving."}
+        </p>
+
+        {/* Step indicator */}
+        <div style={{ display: "flex", gap: 8, marginBottom: "2rem" }}>
+          {[1, 2].map((s) => (
+            <div key={s} style={{ flex: 1, height: 3, borderRadius: 20, background: s <= step ? c.primary : c.inputBorder, transition: "background .2s" }} />
+          ))}
+        </div>
+
+        {/* Error */}
         {error && (
-          <div
-            style={{
-              background: "#fff0f0",
-              border: "0.5px solid #f5c6c6",
-              color: "#c0392b",
-              borderRadius: 8,
-              padding: "10px 14px",
-              fontSize: 13,
-              marginBottom: "1.5rem",
-            }}
-          >
+          <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.25rem" }}>
             {error}
           </div>
         )}
 
-        {/* STEP 1: GitHub Link */}
+        {/* ── STEP 1: GitHub URL ── */}
         {step === 1 && (
           <div>
             <div style={{ marginBottom: "1.5rem" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: text,
-                  marginBottom: 8,
-                }}
-              >
-                GitHub Profile URL
-              </label>
+              <label style={labelStyle}>GitHub Profile URL</label>
               <input
                 type="text"
                 placeholder="https://github.com/username"
                 value={githubUrl}
-                onChange={(e) => setGithubUrl(e.target.value)}
+                onChange={(e) => { setGithubUrl(e.target.value); setError(null); }}
                 onKeyDown={(e) => e.key === "Enter" && handleParse()}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  fontSize: 14,
-                  border: `1px solid ${border}`,
-                  borderRadius: 8,
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
+                style={inputBase}
               />
+              <p style={{ fontSize: 12, color: c.subtext, marginTop: 6, marginBottom: 0 }}>
+                We'll read your public repos, skills, and contributions.
+              </p>
             </div>
+
             <button
               onClick={handleParse}
               disabled={loading}
-              style={{
-                width: "100%",
-                padding: 12,
-                background: primary,
-                color: "#fff",
-                border: "none",
-                borderRadius: 8,
-                fontSize: 15,
-                fontWeight: 500,
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.7 : 1,
-              }}
+              style={{ width: "100%", padding: 12, background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1, transition: "opacity .15s" }}
             >
               {loading ? "Analyzing Profile..." : "Import from GitHub"}
             </button>
+
             <div style={{ textAlign: "center", marginTop: 16 }}>
               <button
                 onClick={() => setStep(2)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: subtext,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
+                style={{ background: "none", border: "none", color: c.subtext, fontSize: 13, cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
               >
                 Skip for now
               </button>
@@ -252,100 +270,70 @@ const ProfileSetupPage: React.FC = () => {
           </div>
         )}
 
-        {/* STEP 2: Review and Save */}
+        {/* ── STEP 2: Review & Save ── */}
         {step === 2 && (
           <div>
             {parsedData && (
-              <div
-                style={{
-                  background: "#EEEDFE",
-                  padding: "12px 16px",
-                  borderRadius: 8,
-                  marginBottom: "1.5rem",
-                  fontSize: 13,
-                  color: primary,
-                }}
-              >
-                <strong>AI Analysis Complete!</strong> We found{" "}
-                {parsedData.skills.length} skills and generated a bio based on
-                your top repositories. Review and edit them below.
-              </div>
+              <>
+                {/* Import banner */}
+                <div style={{ background: c.primarySoft, border: `0.5px solid ${c.primaryBorder}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: c.primary, marginBottom: "1.25rem" }}>
+                  <strong>AI Analysis Complete!</strong> We found {parsedData.skills.length} skills and generated a bio based on your top repositories. Review and edit them below.
+                </div>
+
+                <ScoreBar score={parsedData.score} c={c} />
+
+                {/* Stats strip */}
+                {parsedData.github_stats && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: "1.25rem" }}>
+                    {[
+                      { label: "Repos",     value: parsedData.github_stats.public_repos },
+                      { label: "Stars",     value: parsedData.github_stats.total_stars },
+                      { label: "Followers", value: parsedData.github_stats.followers },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ flex: 1, background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 12px", textAlign: "center" }}>
+                        <div style={{ fontSize: 18, fontWeight: 500, color: c.text }}>{value}</div>
+                        <div style={{ fontSize: 11, color: c.subtext }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Suggestions */}
+                {parsedData.suggestions.length > 0 && (
+                  <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: "1.25rem" }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: c.subtext, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Tips to improve your score</div>
+                    {parsedData.suggestions.map((s, i) => (
+                      <div key={i} style={{ fontSize: 13, color: c.subtext, marginBottom: 4, display: "flex", gap: 6 }}>
+                        <span style={{ color: c.primary }}>·</span> {s}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
+            {/* Bio */}
             <div style={{ marginBottom: "1.25rem" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: text,
-                  marginBottom: 8,
-                }}
-              >
-                Professional Bio
-              </label>
+              <label style={labelStyle}>Professional Bio</label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 rows={5}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  fontSize: 14,
-                  border: `1px solid ${border}`,
-                  borderRadius: 8,
-                  outline: "none",
-                  boxSizing: "border-box",
-                  resize: "vertical",
-                }}
+                placeholder="Tell clients about your experience and what you can build..."
+                style={{ ...inputBase, resize: "vertical" }}
               />
             </div>
 
+            {/* Skills */}
             <div style={{ marginBottom: "1.25rem" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: text,
-                  marginBottom: 8,
-                }}
-              >
-                Skills
-              </label>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 8,
-                  marginBottom: 8,
-                }}
-              >
+              <label style={labelStyle}>Skills</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                 {skills.map((s, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      background: "#f0f0f0",
-                      padding: "4px 10px",
-                      borderRadius: 100,
-                      fontSize: 12,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
+                  <div key={i} style={{ background: c.primarySoft, border: `0.5px solid ${c.primaryBorder}`, padding: "4px 10px", borderRadius: 100, fontSize: 12, color: c.primary, display: "flex", alignItems: "center", gap: 6 }}>
                     {s}
                     <button
-                      onClick={() =>
-                        setSkills(skills.filter((_, idx) => idx !== i))
-                      }
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: subtext,
-                        fontSize: 14,
-                      }}
+                      onClick={() => setSkills(skills.filter((_, idx) => idx !== i))}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: c.primary, fontSize: 14, padding: 0, lineHeight: 1, fontFamily: "inherit" }}
                     >
                       ×
                     </button>
@@ -364,78 +352,38 @@ const ProfileSetupPage: React.FC = () => {
                     }
                   }
                 }}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  fontSize: 13,
-                  border: `1px solid ${border}`,
-                  borderRadius: 8,
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
+                style={inputBase}
               />
             </div>
 
+            {/* Hourly rate */}
             <div style={{ marginBottom: "2rem" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: text,
-                  marginBottom: 8,
-                }}
-              >
-                Hourly Rate (USD)
-              </label>
-              <input
-                type="number"
-                value={hourlyRate}
-                onChange={(e) => setHourlyRate(e.target.value)}
-                style={{
-                  width: "100px",
-                  padding: "10px",
-                  fontSize: 14,
-                  border: `1px solid ${border}`,
-                  borderRadius: 8,
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
+              <label style={labelStyle}>Hourly Rate (USD)</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 14, color: c.subtext }}>$</span>
+                <input
+                  type="number"
+                  value={hourlyRate}
+                  min={0}
+                  onChange={(e) => setHourlyRate(e.target.value)}
+                  style={{ ...inputBase, width: 120 }}
+                />
+                <span style={{ fontSize: 13, color: c.subtext }}>/ hr</span>
+              </div>
             </div>
 
-            <div style={{ display: "flex", gap: 12 }}>
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 10 }}>
               <button
                 onClick={() => setStep(1)}
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  background: "transparent",
-                  color: text,
-                  border: `1px solid ${border}`,
-                  borderRadius: 8,
-                  fontSize: 15,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
+                style={{ flex: 1, padding: 12, background: "transparent", color: c.text, border: `0.5px solid ${c.border}`, borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}
               >
                 Back
               </button>
               <button
                 onClick={handleSave}
                 disabled={loading}
-                style={{
-                  flex: 2,
-                  padding: 12,
-                  background: primary,
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 15,
-                  fontWeight: 500,
-                  cursor: loading ? "not-allowed" : "pointer",
-                  opacity: loading ? 0.7 : 1,
-                }}
+                style={{ flex: 2, padding: 12, background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1, transition: "opacity .15s" }}
               >
                 {loading ? "Saving..." : "Save Profile & Continue"}
               </button>

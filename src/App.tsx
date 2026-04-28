@@ -12,6 +12,8 @@ import ProfileSettingsPage from './pages/ProfileSettingsPage';
 import MessagingPage from './pages/MessagingPage';
 import ActivatePage from './pages/ActivatePage';
 import ProfileSetupPage from './pages/ProfileSetupPage';
+import GitHubReviewPage from './pages/GitHubReviewPage';
+import SettingsPage from './pages/SettingsPage';
 
 const App = () => {
   return (
@@ -87,6 +89,22 @@ const App = () => {
     element={
       <RequireRole role={["freelancer", "client", "admin"]}>
         <MessagingPage />
+      </RequireRole>
+    }
+  />
+  <Route
+    path="/settings"
+    element={
+      <RequireRole role="freelancer">
+        <SettingsPage />
+      </RequireRole>
+    }
+  />
+  <Route
+    path="/github/review"
+    element={
+      <RequireRole role="freelancer">
+        <GitHubReviewPage />
       </RequireRole>
     }
   />
