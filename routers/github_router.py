@@ -36,7 +36,7 @@ def parse_github_profile(
 ):
     # ── 1. Call AI service ────────────────────────────────────────────────────
     try:
-        with httpx.Client(timeout=60) as client:
+        with httpx.Client(timeout=120) as client:
             r = client.post(f"{AI_SERVICE_URL}/parse-github", json={"url": req.url})
             r.raise_for_status()
             parsed = r.json()
@@ -73,6 +73,12 @@ def parse_github_profile(
         "total_stars":    github_stats.get("total_stars", 0),
         "account_created":github_stats.get("account_created", ""),
         "top_languages":  github_stats.get("top_languages", []),
+        "avatar_url":     github_stats.get("avatar_url", ""),
+        "name":           github_stats.get("name", ""),
+        "location":       github_stats.get("location", ""),
+        "website":        github_stats.get("website", ""),
+        "experience":     parsed.get("experience", []),
+        "suggestions":    parsed.get("suggestions", []),
     })
 
     # ── 4. Store skills ───────────────────────────────────────────────────────
@@ -128,6 +134,7 @@ def get_github_profile(
         raise HTTPException(status_code=404, detail="Freelancer profile not found.")
 
     skills = [fs.skill.name for fs in freelancer.skills if fs.skill]
+    stored = json.loads(freelancer.github_stats or "{}")
 
     return {
         "professional_title":  freelancer.professional_title,
@@ -137,5 +144,12 @@ def get_github_profile(
         "skills":              skills,
         "top_languages":       json.loads(freelancer.top_languages or "[]"),
         "sub_category_tags":   json.loads(freelancer.sub_category_tags or "[]"),
-        "github_stats":        json.loads(freelancer.github_stats or "{}"),
+        "github_stats":        stored,
+        # flattened for convenience
+        "avatar_url":          stored.get("avatar_url", ""),
+        "name":                stored.get("name", ""),
+        "location":            stored.get("location", ""),
+        "website":             stored.get("website", ""),
+        "experience":          stored.get("experience", []),
+        "suggestions":         stored.get("suggestions", []),
     }
