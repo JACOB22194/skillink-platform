@@ -654,3 +654,31 @@ class WSOutgoingMessage(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+
+# ─────────────────────────────────────────────────────────────
+# ADD THESE TO YOUR schema.py
+# ─────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel, EmailStr
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class VerifyResetOTPCheckRequest(BaseModel):
+    email: EmailStr
+    otp: str          # 6-digit string e.g. "048271"
+
+
+class VerifyResetOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str          # 6-digit string
+    new_password: str

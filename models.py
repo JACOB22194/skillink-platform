@@ -126,6 +126,7 @@ class User(Base):
                                      back_populates="receiver")
     notifications     = relationship("Notification",  back_populates="user",    # ✅ Phase 5
                                      foreign_keys="Notification.user_id")
+    subscription = relationship("Subscription", back_populates="user", uselist=False)
 
 
 # ─────────────────────────────────────────
@@ -562,3 +563,72 @@ class Recommendation(Base):
 
     project    = relationship("Project",    back_populates="recommendations")
     freelancer = relationship("Freelancer", back_populates="recommendations")
+
+
+    """
+ADD THIS TO YOUR EXISTING models.py
+====================================
+Append these enums and the Subscription class to the bottom of models.py.
+Then run your migrations (or let SQLAlchemy auto-create the table on next startup).
+"""
+
+# Add these imports to the top of models.py (if not already present):
+# from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, ForeignKey
+# import enum
+
+# ─── New Enums ─────────────────────────────────────────────────────────────────
+
+class PlanTier(str, enum.Enum):
+    free     = "free"
+    pro      = "pro"
+    business = "business"
+
+class BillingCycle(str, enum.Enum):
+    monthly = "monthly"
+    yearly  = "yearly"
+
+class SubscriptionStatus(str, enum.Enum):
+    active    = "active"
+    cancelled = "cancelled"
+    expired   = "expired"
+    trialing  = "trialing"
+
+# ─── Subscription Table ────────────────────────────────────────────────────────
+
+class Subscription(Base):
+    """
+    Tracks each user's active plan.
+    One row per user — upserted on upgrade/downgrade.
+    """
+    __tablename__ = "subscriptions"
+
+    subscription_id = Column(Integer, primary_key=True, index=True)
+
+    # Who owns this subscription
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+
+    # Plan details
+    plan_tier     = Column(Enum(PlanTier),          nullable=False, default=PlanTier.free)
+    billing_cycle = Column(Enum(BillingCycle),      nullable=True)   # null for free
+    role_type     = Column(String(20),              nullable=False)   # "freelancer" or "client"
+    status        = Column(Enum(SubscriptionStatus), nullable=False, default=SubscriptionStatus.active)
+
+    # Timestamps
+    started_at    = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at    = Column(DateTime(timezone=True), nullable=True)   # null = never (free)
+    cancelled_at  = Column(DateTime(timezone=True), nullable=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at    = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Payment reference (Stripe subscription ID etc.)
+    payment_ref   = Column(String(255), nullable=True)
+
+    # Relationship back to user
+    user = relationship("User", back_populates="subscription")
+
+
+# ─── Add to User model ─────────────────────────────────────────────────────────
+# In your existing User class, add this relationship:
+#
+#   subscription = relationship("Subscription", back_populates="user", uselist=False)
+#

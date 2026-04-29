@@ -1,12 +1,19 @@
 """
 routers/auth_router.py — Authentication Endpoints
 ===================================================
-POST /auth/register          → create a new account
-POST /auth/login             → log in and get JWT tokens
-POST /auth/verify-mfa        → submit 6-digit MFA code (only if MFA is on)
-POST /auth/refresh           → get a new access token using the refresh token
-POST /auth/mfa/setup         → turn MFA on or off
-POST /auth/change-password   → change your password while logged in
+POST /auth/register               → create a new account
+POST /auth/login                  → log in and get JWT tokens
+POST /auth/verify-mfa             → submit 6-digit MFA code (only if MFA is on)
+POST /auth/refresh                → get a new access token using the refresh token
+POST /auth/mfa/setup              → turn MFA on or off
+POST /auth/change-password        → change your password while logged in
+
+── Forgot Password ──────────────────────────────────────────
+POST /auth/forgot-password        → send a reset link to email (Flow A)
+POST /auth/reset-password         → use the link token to set a new password (Flow A)
+POST /auth/forgot-password-otp    → send a 6-digit OTP to email (Flow B)
+POST /auth/verify-reset-otp-check → validate OTP without changing password yet (Flow B step 1)
+POST /auth/verify-reset-otp       → validate OTP + set new password in one step (Flow B step 2)
 """
 
 import pyotp    # generates MFA secrets and verifies 6-digit codes
@@ -14,6 +21,9 @@ import qrcode   # draws QR code images
 import io       # keeps the image in memory (never saved to disk)
 import base64   # converts the image to a text string the frontend can display
 import bcrypt   # direct bcrypt usage instead of passlib
+import secrets  # cryptographically secure random tokens
+import random   # for OTP digit generation
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -350,3 +360,159 @@ def change_password(
     me.password = hash_password(body.new_password)
     db.commit()
     return {"message": "Password changed successfully."}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  FORGOT PASSWORD — FLOW A: Email reset link
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# In-memory stores (replace with DB columns in production)
+# { token: { user_id: int, expires_at: datetime } }
+_reset_tokens: dict = {}
+
+# { email: { otp: str, expires_at: datetime, verified: bool } }
+_reset_otps: dict = {}
+
+
+@router.post(
+    "/forgot-password",
+    response_model=schema.MessageResponse,
+    summary="Send a password-reset link to the user's email",
+    description="""
+**Flow A — Email link.**
+
+Always returns 200 even if the email is not found (prevents user enumeration).
+The printed link in the console simulates the email delivery.
+""",
+)
+def forgot_password(body: schema.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == body.email).first()
+
+    if user:
+        token = secrets.token_urlsafe(32)
+        expires = datetime.now(timezone.utc) + timedelta(minutes=15)
+        _reset_tokens[token] = {"user_id": user.id, "expires_at": expires}
+
+        reset_url = f"http://localhost:3000/reset-password?token={token}"
+        print(
+            f"\n\n{'='*50}\n"
+            f"[SIMULATED EMAIL] To: {user.email}\n"
+            f"Subject: Reset your SkillLink password\n"
+            f"Click here to reset (expires in 15 min): {reset_url}\n"
+            f"{'='*50}\n\n"
+        )
+
+    return {"message": "If that email exists, a reset link has been sent."}
+
+
+@router.post(
+    "/reset-password",
+    response_model=schema.MessageResponse,
+    summary="Set a new password using the emailed token",
+    description="Flow A step 2 — validate the token and save the new password.",
+)
+def reset_password(body: schema.ResetPasswordRequest, db: Session = Depends(get_db)):
+    entry = _reset_tokens.get(body.token)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+
+    if datetime.now(timezone.utc) > entry["expires_at"]:
+        _reset_tokens.pop(body.token, None)
+        raise HTTPException(status_code=400, detail="This reset link has expired. Please request a new one.")
+
+    user = db.query(models.User).filter(models.User.id == entry["user_id"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    user.password = hash_password(body.new_password)
+    db.commit()
+    _reset_tokens.pop(body.token, None)   # one-time use
+    return {"message": "Password has been reset successfully."}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  FORGOT PASSWORD — FLOW B: 6-digit OTP
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/forgot-password-otp",
+    response_model=schema.MessageResponse,
+    summary="Send a 6-digit OTP to the user's email",
+    description="""
+**Flow B — OTP code.**
+
+Always returns 200 even if the email is not found (prevents user enumeration).
+The OTP expires in 10 minutes.
+""",
+)
+def forgot_password_otp(body: schema.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == body.email).first()
+
+    if user:
+        otp = f"{random.randint(0, 999999):06d}"
+        expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+        _reset_otps[body.email] = {"otp": otp, "expires_at": expires, "verified": False}
+
+        print(
+            f"\n\n{'='*50}\n"
+            f"[SIMULATED EMAIL] To: {user.email}\n"
+            f"Subject: Your SkillLink password reset code\n"
+            f"Your 6-digit reset code is: {otp}  (expires in 10 minutes)\n"
+            f"{'='*50}\n\n"
+        )
+
+    return {"message": "If that email exists, a reset code has been sent."}
+
+
+@router.post(
+    "/verify-reset-otp-check",
+    response_model=schema.MessageResponse,
+    summary="Validate OTP without changing password yet (pre-check)",
+    description="Flow B — checks the OTP is correct, marks it verified so the next step can save the password.",
+)
+def verify_reset_otp_check(body: schema.VerifyResetOTPCheckRequest, db: Session = Depends(get_db)):
+    entry = _reset_otps.get(body.email)
+
+    if not entry:
+        raise HTTPException(status_code=400, detail="No reset code found for this email. Please request a new one.")
+
+    if datetime.now(timezone.utc) > entry["expires_at"]:
+        _reset_otps.pop(body.email, None)
+        raise HTTPException(status_code=400, detail="This code has expired. Please request a new one.")
+
+    if entry["otp"] != body.otp:
+        raise HTTPException(status_code=401, detail="Incorrect code. Please check and try again.")
+
+    # Mark as verified — the final step confirms the password
+    _reset_otps[body.email]["verified"] = True
+    return {"message": "Code verified. You may now set your new password."}
+
+
+@router.post(
+    "/verify-reset-otp",
+    response_model=schema.MessageResponse,
+    summary="Validate OTP + set new password",
+    description="Flow B final step — verifies the OTP and saves the new password in one call.",
+)
+def verify_reset_otp(body: schema.VerifyResetOTPRequest, db: Session = Depends(get_db)):
+    entry = _reset_otps.get(body.email)
+
+    if not entry:
+        raise HTTPException(status_code=400, detail="No reset code found for this email. Please request a new one.")
+
+    if datetime.now(timezone.utc) > entry["expires_at"]:
+        _reset_otps.pop(body.email, None)
+        raise HTTPException(status_code=400, detail="This code has expired. Please request a new one.")
+
+    # Accept either: OTP not yet pre-checked (direct call) or already verified
+    if not entry.get("verified") and entry["otp"] != body.otp:
+        raise HTTPException(status_code=401, detail="Incorrect code. Please check and try again.")
+
+    user = db.query(models.User).filter(models.User.email == body.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    user.password = hash_password(body.new_password)
+    db.commit()
+    _reset_otps.pop(body.email, None)   # one-time use
+    return {"message": "Password has been reset successfully."}

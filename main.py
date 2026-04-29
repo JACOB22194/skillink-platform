@@ -41,6 +41,7 @@ from routers.messaging_router   import router as messaging_router
 from routers.notification_router import router as notification_router
 from routers.github_router       import router as github_router
 from routers.recommend_router    import router as recommend_router
+from routers.subscription_router import router as subscription_router
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -220,7 +221,7 @@ app.include_router(messaging_router)        # Phase 5: REST messaging + WS /ws/c
 app.include_router(notification_router)     # Phase 5: /notifications/*
 app.include_router(github_router)           # POST /github/parse, GET /github/profile
 app.include_router(recommend_router)        # POST /recommend/job/{id}, POST /recommend/preview, GET /recommend/job/{id}/cached
-
+app.include_router(subscription_router)
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])
