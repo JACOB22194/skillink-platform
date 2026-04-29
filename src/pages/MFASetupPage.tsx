@@ -5,25 +5,19 @@
  *   Enable  → returns { message, secret, qr_code?: "data:image/png;base64,...", provisioning_uri?: "otpauth://..." }
  *   Disable → returns { message }
  *
- * POST /auth/mfa/verify → { code: string }
+ * POST /auth/mfa/verify → { totp_code: string }
  *   → returns { message } on success
  *   → 400/422 with { detail: string } on failure
  *
  * Requires: Authorization header with access_token
  * Used by: Any logged-in user from their account settings
  *
- * QR Code: Rendered client-side via qrcode.react using the provisioning_uri.
- *          Falls back to displaying the backend-provided base64 PNG if no URI is available.
- *
- * Install dependency:
- *   npm install qrcode.react
- *   # or
- *   yarn add qrcode.react
+ * QR Code: Uses the base64 PNG returned directly from the backend.
+ * No external QR library needed.
  */
 
 import React, { useRef, useState } from "react";
 import axios, { AxiosError } from "axios";
-import { QRCodeSVG } from "qrcode.react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,9 +28,8 @@ interface MFASetupRequest {
 interface MFASetupResponse {
   message: string;
   secret?: string;
-  /** otpauth://totp/... URI — preferred for client-side QR rendering */
   provisioning_uri?: string;
-  /** Fallback: backend-rendered base64 PNG, e.g. "data:image/png;base64,..." */
+  /** Backend-rendered base64 PNG, e.g. "data:image/png;base64,..." */
   qr_code?: string;
 }
 
@@ -201,8 +194,13 @@ const MFASetupPage: React.FC = () => {
 
   React.useEffect(() => {
     axios.get(`${API_BASE_URL}/users/me`, { headers: getAuthHeaders() })
-      .then(res => setMfaEnabled(res.data.mfa_enabled))
-      .catch(() => {})
+      .then(res => {
+        console.log("MFA Status loaded:", res.data.mfa_enabled);
+        setMfaEnabled(res.data.mfa_enabled);
+      })
+      .catch((err) => {
+        console.error("Failed to load MFA status:", err);
+      })
       .finally(() => setInitLoading(false));
   }, []);
 
@@ -240,21 +238,57 @@ const MFASetupPage: React.FC = () => {
   const handleEnable = async () => {
     setLoading(true);
     setError(null);
+    setSuccessMsg(null);
+    setProvisioningUri(null);
+    setQrCodeFallback(null);
+    setSecret(null);
+    
+    // Validate token exists
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setError("Authentication required. Please log in again.");
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const { data } = await axios.post<MFASetupResponse>(
+      console.log("Enabling MFA... Sending request to:", `${API_BASE_URL}/auth/mfa/setup`);
+      const response = await axios.post<MFASetupResponse>(
         `${API_BASE_URL}/auth/mfa/setup`,
         { enable: true } as MFASetupRequest,
-        { headers: getAuthHeaders() }
+        { 
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        }
       );
-      // Prefer provisioning_uri for client-side QR; fall back to base64 PNG
-      setProvisioningUri(data.provisioning_uri ?? null);
-      setQrCodeFallback(data.qr_code ?? null);
-      setSecret(data.secret ?? null);
+      const data = response.data;
+      console.log("MFA Setup Response:", data);
+      
+      // Backend returns qr_code (base64 PNG) — use it directly
+      // Also accept provisioning_uri as a fallback signal
+      if (!data.qr_code && !data.provisioning_uri) {
+        setError("Server did not return QR code data. Please try again.");
+        setLoading(false);
+        return;
+      }
+      
+      // Use backend-provided base64 PNG (qr_code field)
+      setQrCodeFallback(data.qr_code || null);
+      setProvisioningUri(data.provisioning_uri || null);
+      setSecret(data.secret || null);
       setOtpCode("");
+      setSuccessMsg("QR code generated! Scan it with your authenticator app.");
       setStep(2);
     } catch (err) {
+      console.error("MFA Setup Error:", err);
       const e = err as AxiosError<ApiError>;
-      setError(e.response?.data?.detail ?? "Failed to enable MFA.");
+      const errorMsg = e.response?.data?.detail 
+        || e.response?.statusText 
+        || e.message 
+        || "Failed to enable MFA. Please check your connection and try again.";
+      setError(`Error: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
@@ -263,6 +297,7 @@ const MFASetupPage: React.FC = () => {
   // ── Advance Scan → Confirm (Step 2 → 3) ──
   const handleScanned = () => {
     setError(null);
+    setSuccessMsg(null);
     setOtpCode("");
     setStep(3);
   };
@@ -273,19 +308,39 @@ const MFASetupPage: React.FC = () => {
       setError("Please enter the full 6-digit code from your authenticator app.");
       return;
     }
+    
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setError("Authentication required. Please log in again.");
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     try {
+      console.log("Verifying MFA code...");
       await axios.post<{ message: string }>(
         `${API_BASE_URL}/auth/mfa/verify`,
         { totp_code: otpCode },
-        { headers: getAuthHeaders() }
+        { 
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        }
       );
+      console.log("MFA verification successful!");
       setMfaEnabled(true);
+      setSuccessMsg("✅ MFA has been successfully enabled on your account!");
       setStep(4);
     } catch (err) {
+      console.error("MFA Verification Error:", err);
       const e = err as AxiosError<ApiError>;
-      setError(e.response?.data?.detail ?? "Invalid code. Please try again.");
+      const errorMsg = e.response?.data?.detail 
+        || e.response?.statusText 
+        || e.message 
+        || "Invalid code. Please try again.";
+      setError(`${errorMsg}`);
       setOtpCode("");
     } finally {
       setLoading(false);
@@ -294,20 +349,38 @@ const MFASetupPage: React.FC = () => {
 
   // ── Disable MFA ──
   const handleDisable = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setError("Authentication required. Please log in again.");
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     try {
+      console.log("Disabling MFA...");
       const { data } = await axios.post<MFASetupResponse>(
         `${API_BASE_URL}/auth/mfa/setup`,
         { enable: false } as MFASetupRequest,
-        { headers: getAuthHeaders() }
+        { 
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        }
       );
+      console.log("MFA disabled successfully");
       setMfaEnabled(false);
-      setSuccessMsg(data.message);
+      setSuccessMsg(data.message || "MFA has been disabled on your account.");
       setStep(1);
     } catch (err) {
+      console.error("MFA Disable Error:", err);
       const e = err as AxiosError<ApiError>;
-      setError(e.response?.data?.detail ?? "Failed to disable MFA.");
+      const errorMsg = e.response?.data?.detail 
+        || e.response?.statusText 
+        || e.message 
+        || "Failed to disable MFA.";
+      setError(`Error: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
@@ -383,13 +456,15 @@ const MFASetupPage: React.FC = () => {
 
         {/* Error / success banners */}
         {error && (
-          <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
-            {error}
+          <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "12px 14px", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <span style={{ flexShrink: 0, marginTop: 2 }}>⚠️</span>
+            <span>{error}</span>
           </div>
         )}
         {successMsg && (
-          <div style={{ background: c.successBg, border: `0.5px solid ${c.successBorder}`, color: c.successText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
-            {successMsg}
+          <div style={{ background: c.successBg, border: `0.5px solid ${c.successBorder}`, color: c.successText, borderRadius: 8, padding: "12px 14px", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <span style={{ flexShrink: 0, marginTop: 2 }}>✅</span>
+            <span>{successMsg}</span>
           </div>
         )}
 
@@ -419,24 +494,18 @@ const MFASetupPage: React.FC = () => {
         )}
 
         {/* ── Step 2: Scan QR ── */}
-        {step === 2 && (provisioningUri || qrCodeFallback) && (
+        {step === 2 && qrCodeFallback ? (
           <div style={sharedCard}>
             {stepIndicators}
 
             <div style={{ textAlign: "center", marginBottom: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Scan this QR code with your authenticator app</div>
               <div style={{ display: "inline-block", background: "#fff", padding: 12, borderRadius: 8, border: `0.5px solid ${c.border}` }}>
-                {provisioningUri ? (
-                  // Client-side QR rendering via qrcode.react
-                  <QRCodeSVG
-                    value={provisioningUri}
-                    size={180}
-                    level="M"
-                    includeMargin={false}
-                  />
+                {qrCodeFallback ? (
+                  // Backend-rendered base64 PNG QR code
+                  <img src={qrCodeFallback} alt="MFA QR code" style={{ width: 180, height: 180, display: "block" }} />
                 ) : (
-                  // Fallback: base64 PNG from backend
-                  <img src={qrCodeFallback!} alt="MFA QR code" style={{ width: 180, height: 180, display: "block" }} />
+                  <div style={{ fontSize: 12, color: c.subtext, padding: "20px", textAlign: "center", width: 180 }}>QR code unavailable</div>
                 )}
               </div>
             </div>
@@ -469,11 +538,24 @@ const MFASetupPage: React.FC = () => {
             </div>
 
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => { setStep(1); setError(null); }} style={btnOutline}>Back</button>
+              <button onClick={() => { setStep(1); setError(null); setSuccessMsg(null); }} style={btnOutline}>Back</button>
               <button onClick={handleScanned} style={{ ...btnPrimary, flex: 1 }}>I've scanned the code →</button>
             </div>
           </div>
-        )}
+        ) : step === 2 ? (
+          <div style={sharedCard}>
+            <div style={{ textAlign: "center", padding: "2rem" }}>
+              <div style={{ color: c.errorText, marginBottom: 12 }}>⚠️</div>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>QR Code Generation Failed</div>
+              <div style={{ fontSize: 12, color: c.subtext, marginBottom: 16 }}>
+                {error || "The server didn't return QR code data. Please try again."}
+              </div>
+              <button onClick={() => { setStep(1); setError(null); setSuccessMsg(null); setProvisioningUri(null); setQrCodeFallback(null); }} style={btnPrimary}>
+                Back to start
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {/* ── Step 3: Confirm 6-digit code ── */}
         {step === 3 && (
@@ -493,7 +575,7 @@ const MFASetupPage: React.FC = () => {
             </div>
 
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => { setStep(2); setError(null); setOtpCode(""); }} style={btnOutline}>Back</button>
+              <button onClick={() => { setStep(2); setError(null); setSuccessMsg(null); setOtpCode(""); }} style={btnOutline}>Back</button>
               <button
                 onClick={handleVerify}
                 disabled={loading || otpCode.length !== 6}
@@ -513,7 +595,7 @@ const MFASetupPage: React.FC = () => {
             <div style={{ fontSize: 13, color: c.subtext, marginBottom: 24 }}>
               Your account is now protected with two-factor authentication. You'll need your authenticator app at every login.
             </div>
-            < a href="/dashboard/freelancer" style={{ display: "inline-block", padding: "10px 24px", background: c.primary, color: "#fff", borderRadius: 8, textDecoration: "none", fontSize: 14, fontWeight: 500 }}>
+            <a href="/dashboard/freelancer" style={{ display: "inline-block", padding: "10px 24px", background: c.primary, color: "#fff", borderRadius: 8, textDecoration: "none", fontSize: 14, fontWeight: 500 }}>
               Back to dashboard
             </a>
           </div>

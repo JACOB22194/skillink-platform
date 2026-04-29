@@ -502,6 +502,31 @@ const ClientDashboard: React.FC = () => {
           <NavItem label="Active Projects" active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />} colors={c} />
           <NavItem label="Workrooms" active={activeView === "Workrooms"} onClick={() => setActiveView("Workrooms")} icon={<IconTeam />} colors={c} />
           <NavItem label="Invoices" active={activeView === "Invoices"} onClick={() => setActiveView("Invoices")} icon={<IconInv />} colors={c} />
+
+          {/* ── Upgrade Banner ── */}
+          <div style={{ margin: "10px 12px 0" }}>
+            <div
+              onClick={() => navigate("/pricing?role=client")}
+              style={{
+                background: "linear-gradient(135deg, #1a2640 0%, #1e3560 100%)",
+                border: `0.5px solid rgba(59,130,246,0.35)`,
+                borderRadius: 10,
+                padding: "10px 12px",
+                cursor: "pointer",
+                transition: "opacity .15s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+            >
+              <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#7eb3f8", marginBottom: 4 }}>⚡ Skillink Business</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 4 }}>Upgrade Now</div>
+              <div style={{ fontSize: 10, color: "#7eb3f8", lineHeight: 1.4 }}>Post unlimited jobs, AI talent matching & more.</div>
+              <div style={{ marginTop: 8, fontSize: 10, fontWeight: 600, color: "#3b82f6", background: "rgba(59,130,246,0.15)", borderRadius: 6, padding: "4px 8px", display: "inline-block" }}>
+                View Plans →
+              </div>
+            </div>
+          </div>
+
           <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Switch theme</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Contact us</div>

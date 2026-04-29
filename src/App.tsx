@@ -14,18 +14,26 @@ import ActivatePage from './pages/ActivatePage';
 import ProfileSetupPage from './pages/ProfileSetupPage';
 import GitHubReviewPage from './pages/GitHubReviewPage';
 import SettingsPage from './pages/SettingsPage';
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import PricingPage from "./pages/PricingPage";
+import PaymentPage from "./pages/PaymentPage";
 
 const App = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* The main URL "/" will show the Landing Page */}
         <Route path="/" element={<LandingPage />} />
-        
-        {/* The "/login" URL will show your dark-mode Login screen */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/activate" element={<ActivatePage />} />
+
+        {/* ── Pricing & Payment (public) ── */}
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/payment" element={<PaymentPage />} />
+
+        {/* ── Forgot / Reset Password ── */}
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password"  element={<ForgotPasswordPage />} />
 
         {/* Dashboard routes */}
         <Route
@@ -60,54 +68,54 @@ const App = () => {
             </RequireRole>
           }
         />
-  <Route
-    path="/settings/mfa"
-    element={
-      <RequireRole role={["freelancer", "client", "admin"]}>
-        <MFASetupPage />
-      </RequireRole>
-    }
-  />
-  <Route
-    path="/settings/profile"
-    element={
-      <RequireRole role="freelancer">
-        <ProfileSettingsPage />
-      </RequireRole>
-    }
-  />
-  <Route
-    path="/profile-setup"
-    element={
-      <RequireRole role="freelancer">
-        <ProfileSetupPage />
-      </RequireRole>
-    }
-  />
-  <Route
-    path="/messages"
-    element={
-      <RequireRole role={["freelancer", "client", "admin"]}>
-        <MessagingPage />
-      </RequireRole>
-    }
-  />
-  <Route
-    path="/settings"
-    element={
-      <RequireRole role="freelancer">
-        <SettingsPage />
-      </RequireRole>
-    }
-  />
-  <Route
-    path="/github/review"
-    element={
-      <RequireRole role="freelancer">
-        <GitHubReviewPage />
-      </RequireRole>
-    }
-  />
+        <Route
+          path="/settings/mfa"
+          element={
+            <RequireRole role={["freelancer", "client", "admin"]}>
+              <MFASetupPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/settings/profile"
+          element={
+            <RequireRole role="freelancer">
+              <ProfileSettingsPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/profile-setup"
+          element={
+            <RequireRole role="freelancer">
+              <ProfileSetupPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/messages"
+          element={
+            <RequireRole role={["freelancer", "client", "admin"]}>
+              <MessagingPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <RequireRole role="freelancer">
+              <SettingsPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/github/review"
+          element={
+            <RequireRole role="freelancer">
+              <GitHubReviewPage />
+            </RequireRole>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
