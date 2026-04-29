@@ -182,7 +182,11 @@ const PostProjectPage: React.FC = () => {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setMatchError(err.detail || "Failed to get recommendations.");
+        if (res.status === 403) {
+          setMatchError("Session conflict: you appear to be logged in as a freelancer in another tab. Please sign out and log back in as a client.");
+        } else {
+          setMatchError(err.detail || "Failed to get recommendations.");
+        }
         return;
       }
 

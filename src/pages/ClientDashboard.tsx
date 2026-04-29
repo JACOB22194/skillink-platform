@@ -400,7 +400,7 @@ const FindTalentView: React.FC<{ colors: ThemeColors }> = ({ colors }) => {
             <div style={{ textAlign: "center", padding: "3rem 0", color: colors.subtext }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
               <div style={{ fontSize: 16, fontWeight: 500, color: colors.text, marginBottom: 6 }}>No matches found</div>
-              <div style={{ fontSize: 13 }}>No freelancers have connected their GitHub profiles yet.</div>
+              <div style={{ fontSize: 13 }}>No freelancers matched this project's requirements, or no profiles have been set up yet.</div>
             </div>
           )}
         </>

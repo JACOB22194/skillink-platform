@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/useAuth";
 import { useProfile, useGitHubProfile } from "../api/hooks";
 import type { FreelancerProfile } from "../api/types";
 import { Skeleton, SkeletonCard, SkeletonMetric } from "../components/ui/Skeleton";
 import { ErrorBoundary } from "../components/ui/ErrorBoundary";
+import { API_BASE_URL, getAuthHeaders } from "../shared/api";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,129 @@ const IconBulb = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="non
 const IconShield = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>;
 const IconTeam = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>;
 const IconSettings = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface MatchedProject {
+  project_id:     number;
+  title:          string;
+  description:    string;
+  budget:         number;
+  match_score:    number;
+  matched_skills: string[];
+  text_score:     number;
+  skill_score:    number;
+  quality_score:  number;
+}
+
+// ─── Project Match View ───────────────────────────────────────────────────────
+
+const MATCH_PALETTE = [
+  { bg: "#2a2640", color: "#7F77DD" },
+  { bg: "rgba(34,197,94,.12)", color: "#22c55e" },
+  { bg: "rgba(59,130,246,.15)", color: "#3b82f6" },
+  { bg: "rgba(245,158,11,.1)", color: "#f59e0b" },
+  { bg: "rgba(239,68,68,.1)", color: "#ef4444" },
+];
+
+const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
+  const [matches, setMatches] = useState<MatchedProject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [latency, setLatency] = useState(0);
+  const [ran, setRan] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/recommend/my-matches?top_k=10`, getAuthHeaders());
+        if (res.ok) {
+          const data = await res.json();
+          setMatches(data.matches || []);
+          setLatency(data.latency_ms || 0);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setError(err.detail || "Failed to load matches.");
+        }
+      } catch {
+        setError("Could not reach the recommendation service.");
+      } finally {
+        setLoading(false);
+        setRan(true);
+      }
+    })();
+  }, []);
+
+  return (
+    <div style={{ animation: "fadeIn 0.5s ease" }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>AI Matches</div>
+        <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Open projects matched to your profile by TF-IDF · skill overlap · GitHub quality.</div>
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: "center", padding: "3rem 0", color: c.subtext }}>
+          <div style={{ fontSize: 14, marginBottom: 8 }}>Loading your matches...</div>
+          <div style={{ fontSize: 11, opacity: 0.6 }}>Querying cached recommendations</div>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div style={{ background: "rgba(239,68,68,.08)", color: "#ef4444", padding: "12px 16px", borderRadius: 10, fontSize: 13, border: "1px solid rgba(239,68,68,.15)" }}>⚠ {error}</div>
+      )}
+
+      {!loading && !error && ran && matches.length === 0 && (
+        <div style={{ textAlign: "center", padding: "3rem 0", color: c.subtext }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+          <div style={{ fontSize: 16, fontWeight: 500, color: c.text, marginBottom: 8 }}>No matches yet</div>
+          <div style={{ fontSize: 13, maxWidth: 320, margin: "0 auto", lineHeight: 1.6 }}>
+            Matches appear here once clients run AI scoring for their projects. Make sure your GitHub profile is connected and your skills are up to date.
+          </div>
+        </div>
+      )}
+
+      {!loading && matches.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, color: c.subtext, marginBottom: 12 }}>
+            Found <strong style={{ color: c.text }}>{matches.length}</strong> matching project{matches.length !== 1 ? "s" : ""} in <strong style={{ color: c.primary }}>{latency.toFixed(0)}ms</strong>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {matches.map((p, i) => {
+              const pal = MATCH_PALETTE[i % MATCH_PALETTE.length];
+              const pct = Math.round(p.match_score * 100);
+              return (
+                <div key={p.project_id} style={{ display: "flex", alignItems: "flex-start", padding: 16, border: `0.5px solid ${i === 0 ? c.primary + "40" : c.border}`, borderRadius: 12, background: i === 0 ? c.primarySoft + "20" : c.surface }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: pal.bg, color: pal.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0, marginRight: 14 }}>📋</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{p.title}</span>
+                      {i === 0 && <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 20, background: c.primary, color: "#fff", fontWeight: 600 }}>BEST FIT</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5 }}>
+                      Budget: <strong style={{ color: c.text }}>${p.budget.toLocaleString()}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 6, opacity: 0.85 }}>{p.description}</div>
+                    {p.matched_skills.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {p.matched_skills.map(s => (
+                          <span key={s} style={{ fontSize: 9, padding: "2px 8px", borderRadius: 20, background: c.primarySoft, color: c.primary, fontWeight: 500 }}>{s}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+                    <div style={{ fontSize: 20, fontWeight: 600, color: pct >= 50 ? c.primary : c.subtext, lineHeight: 1 }}>{pct}%</div>
+                    <div style={{ fontSize: 9, color: c.subtext, marginTop: 3 }}>match</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 // ─── Metric Skeletons ─────────────────────────────────────────────────────────
 
@@ -170,6 +294,7 @@ const FreelancerDashboard: React.FC = () => {
     return saved !== null ? JSON.parse(saved) : true;
   });
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [activeView, setActiveView] = useState("Dashboard");
   const c = getColors(darkMode);
 
   const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
@@ -228,11 +353,11 @@ const FreelancerDashboard: React.FC = () => {
           {/* ── Sidebar ── */}
           <aside style={{ width: 200, borderRight: `0.5px solid ${c.border}`, background: c.surface, display: "flex", flexDirection: "column", padding: "16px 0", flexShrink: 0 }}>
             <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Main</div>
-            <NavItem label="Dashboard" active icon={<IconGrid />} colors={c} />
+            <NavItem label="Dashboard" active={activeView === "Dashboard"} icon={<IconGrid />} colors={c} onClick={() => setActiveView("Dashboard")} />
             <NavItem label="Profile"   icon={<IconUser />} colors={c} onClick={() => navigate("/settings")} />
             <NavItem label="Messages"  badge={0} icon={<IconMsg />} colors={c} onClick={() => navigate("/messages")} />
             <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Skillink</div>
-            <NavItem label="AI Matches"   badge="—" icon={<IconBulb />}   colors={c} />
+            <NavItem label="AI Matches"   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
             <NavItem label="Verification"         icon={<IconShield />}  colors={c} />
             <NavItem label="Workrooms"    badge="—" icon={<IconTeam />}   colors={c} />
             <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
@@ -242,6 +367,10 @@ const FreelancerDashboard: React.FC = () => {
 
           {/* ── Main Content ── */}
           <main style={{ flex: 1, overflowY: "auto", padding: 20, background: c.bg }}>
+
+            {activeView === "AI Matches" && <ProjectMatchView c={c} />}
+
+            {activeView === "Dashboard" && <>
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Dashboard</div>
               <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Welcome back, {firstName} — your AI match engine is active</div>
@@ -323,13 +452,13 @@ const FreelancerDashboard: React.FC = () => {
                 )}
               </div>
 
-              {/* AI Matches placeholder */}
+              {/* AI Matches preview card */}
               <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                   <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Top AI Matches</span>
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: c.primarySoft, color: c.primary }}>Coming soon</span>
+                  <span onClick={() => setActiveView("AI Matches")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>View all →</span>
                 </div>
-                <EmptyState label="AI match engine warming up" hint="Once you complete your profile, the engine will surface the best-fit jobs for you." c={c} />
+                <EmptyState label="Click 'AI Matches' in the sidebar" hint="The engine surfaces best-fit projects once clients run matching for their jobs." c={c} />
               </div>
             </div>
 
@@ -351,6 +480,7 @@ const FreelancerDashboard: React.FC = () => {
                 <EmptyState label="No reviews yet" hint="Client reviews will appear here after you complete your first project." c={c} />
               </div>
             </div>
+            </>}
           </main>
 
           {/* ── Right Panel ── */}
