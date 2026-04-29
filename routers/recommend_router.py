@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from typing import Optional
 import httpx, json, os, time
 
-from auth import require_client, get_current_user
+from auth import require_client, require_freelancer, get_current_user
 from db   import get_db
 import models
 
@@ -71,6 +71,23 @@ class RecommendResponse(BaseModel):
     latency_ms:   float
 
 
+class MatchedProject(BaseModel):
+    project_id:     int
+    title:          str
+    description:    str
+    budget:         float
+    match_score:    float
+    matched_skills: list[str]
+    text_score:     float
+    skill_score:    float
+    quality_score:  float
+
+
+class FreelancerMatchResponse(BaseModel):
+    matches:    list[MatchedProject]
+    latency_ms: float
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _classify(title: str, description: str) -> dict:
@@ -93,12 +110,20 @@ def _load_candidates(db: Session) -> list[dict]:
     """
     Load all freelancers with their skills from DB.
     Returns plain dicts — no SQLAlchemy objects leave this function.
+    Freelancers without a parsed GitHub profile use a fallback profile_text
+    built from their bio, professional title, and skills so they still
+    participate in text-similarity scoring.
     """
     freelancers = (
         db.query(models.Freelancer)
         .join(models.User, models.Freelancer.user_id == models.User.id)
         .filter(models.User.status == "active")
-        .filter(models.Freelancer.profile_text.isnot(None))  # only parsed profiles
+        .filter(
+            # Include anyone with at least a title, bio, or skills
+            (models.Freelancer.professional_title.isnot(None)) |
+            (models.Freelancer.bio.isnot(None)) |
+            (models.Freelancer.profile_text.isnot(None))
+        )
         .all()
     )
 
@@ -106,6 +131,14 @@ def _load_candidates(db: Session) -> list[dict]:
     for f in freelancers:
         skills = [fs.skill.name for fs in f.skills if fs.skill]
         stats  = json.loads(f.github_stats or "{}")
+
+        # Use parsed GitHub text when available; fall back to bio + title + skills
+        profile_text = f.profile_text or " ".join(filter(None, [
+            f.professional_title,
+            f.bio,
+            " ".join(skills),
+        ]))
+
         candidates.append({
             "freelancer_id":      f.freelancer_id,
             "user_id":            f.user_id,
@@ -119,7 +152,7 @@ def _load_candidates(db: Session) -> list[dict]:
             "skills":             skills,
             "top_languages":      json.loads(f.top_languages or "[]"),
             "sub_category_tags":  json.loads(f.sub_category_tags or "[]"),
-            "profile_text":       f.profile_text or "",
+            "profile_text":       profile_text,
             "github_stats":       stats,
         })
 
@@ -227,7 +260,7 @@ def recommend_for_job(
         raise HTTPException(
             status_code=503,
             detail="No freelancer profiles available yet. "
-                   "Ask freelancers to connect their GitHub profile."
+                   "Ask freelancers to complete their profile (bio, title, or GitHub)."
         )
 
     # ── Score ─────────────────────────────────────────────────────────────────
@@ -341,19 +374,21 @@ def get_cached_recommendations(
             continue
         skills = [fs.skill.name for fs in freelancer.skills if fs.skill]
         matches.append(MatchedFreelancer(
-            freelancer_id     = rec.freelancer_id,
-            name              = freelancer.user.email if freelancer.user else "",
-            professional_title= freelancer.professional_title or "",
-            github_url        = freelancer.github_url or "",
-            hourly_rate       = float(freelancer.hourly_rate or 0),
-            github_score      = int(freelancer.github_score or 0),
-            match_score       = rec.match_score,
-            matched_skills    = json.loads(rec.matched_skills or "[]"),
-            explanation       = "",
-            text_score        = rec.text_score,
-            skill_score       = rec.skill_score,
-            quality_score     = rec.quality_score,
-            activity_score    = 0.0,
+            freelancer_id      = rec.freelancer_id,
+            name               = freelancer.user.email if freelancer.user else "",
+            professional_title = freelancer.professional_title or "",
+            github_url         = freelancer.github_url or "",
+            hourly_rate        = float(freelancer.hourly_rate or 0),
+            github_score       = int(freelancer.github_score or 0),
+            match_score        = rec.match_score,
+            matched_skills     = json.loads(rec.matched_skills or "[]"),
+            explanation        = "",
+            text_score         = rec.text_score,
+            skill_score        = rec.skill_score,
+            quality_score      = rec.quality_score,
+            activity_score     = 0.0,
+            classifier_weight  = 1.0,
+            matched_on         = "",
         ))
 
     return RecommendResponse(
@@ -362,4 +397,59 @@ def get_cached_recommendations(
         category     = "",
         matches      = matches,
         latency_ms   = 0.0,
+    )
+
+
+@router.get("/my-matches", response_model=FreelancerMatchResponse)
+def get_my_project_matches(
+    top_k: int         = Query(default=10, ge=1, le=20),
+    me:    models.User = Depends(require_freelancer),
+    db:    Session     = Depends(get_db),
+):
+    """
+    Return open projects that best match the current freelancer, drawn from
+    cached client-triggered recommendations (fast — no AI call required).
+    """
+    t0 = time.perf_counter()
+
+    freelancer = (
+        db.query(models.Freelancer)
+        .filter(models.Freelancer.user_id == me.id)
+        .first()
+    )
+    if not freelancer:
+        raise HTTPException(status_code=404, detail="Freelancer profile not found.")
+
+    recs = (
+        db.query(models.Recommendation)
+        .join(models.Project, models.Recommendation.project_id == models.Project.project_id)
+        .filter(models.Recommendation.freelancer_id == freelancer.freelancer_id)
+        .filter(models.Project.status == models.ProjectStatus.open)
+        .order_by(models.Recommendation.match_score.desc())
+        .limit(top_k)
+        .all()
+    )
+
+    matches = []
+    for rec in recs:
+        project = db.query(models.Project).filter(
+            models.Project.project_id == rec.project_id
+        ).first()
+        if not project:
+            continue
+        matches.append(MatchedProject(
+            project_id     = project.project_id,
+            title          = project.title,
+            description    = (project.description or "")[:300],
+            budget         = float(project.budget or 0),
+            match_score    = rec.match_score,
+            matched_skills = json.loads(rec.matched_skills or "[]"),
+            text_score     = rec.text_score,
+            skill_score    = rec.skill_score,
+            quality_score  = rec.quality_score,
+        ))
+
+    return FreelancerMatchResponse(
+        matches    = matches,
+        latency_ms = round((time.perf_counter() - t0) * 1000, 1),
     )
