@@ -309,6 +309,50 @@ def wallet_transactions(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /invoices/my
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/invoices/my",
+    summary="Get all invoices (payments) for the logged-in client",
+)
+def get_client_invoices(
+    me: models.User = Depends(require_client),
+    db: Session     = Depends(get_db),
+):
+    client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+    if not client:
+        raise HTTPException(404, "Client profile not found.")
+
+    # Fetch all payments linked to this client's contracts via escrow
+    payments = (
+        db.query(models.Payment, models.Milestone, models.Escrow, models.Contract)
+        .join(models.Escrow,    models.Payment.escrow_id    == models.Escrow.escrow_id)
+        .join(models.Contract,  models.Escrow.contract_id  == models.Contract.contract_id)
+        .outerjoin(models.Milestone, models.Payment.milestone_id == models.Milestone.milestone_id)
+        .join(models.Project,   models.Contract.project_id == models.Project.project_id)
+        .filter(models.Project.client_id == client.client_id)
+        .order_by(models.Payment.payment_date.desc())
+        .all()
+    )
+
+    result = []
+    for payment, milestone, escrow, contract in payments:
+        result.append({
+            "payment_id":    payment.payment_id,
+            "contract_id":   contract.contract_id,
+            "project_id":    contract.project_id,
+            "milestone_id":  milestone.milestone_id if milestone else None,
+            "milestone_title": milestone.title if milestone else "Escrow Payment",
+            "amount":        payment.amount or 0.0,
+            "status":        milestone.status.value if milestone else "paid",
+            "payment_date":  payment.payment_date.isoformat() if payment.payment_date else None,
+            "escrow_status": escrow.status.value,
+        })
+    return result
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  Helper
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

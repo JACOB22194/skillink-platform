@@ -98,42 +98,77 @@ def ai_match_freelancers(
     for f in freelancers:
         user        = db.query(models.User).filter(models.User.id == f.user_id).first()
         skill_names = [fs.skill.name for fs in f.skills if fs.skill]
+
+        # Parse JSON-stored list fields safely
+        import json as _json
+        def _parse_json_list(val):
+            if not val:
+                return []
+            try:
+                return _json.loads(val)
+            except Exception:
+                return []
+
+        top_languages     = _parse_json_list(f.top_languages)
+        sub_category_tags = _parse_json_list(f.sub_category_tags)
+
+        # Build profile_text for TF-IDF scoring
+        profile_text = " ".join(filter(None, [
+            f.professional_title or "",
+            f.bio or "",
+            " ".join(skill_names),
+            " ".join(top_languages),
+        ]))
+
         freelancer_payloads.append({
-            "freelancer_id":  f.freelancer_id,
-            "user_id":        f.user_id,
-            "email":          user.email if user else "",
-            "bio":            f.bio or "",
-            "hourly_rate":    f.hourly_rate or 0,
-            "success_score":  f.success_score or 0,
-            "skills":         skill_names,
+            "freelancer_id":      f.freelancer_id,
+            "user_id":            f.user_id,
+            "name":               user.email.split("@")[0] if user else f"freelancer_{f.freelancer_id}",
+            "email":              user.email if user else "",
+            "bio":                f.bio or "",
+            "professional_title": f.professional_title or "",
+            "hourly_rate":        f.hourly_rate or 0,
+            "success_score":      f.success_score or 0,
+            "github_score":       f.github_score or 0,
+            "github_url":         f.github_url or "",
+            "skills":             skill_names,
+            "top_languages":      top_languages,
+            "sub_category_tags":  sub_category_tags,
+            "profile_text":       profile_text,
+            "github_stats":       {},
         })
 
     try:
         response = httpx.post(
             f"{AI_SERVICE_URL}/match",
             json={
-                "project_id":      project_id,
-                "title":           project.title,
-                "description":     project.description or "",
-                "required_skills": required_skills,
-                "budget":          project.budget,
-                "freelancers":     freelancer_payloads,
+                "title":            project.title,
+                "description":      project.description or "",
+                "sub_category":     project.sub_category or "",
+                "category":         project.category or "",
+                "budget_min":       float(project.budget or 0),
+                "budget_max":       float(project.budget or 0),
+                "candidates":       freelancer_payloads,
+                "top_k":            10,
             },
             timeout=AI_TIMEOUT,
         )
         response.raise_for_status()
         ai_data = response.json()
 
+        # Build a lookup for email (not returned by AI service)
+        payload_map = {fp["freelancer_id"]: fp for fp in freelancer_payloads}
+
         matches = [
             schema.FreelancerSearchResult(
                 freelancer_id  = m["freelancer_id"],
-                user_id        = m["user_id"],
-                email          = m["email"],
-                bio            = m.get("bio"),
+                user_id        = payload_map.get(m["freelancer_id"], {}).get("user_id", 0),
+                email          = payload_map.get(m["freelancer_id"], {}).get("email", ""),
+                bio            = payload_map.get(m["freelancer_id"], {}).get("bio"),
                 hourly_rate    = m.get("hourly_rate"),
-                success_score  = m.get("success_score", 0),
-                skills         = m.get("skills", []),
-                ai_match_score = m.get("score"),
+                success_score  = payload_map.get(m["freelancer_id"], {}).get("success_score", 0),
+                skills         = payload_map.get(m["freelancer_id"], {}).get("skills", []),
+                ai_match_score = round(m.get("match_score", 0) * 100, 1),
             )
             for m in ai_data.get("matches", [])
         ]
