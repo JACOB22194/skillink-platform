@@ -102,6 +102,7 @@ const PostProjectPage: React.FC = () => {
   // Data state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [budget, setBudget] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [extraLabels, setExtraLabels] = useState<string[]>([]);
   const [removedPrimaryLabel, setRemovedPrimaryLabel] = useState(false);
@@ -115,6 +116,10 @@ const PostProjectPage: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("skilllink-darkMode", JSON.stringify(darkMode));
   }, [darkMode]);
+
+  // Validate budget
+  const budgetNum = parseFloat(budget) || 0;
+  const isBudgetValid = budgetNum >= 10;
 
   const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     e.target.style.borderColor = colors.primary;
@@ -161,7 +166,7 @@ const PostProjectPage: React.FC = () => {
 
   // Fetch matches when entering step 2
   const goToMatching = async () => {
-    if (!description.trim() || !title.trim()) return;
+    if (!description.trim() || !title.trim() || !isBudgetValid) return;
     setStep("matching");
     setMatchLoading(true);
     setMatchError("");
@@ -232,7 +237,7 @@ const PostProjectPage: React.FC = () => {
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim(),
-          budget: 0,
+          budget: parseFloat(budget) || 0,
           required_skills: (analysisResult?.label && !removedPrimaryLabel) ? [analysisResult.label, ...extraLabels] : extraLabels,
           sub_category: removedPrimaryLabel ? null : (analysisResult?.label || null),
           category: removedPrimaryLabel ? null : (analysisResult?.category || null),
@@ -340,6 +345,34 @@ const PostProjectPage: React.FC = () => {
                 }}
               />
 
+              <div style={{ marginBottom: "1.5rem" }}>
+                <label style={{ display: "block", fontSize: 14, fontWeight: 500, color: colors.text, marginBottom: "0.5rem" }}>
+                  Budget (minimum $10)
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span style={{ color: colors.subtext, fontSize: 16 }}>$</span>
+                  <input
+                    type="number"
+                    placeholder="e.g. 500"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                    min="10"
+                    step="0.01"
+                    style={{
+                      ...inputStyle,
+                      marginBottom: 0,
+                      flex: 1,
+                      borderColor: budget && !isBudgetValid ? "#ef4444" : colors.border,
+                    }}
+                  />
+                </div>
+                {budget && !isBudgetValid && (
+                  <div style={{ fontSize: 12, color: "#ef4444", marginTop: "0.5rem" }}>❌ Budget must be at least $10.00</div>
+                )}
+              </div>
+
               {/* Real-time AI prediction badges + extras */}
               {analysisResult && (
                 <div style={{ animation: "fadeIn 0.3s ease", marginBottom: "1rem" }}>
@@ -436,16 +469,16 @@ const PostProjectPage: React.FC = () => {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
                 <button
                   onClick={goToMatching}
-                  disabled={!description.trim() || !title.trim()}
+                  disabled={!description.trim() || !title.trim() || !isBudgetValid}
                   style={{
-                    background: (description.trim() && title.trim()) ? colors.primary : colors.border,
+                    background: (description.trim() && title.trim() && isBudgetValid) ? colors.primary : colors.border,
                     color: "#fff",
                     border: "none",
                     padding: "12px 28px",
                     borderRadius: 8,
                     fontSize: 15,
                     fontWeight: 500,
-                    cursor: (description.trim() && title.trim()) ? "pointer" : "not-allowed",
+                    cursor: (description.trim() && title.trim() && isBudgetValid) ? "pointer" : "not-allowed",
                     transition: "opacity 0.2s",
                   }}
                 >
@@ -494,6 +527,13 @@ const PostProjectPage: React.FC = () => {
               {matchError && (
                 <div style={{ background: "rgba(239,68,68,.08)", color: "#ef4444", padding: "16px 20px", borderRadius: 12, fontSize: 14, marginBottom: "1.5rem", border: "1px solid rgba(239,68,68,.15)" }}>
                   ⚠ {matchError}
+                </div>
+              )}
+
+              {/* Budget error after save */}
+              {errorMsg && (
+                <div style={{ background: "rgba(239,68,68,.08)", color: "#ef4444", padding: "16px 20px", borderRadius: 12, fontSize: 14, marginBottom: "1.5rem", border: "1px solid rgba(239,68,68,.15)" }}>
+                  ❌ {errorMsg}
                 </div>
               )}
 

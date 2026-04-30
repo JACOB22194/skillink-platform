@@ -159,56 +159,220 @@ const IconRefresh = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="
 
 // ─── Company Profile View ─────────────────────────────────────────────────────
 
-const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string) => void }> = ({ colors, onSave }) => {
-  const [companyName, setCompanyName] = useState("");
-  const [loading, setLoading]         = useState(true);
-  const [saving, setSaving]           = useState(false);
-  const [feedback, setFeedback]       = useState("");
+const INDUSTRIES = ["Technology", "Finance", "Healthcare", "Education", "E-Commerce", "Marketing", "Design", "Consulting", "Real Estate", "Other"];
+const COMPANY_SIZES = ["1–10", "11–50", "51–200", "201–500", "500+"];
 
+const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string) => void }> = ({ colors: c, onSave }) => {
+  const [companyName,  setCompanyName]  = useState("");
+  const [website,      setWebsite]      = useState("");
+  const [industry,     setIndustry]     = useState("");
+  const [size,         setSize]         = useState("");
+  const [description,  setDescription]  = useState("");
+  const [location,     setLocation]     = useState("");
+  const [loading,      setLoading]      = useState(true);
+  const [saving,       setSaving]       = useState(false);
+  const [feedback,     setFeedback]     = useState<{ msg: string; ok: boolean } | null>(null);
+  const [activeTab,    setActiveTab]    = useState<"general" | "details">("general");
+
+  // Load persisted extra fields from localStorage
   useEffect(() => {
     apiClient.get<ClientProfile>("/users/me/profile")
-      .then(r => setCompanyName(r.data.company_name || ""))
+      .then(r => {
+        setCompanyName(r.data.company_name || "");
+        const saved = JSON.parse(localStorage.getItem("skilllink-company-meta") || "{}");
+        setWebsite(saved.website || "");
+        setIndustry(saved.industry || "");
+        setSize(saved.size || "");
+        setDescription(saved.description || "");
+        setLocation(saved.location || "");
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const save = async () => {
     setSaving(true);
-    setFeedback("");
+    setFeedback(null);
     try {
       await apiClient.put("/users/me/profile", { company_name: companyName });
+      // Persist extra fields locally until backend supports them
+      localStorage.setItem("skilllink-company-meta", JSON.stringify({ website, industry, size, description, location }));
       onSave(companyName);
-      setFeedback("Profile updated!");
-      setTimeout(() => setFeedback(""), 3000);
+      setFeedback({ msg: "✓ Profile saved successfully!", ok: true });
     } catch {
-      setFeedback("Failed to update.");
+      setFeedback({ msg: "✗ Failed to save changes.", ok: false });
     } finally {
       setSaving(false);
+      setTimeout(() => setFeedback(null), 3500);
     }
   };
 
-  if (loading) return <div style={{ padding: 20, color: colors.subtext }}>Loading…</div>;
+  const initials = companyName.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2) || "CO";
+  const completeness = [companyName, website, industry, size, description, location].filter(Boolean).length;
+  const completePct = Math.round((completeness / 6) * 100);
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "10px 14px", fontSize: 13,
+    background: c.bg, color: c.text,
+    border: `1px solid ${c.border}`, borderRadius: 8,
+    outline: "none", boxSizing: "border-box",
+    transition: "border-color .2s",
+  };
+  const labelStyle: React.CSSProperties = {
+    display: "block", fontSize: 11, fontWeight: 600,
+    color: c.subtext, marginBottom: 6,
+    textTransform: "uppercase", letterSpacing: ".06em",
+  };
+
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+      <div style={{ width: 28, height: 28, border: `3px solid ${c.border}`, borderTopColor: c.primary, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+    </div>
+  );
 
   return (
-    <div style={{ animation: "fadeIn 0.5s ease" }}>
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: colors.text }}>Company Profile</div>
-        <div style={{ fontSize: 12, color: colors.subtext, marginTop: 3 }}>Manage your corporate identity.</div>
+    <div style={{ padding: "28px 32px", maxWidth: 800, animation: "fadeIn 0.4s ease" }}>
+
+      {/* ── Header ── */}
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Company Profile</h2>
+        <p style={{ fontSize: 13, color: c.subtext, margin: "4px 0 0" }}>Manage your corporate identity and visibility on SkillLink.</p>
       </div>
-      <div style={{ background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 12, padding: 24, maxWidth: 600 }}>
-        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: colors.subtext, marginBottom: 8, textTransform: "uppercase", letterSpacing: ".05em" }}>
-          Company Name
-        </label>
-        <input
-          value={companyName}
-          onChange={e => setCompanyName(e.target.value)}
-          style={{ width: "100%", padding: "10px 14px", fontSize: 14, background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, marginBottom: 16, outline: "none", boxSizing: "border-box" }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <button onClick={save} disabled={saving} style={{ background: colors.primary, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer" }}>
+
+      {/* ── Hero card ── */}
+      <div style={{ background: `linear-gradient(135deg, ${c.primarySoft} 0%, ${c.surface} 60%)`, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, marginBottom: 24, display: "flex", alignItems: "center", gap: 20, position: "relative", overflow: "hidden" }}>
+        {/* Decorative blob */}
+        <div style={{ position: "absolute", right: -40, top: -40, width: 160, height: 160, borderRadius: "50%", background: `rgba(127,119,221,.08)`, pointerEvents: "none" }} />
+
+        {/* Avatar */}
+        <div style={{ width: 72, height: 72, borderRadius: 18, background: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700, color: "#fff", flexShrink: 0, boxShadow: `0 4px 20px rgba(127,119,221,.35)` }}>
+          {initials}
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: c.text }}>{companyName || "Your Company"}</div>
+          <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>
+            {industry && <span style={{ marginRight: 12 }}>🏢 {industry}</span>}
+            {location && <span style={{ marginRight: 12 }}>📍 {location}</span>}
+            {size     && <span>👥 {size} employees</span>}
+          </div>
+          {website && (
+            <a href={website.startsWith("http") ? website : `https://${website}`} target="_blank" rel="noreferrer"
+              style={{ fontSize: 12, color: c.primary, textDecoration: "none", marginTop: 4, display: "inline-block" }}>
+              🔗 {website}
+            </a>
+          )}
+        </div>
+
+        {/* Profile completeness */}
+        <div style={{ textAlign: "center", flexShrink: 0 }}>
+          <div style={{ position: "relative", width: 56, height: 56, margin: "0 auto 6px" }}>
+            <svg viewBox="0 0 56 56" style={{ transform: "rotate(-90deg)", width: 56, height: 56 }}>
+              <circle cx="28" cy="28" r="22" fill="none" stroke={c.border} strokeWidth="5" />
+              <circle cx="28" cy="28" r="22" fill="none" stroke={c.primary} strokeWidth="5"
+                strokeDasharray={`${2 * Math.PI * 22}`}
+                strokeDashoffset={`${2 * Math.PI * 22 * (1 - completePct / 100)}`}
+                strokeLinecap="round" style={{ transition: "stroke-dashoffset .6s ease" }} />
+            </svg>
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: c.text }}>{completePct}%</div>
+          </div>
+          <div style={{ fontSize: 10, color: c.subtext, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Complete</div>
+        </div>
+      </div>
+
+      {/* ── Tabs ── */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, background: c.surface, border: `1px solid ${c.border}`, borderRadius: 10, padding: 4, width: "fit-content" }}>
+        {(["general", "details"] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            style={{ padding: "7px 20px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all .2s",
+              background: activeTab === tab ? c.primary : "transparent",
+              color:      activeTab === tab ? "#fff" : c.subtext,
+            }}>
+            {tab === "general" ? "General" : "Details"}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Form card ── */}
+      <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 14, padding: 24 }}>
+
+        {activeTab === "general" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            {/* Company Name — full width */}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelStyle}>Company Name *</label>
+              <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+                placeholder="e.g. Acme Corporation"
+                style={inputStyle}
+                onFocus={e => (e.target.style.borderColor = c.primary)}
+                onBlur={e  => (e.target.style.borderColor = c.border)} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Website</label>
+              <input value={website} onChange={e => setWebsite(e.target.value)}
+                placeholder="https://yourcompany.com"
+                style={inputStyle}
+                onFocus={e => (e.target.style.borderColor = c.primary)}
+                onBlur={e  => (e.target.style.borderColor = c.border)} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Location</label>
+              <input value={location} onChange={e => setLocation(e.target.value)}
+                placeholder="e.g. New York, USA"
+                style={inputStyle}
+                onFocus={e => (e.target.style.borderColor = c.primary)}
+                onBlur={e  => (e.target.style.borderColor = c.border)} />
+            </div>
+          </div>
+        )}
+
+        {activeTab === "details" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div>
+              <label style={labelStyle}>Industry</label>
+              <select value={industry} onChange={e => setIndustry(e.target.value)}
+                style={{ ...inputStyle, appearance: "none" }}>
+                <option value="">Select industry…</option>
+                {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Company Size</label>
+              <select value={size} onChange={e => setSize(e.target.value)}
+                style={{ ...inputStyle, appearance: "none" }}>
+                <option value="">Select size…</option>
+                {COMPANY_SIZES.map(s => <option key={s} value={s}>{s} employees</option>)}
+              </select>
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelStyle}>About the Company</label>
+              <textarea value={description} onChange={e => setDescription(e.target.value)}
+                rows={4} placeholder="Briefly describe what your company does…"
+                style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }}
+                onFocus={e => (e.target.style.borderColor = c.primary)}
+                onBlur={e  => (e.target.style.borderColor = c.border)} />
+              <div style={{ fontSize: 11, color: c.subtext, marginTop: 4, textAlign: "right" }}>{description.length} / 500</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Footer ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 24, paddingTop: 20, borderTop: `1px solid ${c.border}` }}>
+          {feedback ? (
+            <span style={{ fontSize: 13, fontWeight: 500, color: feedback.ok ? "#22c55e" : "#f87171" }}>{feedback.msg}</span>
+          ) : (
+            <span style={{ fontSize: 12, color: c.subtext }}>
+              {completePct < 100 ? `${6 - completeness} field${6 - completeness !== 1 ? "s" : ""} remaining to complete your profile` : "✓ Profile is complete"}
+            </span>
+          )}
+          <button onClick={save} disabled={saving || !companyName.trim()}
+            style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 9, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: saving || !companyName.trim() ? "not-allowed" : "pointer", opacity: saving || !companyName.trim() ? 0.7 : 1, transition: "opacity .2s" }}>
             {saving ? "Saving…" : "Save Changes"}
           </button>
-          {feedback && <span style={{ fontSize: 12, color: colors.primary }}>{feedback}</span>}
         </div>
       </div>
     </div>
@@ -221,6 +385,21 @@ const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contr
   ({ colors, projects, contracts, loading, onRefresh }) => {
   const navigate = useNavigate();
   const contractByProject = Object.fromEntries(contracts.map(c => [c.project_id, c]));
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmId, setConfirmId]   = useState<number | null>(null);
+
+  const handleDelete = async (projectId: number) => {
+    setDeletingId(projectId);
+    try {
+      await apiClient.delete(`/projects/${projectId}`);
+      onRefresh();
+    } catch (e: any) {
+      alert(e.response?.data?.detail || "Failed to delete project.");
+    } finally {
+      setDeletingId(null);
+      setConfirmId(null);
+    }
+  };
 
   const thStyle: React.CSSProperties = { fontSize: 10, color: colors.subtext, textAlign: "left", padding: "0 8px 8px", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 500, borderBottom: `0.5px solid ${colors.border}` };
   const tdStyle: React.CSSProperties = { padding: "10px 8px", fontSize: 12, color: colors.text, borderBottom: `0.5px solid ${colors.border}` };
@@ -260,7 +439,7 @@ const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contr
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                {["Title", "Budget", "Category", "Status", "Contract"].map(h =>
+                {["Title", "Budget", "Category", "Status", "Contract", ""].map(h =>
                   <th key={h} style={thStyle}>{h}</th>
                 )}
               </tr>
@@ -288,6 +467,31 @@ const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contr
                         <Badge bg={cs.bg} color={cs.color} border={cs.border} style={{ margin: 0 }}>#{contract!.contract_id} · {contract!.status}</Badge>
                       ) : (
                         <span style={{ color: colors.subtext, fontSize: 11 }}>No contract</span>
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                      {confirmId === p.project_id ? (
+                        <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                          <button
+                            onClick={() => handleDelete(p.project_id)}
+                            disabled={deletingId === p.project_id}
+                            style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "none", background: "#ef4444", color: "#fff", cursor: "pointer", fontWeight: 600 }}>
+                            {deletingId === p.project_id ? "…" : "Confirm"}
+                          </button>
+                          <button
+                            onClick={() => setConfirmId(null)}
+                            style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${colors.border}`, background: "transparent", color: colors.subtext, cursor: "pointer" }}>
+                            Cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmId(p.project_id)}
+                          disabled={!!contractByProject[p.project_id]}
+                          title={contractByProject[p.project_id] ? "Cannot delete a project with an active contract" : "Delete project"}
+                          style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid rgba(239,68,68,.3)`, background: "rgba(239,68,68,.08)", color: "#ef4444", cursor: contractByProject[p.project_id] ? "not-allowed" : "pointer", opacity: contractByProject[p.project_id] ? 0.4 : 1 }}>
+                          🗑 Delete
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -337,7 +541,7 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
     setLoading(true); setError(""); setMatches([]);
     const t0 = performance.now();
     try {
-      const res = await fetch(`${API_BASE}/ai/match/${selectedId}`, {
+      const res = await fetch(`${API_BASE}/projects/${selectedId}/ai-match`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
       });
       if (!res.ok) throw new Error((await res.json()).detail || "Match failed");
@@ -478,6 +682,121 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
 
 // ─── Stub View ────────────────────────────────────────────────────────────────
 
+// ─── Invoice Types ────────────────────────────────────────────────────────────
+
+interface Invoice {
+  payment_id:      number;
+  contract_id:     number;
+  project_id:      number;
+  milestone_id:    number | null;
+  milestone_title: string;
+  amount:          number;
+  status:          string;
+  payment_date:    string | null;
+  escrow_status:   string;
+}
+
+// ─── Invoices View ────────────────────────────────────────────────────────────
+
+const statusBadge = (status: string, colors: ThemeColors) => {
+  const map: Record<string, { bg: string; color: string }> = {
+    paid:     { bg: "rgba(34,197,94,.15)",  color: "#22c55e" },
+    approved: { bg: "rgba(99,102,241,.15)", color: "#818cf8" },
+    pending:  { bg: "rgba(234,179, 8,.15)", color: "#eab308" },
+  };
+  const s = map[status] ?? { bg: "rgba(148,163,184,.15)", color: colors.subtext };
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: s.bg, color: s.color, textTransform: "capitalize" }}>
+      {status}
+    </span>
+  );
+};
+
+const InvoicesView: React.FC<{ colors: ThemeColors }> = ({ colors: c }) => {
+  const [invoices, setInvoices]   = useState<Invoice[]>([]);
+  const [loading,  setLoading]    = useState(true);
+  const [error,    setError]      = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await apiClient.get<Invoice[]>("/invoices/my");
+        setInvoices(r.data);
+      } catch {
+        setError("Failed to load invoices.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const totalPaid = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.amount, 0);
+
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+      <div style={{ width: 32, height: 32, border: `3px solid ${c.border}`, borderTopColor: c.primary, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh", color: "#f87171", flexDirection: "column", gap: 8 }}>
+      <span style={{ fontSize: 32 }}>⚠️</span>
+      <span>{error}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "24px 28px", animation: "fadeIn 0.4s ease" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: 0 }}>Invoices</h2>
+          <p style={{ fontSize: 13, color: c.subtext, margin: "4px 0 0" }}>All milestone payments made on your contracts</p>
+        </div>
+        <div style={{ background: "rgba(99,102,241,.12)", border: `1px solid rgba(99,102,241,.25)`, borderRadius: 10, padding: "10px 18px", textAlign: "center" }}>
+          <div style={{ fontSize: 11, color: c.subtext, marginBottom: 2 }}>Total Paid</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: c.primary }}>${totalPaid.toFixed(2)}</div>
+        </div>
+      </div>
+
+      {invoices.length === 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "40vh", color: c.subtext, gap: 12 }}>
+          <span style={{ fontSize: 40 }}>🧾</span>
+          <span style={{ fontSize: 15, color: c.text, fontWeight: 500 }}>No invoices yet</span>
+          <span style={{ fontSize: 13 }}>Payments will appear here once milestones are released.</span>
+        </div>
+      ) : (
+        <div style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, overflow: "hidden" }}>
+          {/* Table header */}
+          <div style={{ display: "grid", gridTemplateColumns: "60px 1fr 120px 100px 130px", padding: "10px 20px", borderBottom: `1px solid ${c.border}`, fontSize: 11, fontWeight: 600, color: c.subtext, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            {["#", "Milestone", "Contract", "Amount", "Date"].map(h => <span key={h}>{h}</span>)}
+          </div>
+
+          {invoices.map((inv, idx) => (
+            <div
+              key={inv.payment_id}
+              style={{ display: "grid", gridTemplateColumns: "60px 1fr 120px 100px 130px", padding: "14px 20px", borderBottom: idx < invoices.length - 1 ? `1px solid ${c.border}` : "none", fontSize: 13, color: c.text, alignItems: "center", transition: "background .15s" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(99,102,241,.04)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <span style={{ color: c.subtext, fontSize: 12 }}>#{inv.payment_id}</span>
+              <div>
+                <div style={{ fontWeight: 500 }}>{inv.milestone_title}</div>
+                <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>{statusBadge(inv.status, c)}</div>
+              </div>
+              <span style={{ fontSize: 12, color: c.subtext }}>Contract #{inv.contract_id}</span>
+              <span style={{ fontWeight: 600, color: "#22c55e" }}>${inv.amount.toFixed(2)}</span>
+              <span style={{ fontSize: 12, color: c.subtext }}>
+                {inv.payment_date ? new Date(inv.payment_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const StubView: React.FC<{ colors: ThemeColors; title: string }> = ({ colors, title }) => (
   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", color: colors.subtext, animation: "fadeIn 0.5s ease" }}>
     <div style={{ fontSize: 40, marginBottom: 16 }}>🚧</div>
@@ -500,6 +819,7 @@ const ClientDashboard: React.FC = () => {
 
   const [activeView, setActiveView]     = useState("Dashboard");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [unreadCount, setUnreadCount]   = useState(0);
   const c = getColors(darkMode);
 
   // ── Real data state ──
@@ -545,6 +865,26 @@ const ClientDashboard: React.FC = () => {
     fetchProjects();
     fetchContracts();
   }, [fetchProfile, fetchProjects, fetchContracts]);
+
+  // ── Fetch unread message count ──
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+        const response = await fetch(`${API_BASE_URL}/messages/inbox`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+        });
+        if (response.ok) {
+          const conversations = await response.json();
+          const total = conversations.reduce((sum: number, conv: any) => sum + (conv.unread_count || 0), 0);
+          setUnreadCount(total);
+        }
+      } catch (err) {
+        console.error("Failed to fetch unread count:", err);
+      }
+    };
+    fetchUnreadCount();
+  }, []);
 
   // ── Derived stats ──
   const stats: DashboardStats = {
@@ -661,7 +1001,7 @@ const ClientDashboard: React.FC = () => {
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Main</div>
           <NavItem label="Dashboard"       active={activeView === "Dashboard"}       onClick={() => setActiveView("Dashboard")}       icon={<IconGrid />}   colors={c} />
           <NavItem label="Company Profile" active={activeView === "Company Profile"} onClick={() => setActiveView("Company Profile")} icon={<IconUser />}   colors={c} />
-          <NavItem label="Messages"        active={activeView === "Messages"}        onClick={() => setActiveView("Messages")}        icon={<IconMsg />}    colors={c} />
+          <NavItem label="Messages"        badge={unreadCount} icon={<IconMsg />}    colors={c} onClick={() => navigate("/messages")} />
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Hiring</div>
           <NavItem label="Find Talent"    badge="New" active={activeView === "Find Talent"}    onClick={() => setActiveView("Find Talent")}    icon={<IconSearch />} colors={c} />
           <NavItem label="Active Projects"            active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />}   colors={c} />
@@ -882,8 +1222,8 @@ const ClientDashboard: React.FC = () => {
             <MyProjectsView colors={c} projects={projects} contracts={contracts} loading={loadingProjects} onRefresh={() => { fetchProjects(); fetchContracts(); }} />
           )}
 
-          {["Messages", "Invoices"].includes(activeView) && (
-            <StubView colors={c} title={activeView} />
+          {activeView === "Invoices" && (
+            <InvoicesView colors={c} />
           )}
         </main>
 

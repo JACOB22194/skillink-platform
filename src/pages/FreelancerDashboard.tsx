@@ -720,6 +720,7 @@ const FreelancerDashboard: React.FC = () => {
   });
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [activeView, setActiveView] = useState("Dashboard");
+  const [unreadCount, setUnreadCount] = useState(0);
   const c = getColors(darkMode);
 
   const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
@@ -729,6 +730,23 @@ const FreelancerDashboard: React.FC = () => {
   const toggleTheme = () => {
     setDarkMode((d) => { localStorage.setItem("skilllink-darkMode", JSON.stringify(!d)); return !d; });
   };
+
+  // Fetch unread message count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/messages/inbox`, getAuthHeaders());
+        if (response.ok) {
+          const conversations = await response.json();
+          const total = conversations.reduce((sum: number, conv: any) => sum + (conv.unread_count || 0), 0);
+          setUnreadCount(total);
+        }
+      } catch (err) {
+        console.error("Failed to fetch unread count:", err);
+      }
+    };
+    fetchUnreadCount();
+  }, []);
 
   return (
     <ErrorBoundary>
@@ -780,7 +798,7 @@ const FreelancerDashboard: React.FC = () => {
             <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Main</div>
             <NavItem label="Dashboard" active={activeView === "Dashboard"} icon={<IconGrid />} colors={c} onClick={() => setActiveView("Dashboard")} />
             <NavItem label="Profile"   icon={<IconUser />} colors={c} onClick={() => navigate("/settings")} />
-            <NavItem label="Messages"  badge={0} icon={<IconMsg />} colors={c} onClick={() => navigate("/messages")} />
+            <NavItem label="Messages"  badge={unreadCount} icon={<IconMsg />} colors={c} onClick={() => navigate("/messages")} />
             <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Skillink</div>
             <NavItem label="AI Matches"   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
             <NavItem label="Verification" active={activeView === "Verification"} icon={<IconShield />} colors={c} onClick={() => setActiveView("Verification")} />
