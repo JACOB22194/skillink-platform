@@ -181,6 +181,18 @@ const PostProjectPage: React.FC = () => {
       });
 
       if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        let msg = "Failed to save project";
+        if (typeof errorData.detail === "string") {
+          msg = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          msg = errorData.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        } else if (errorData.message) {
+          msg = errorData.message;
+        }
+        throw new Error(msg);
+      }
+      if (false) {
         const err = await res.json().catch(() => ({}));
         if (res.status === 403) {
           setMatchError("Session conflict: you appear to be logged in as a freelancer in another tab. Please sign out and log back in as a client.");
@@ -228,8 +240,16 @@ const PostProjectPage: React.FC = () => {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || "Failed to save project");
+        const errorData = await res.json().catch(() => ({}));
+        let msg = "Failed to save project";
+        if (typeof errorData.detail === "string") {
+          msg = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          msg = errorData.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        } else if (errorData.message) {
+          msg = errorData.message;
+        }
+        throw new Error(msg);
       }
       
       navigate("/dashboard/client");

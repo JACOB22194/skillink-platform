@@ -10,9 +10,13 @@
  *   - company_name only sent when role === "client"
  *
  * On success → stores tokens and redirects based on role.
+ *
+ * CHANGE: Company Name field is now a searchable dropdown for clients.
+ *   - Searches existing companies via GET /users/companies/search?q=
+ *   - User can also type a NEW company name not in the list
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios, { AxiosError } from "axios";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -126,6 +130,328 @@ const PasswordStrength: React.FC<{ password: string; colors: ThemeColors }> = ({
   );
 };
 
+// ─── Built-in Company List ────────────────────────────────────────────────────
+
+const BUILTIN_COMPANIES: { name: string; tier: "famous" | "medium" }[] = [
+  // ── Tier 1: Famous (global household names) ──
+  { name: "Google",           tier: "famous" },
+  { name: "Microsoft",        tier: "famous" },
+  { name: "Apple",            tier: "famous" },
+  { name: "Amazon",           tier: "famous" },
+  { name: "Meta",             tier: "famous" },
+  { name: "Netflix",          tier: "famous" },
+  { name: "Tesla",            tier: "famous" },
+  { name: "IBM",              tier: "famous" },
+  { name: "Intel",            tier: "famous" },
+  { name: "Samsung",          tier: "famous" },
+  { name: "Oracle",           tier: "famous" },
+  { name: "Salesforce",       tier: "famous" },
+  { name: "Adobe",            tier: "famous" },
+  { name: "Nvidia",           tier: "famous" },
+  { name: "Uber",             tier: "famous" },
+  { name: "Airbnb",           tier: "famous" },
+  { name: "Spotify",          tier: "famous" },
+  { name: "Twitter / X",      tier: "famous" },
+  { name: "LinkedIn",         tier: "famous" },
+  { name: "PayPal",           tier: "famous" },
+  { name: "Shopify",          tier: "famous" },
+  { name: "Zoom",             tier: "famous" },
+  { name: "Slack",            tier: "famous" },
+  { name: "Dropbox",          tier: "famous" },
+  { name: "GitHub",           tier: "famous" },
+  { name: "OpenAI",           tier: "famous" },
+  { name: "Anthropic",        tier: "famous" },
+  { name: "Stripe",           tier: "famous" },
+  { name: "Square",           tier: "famous" },
+  { name: "Atlassian",        tier: "famous" },
+  { name: "HubSpot",          tier: "famous" },
+  { name: "SAP",              tier: "famous" },
+  { name: "Cisco",            tier: "famous" },
+  { name: "Dell",             tier: "famous" },
+  { name: "HP",               tier: "famous" },
+  { name: "Sony",             tier: "famous" },
+  { name: "Siemens",          tier: "famous" },
+  { name: "Accenture",        tier: "famous" },
+  { name: "Deloitte",         tier: "famous" },
+  { name: "McKinsey",         tier: "famous" },
+  // ── Tier 2: Medium-famous (well-known in tech/startup world) ──
+  { name: "Twilio",           tier: "medium" },
+  { name: "Cloudflare",       tier: "medium" },
+  { name: "Figma",            tier: "medium" },
+  { name: "Notion",           tier: "medium" },
+  { name: "Airtable",         tier: "medium" },
+  { name: "Canva",            tier: "medium" },
+  { name: "Vercel",           tier: "medium" },
+  { name: "Netlify",          tier: "medium" },
+  { name: "DigitalOcean",     tier: "medium" },
+  { name: "HashiCorp",        tier: "medium" },
+  { name: "MongoDB",          tier: "medium" },
+  { name: "Elastic",          tier: "medium" },
+  { name: "Datadog",          tier: "medium" },
+  { name: "New Relic",        tier: "medium" },
+  { name: "PagerDuty",        tier: "medium" },
+  { name: "Okta",             tier: "medium" },
+  { name: "Auth0",            tier: "medium" },
+  { name: "Twitch",           tier: "medium" },
+  { name: "Discord",          tier: "medium" },
+  { name: "Asana",            tier: "medium" },
+  { name: "Trello",           tier: "medium" },
+  { name: "Jira",             tier: "medium" },
+  { name: "Zendesk",          tier: "medium" },
+  { name: "Intercom",         tier: "medium" },
+  { name: "Mixpanel",         tier: "medium" },
+  { name: "Segment",          tier: "medium" },
+  { name: "Amplitude",        tier: "medium" },
+  { name: "Loom",             tier: "medium" },
+  { name: "Linear",           tier: "medium" },
+  { name: "Railway",          tier: "medium" },
+  { name: "Supabase",         tier: "medium" },
+  { name: "PlanetScale",      tier: "medium" },
+  { name: "Render",           tier: "medium" },
+  { name: "Fly.io",           tier: "medium" },
+  { name: "Retool",           tier: "medium" },
+  { name: "Webflow",          tier: "medium" },
+  { name: "Bubble",           tier: "medium" },
+  { name: "Glide",            tier: "medium" },
+  { name: "Appsmith",         tier: "medium" },
+  { name: "Postman",          tier: "medium" },
+];
+
+const LS_KEY = "skilllink-custom-companies";
+
+function loadCustomCompanies(): string[] {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomCompanies(list: string[]): void {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch { /* noop */ }
+}
+
+// ─── Company Search Dropdown ──────────────────────────────────────────────────
+
+interface CompanyDropdownProps {
+  value: string;
+  onChange: (value: string) => void;
+  colors: ThemeColors;
+  hasError: boolean;
+}
+
+const TIER_LABEL: Record<string, string> = { famous: "Well-known", medium: "Popular", custom: "Added by users" };
+const TIER_ICON:  Record<string, string> = { famous: "⭐", medium: "🏢", custom: "➕" };
+
+const CompanyDropdown: React.FC<CompanyDropdownProps> = ({ value, onChange, colors, hasError }) => {
+  const [query, setQuery]             = useState(value);
+  const [open, setOpen]               = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
+  const [customCompanies, setCustomCompanies] = useState<string[]>(loadCustomCompanies);
+  const containerRef                  = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Build filtered list from builtins + custom
+  const allCompanies: { name: string; tier: string }[] = [
+    ...BUILTIN_COMPANIES,
+    ...customCompanies.map((n) => ({ name: n, tier: "custom" })),
+  ];
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? allCompanies.filter((c) => c.name.toLowerCase().includes(q))
+    : allCompanies;
+
+  // Group by tier for display
+  const grouped: Record<string, { name: string; tier: string }[]> = {};
+  for (const item of filtered) {
+    if (!grouped[item.tier]) grouped[item.tier] = [];
+    grouped[item.tier].push(item);
+  }
+  const tierOrder = ["famous", "medium", "custom"];
+  const flatList = tierOrder.flatMap((t) => grouped[t] ?? []);
+
+  // Whether the typed query is a brand-new company (not in any list)
+  const isNewCompany =
+    q.length > 0 &&
+    !allCompanies.some((c) => c.name.toLowerCase() === q);
+
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    onChange(val);
+    setHighlighted(-1);
+    setOpen(true);
+  };
+
+  const handleSelect = (name: string) => {
+    setQuery(name);
+    onChange(name);
+    setOpen(false);
+    setHighlighted(-1);
+  };
+
+  const handleAddNew = () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const updated = [...customCompanies, trimmed];
+    setCustomCompanies(updated);
+    saveCustomCompanies(updated);
+    handleSelect(trimmed);
+  };
+
+  // Build a flat index for keyboard nav (includes "add new" slot at end if applicable)
+  const navLength = flatList.length + (isNewCompany ? 1 : 0);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) { if (e.key === "ArrowDown" || e.key === "Enter") setOpen(true); return; }
+    if (e.key === "ArrowDown")  { e.preventDefault(); setHighlighted((h) => Math.min(h + 1, navLength - 1)); }
+    else if (e.key === "ArrowUp")   { e.preventDefault(); setHighlighted((h) => Math.max(h - 1, -1)); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlighted >= 0 && highlighted < flatList.length) handleSelect(flatList[highlighted].name);
+      else if (highlighted === flatList.length && isNewCompany) handleAddNew();
+    }
+    else if (e.key === "Escape") setOpen(false);
+  };
+
+  const isOpen = open && (flatList.length > 0 || isNewCompany);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative" }}>
+      {/* Input */}
+      <div style={{ position: "relative" }}>
+        <input
+          type="text"
+          placeholder="Search or type your company name…"
+          value={query}
+          onChange={handleInput}
+          onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
+          autoComplete="off"
+          style={{
+            width: "100%",
+            padding: "10px 36px 10px 12px",
+            fontSize: 14,
+            border: `0.5px solid ${hasError ? colors.errorText : colors.inputBorder}`,
+            borderRadius: isOpen ? "8px 8px 0 0" : 8,
+            background: colors.inputBg,
+            color: colors.text,
+            fontFamily: "inherit",
+            outline: "none",
+            boxSizing: "border-box",
+            transition: "border-color .15s",
+          }}
+        />
+        <span style={{
+          position: "absolute", right: 11, top: "50%", transform: "translateY(-50%)",
+          color: colors.subtext, fontSize: 13, pointerEvents: "none",
+        }}>
+          {isOpen ? "▲" : "▼"}
+        </span>
+      </div>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 999,
+          background: colors.inputBg,
+          border: `0.5px solid ${colors.inputBorder}`,
+          borderTop: "none",
+          borderRadius: "0 0 8px 8px",
+          maxHeight: 260,
+          overflowY: "auto",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+        }}>
+          {/* Grouped results */}
+          {tierOrder.map((tier) => {
+            const items = grouped[tier];
+            if (!items || items.length === 0) return null;
+            return (
+              <div key={tier}>
+                {/* Section header */}
+                <div style={{
+                  padding: "5px 12px 3px",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.07em",
+                  textTransform: "uppercase",
+                  color: colors.subtext,
+                  background: colors.inputBg,
+                  borderBottom: `0.5px solid ${colors.border}`,
+                  position: "sticky",
+                  top: 0,
+                }}>
+                  {TIER_ICON[tier]} {TIER_LABEL[tier]}
+                </div>
+                {items.map((item) => {
+                  const idx = flatList.indexOf(item);
+                  return (
+                    <div
+                      key={item.name}
+                      onMouseDown={() => handleSelect(item.name)}
+                      onMouseEnter={() => setHighlighted(idx)}
+                      style={{
+                        padding: "9px 14px",
+                        fontSize: 14,
+                        cursor: "pointer",
+                        color: colors.text,
+                        background: idx === highlighted ? colors.primarySoft : "transparent",
+                        borderBottom: `0.5px solid ${colors.border}`,
+                        transition: "background .1s",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <span style={{ fontSize: 14 }}>🏢</span>
+                      <span>{item.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          {/* "Add new company" row */}
+          {isNewCompany && (
+            <div
+              onMouseDown={handleAddNew}
+              onMouseEnter={() => setHighlighted(flatList.length)}
+              style={{
+                padding: "10px 14px",
+                fontSize: 13,
+                cursor: "pointer",
+                color: colors.primary,
+                background: highlighted === flatList.length ? colors.primarySoft : "transparent",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontWeight: 500,
+                borderTop: `0.5px solid ${colors.border}`,
+              }}
+            >
+              <span>➕</span>
+              <span>Add "<strong>{query.trim()}</strong>" as a new company</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const RegisterPage: React.FC = () => {
@@ -159,6 +485,12 @@ const RegisterPage: React.FC = () => {
 
   const handleRoleSelect = (role: UserRole) => {
     setForm((prev) => ({ ...prev, role, company_name: "" }));
+  };
+
+  const handleCompanyChange = (value: string) => {
+    setForm((prev) => ({ ...prev, company_name: value }));
+    setFieldErrors((prev) => ({ ...prev, company_name: "" }));
+    setError(null);
   };
 
   const validate = (): boolean => {
@@ -279,12 +611,20 @@ const RegisterPage: React.FC = () => {
           {fieldErrors.email && <div style={errStyle}>{fieldErrors.email}</div>}
         </div>
 
-        {/* Company name (clients only) */}
+        {/* Company name (clients only) — searchable dropdown */}
         {form.role === "client" && (
           <div style={{ marginBottom: "1.25rem" }}>
-            <label style={labelStyle}>Company Name</label>
-            <input style={{ ...inputBase, borderColor: fieldErrors.company_name ? c.errorText : c.inputBorder }} type="text" name="company_name" placeholder="Your Company Ltd." value={form.company_name || ""} onChange={handleChange} autoComplete="organization" />
+            <label style={labelStyle}>Company</label>
+            <CompanyDropdown
+              value={form.company_name || ""}
+              onChange={handleCompanyChange}
+              colors={c}
+              hasError={!!fieldErrors.company_name}
+            />
             {fieldErrors.company_name && <div style={errStyle}>{fieldErrors.company_name}</div>}
+            <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>
+              Search existing companies or type a new name to create one.
+            </div>
           </div>
         )}
 

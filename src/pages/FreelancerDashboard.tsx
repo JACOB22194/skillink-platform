@@ -6,6 +6,7 @@ import type { FreelancerProfile } from "../api/types";
 import { Skeleton, SkeletonCard, SkeletonMetric } from "../components/ui/Skeleton";
 import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { API_BASE_URL, getAuthHeaders } from "../shared/api";
+import UpgradeNowSection from "../components/UpgradeNowSection";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -784,6 +785,29 @@ const FreelancerDashboard: React.FC = () => {
             <NavItem label="AI Matches"   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
             <NavItem label="Verification" active={activeView === "Verification"} icon={<IconShield />} colors={c} onClick={() => setActiveView("Verification")} />
             <NavItem label="Workrooms" active={activeView === "Workrooms"} badge="—" icon={<IconTeam />} colors={c} onClick={() => setActiveView("Workrooms")} />
+            {/* ── Upgrade Banner ── */}
+            <div style={{ margin: "10px 12px 0" }}>
+              <div
+                onClick={() => setActiveView("Upgrade")}
+                style={{
+                  background: "linear-gradient(135deg, #2a1f4a 0%, #3d2566 100%)",
+                  border: `0.5px solid rgba(127,119,221,0.4)`,
+                  borderRadius: 10,
+                  padding: "12px 12px",
+                  cursor: "pointer",
+                  transition: "all .2s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 20px rgba(127,119,221,0.25)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
+              >
+                <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#c4b5fd", marginBottom: 4 }}>⭐ Premium</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 4 }}>Upgrade Now</div>
+                <div style={{ fontSize: 10, color: "#c4b5fd", lineHeight: 1.4 }}>Unlimited proposals, AI scoring & more.</div>
+                <div style={{ marginTop: 8, fontSize: 10, fontWeight: 600, color: "#7F77DD", background: "rgba(127,119,221,0.2)", borderRadius: 6, padding: "4px 8px", display: "inline-block" }}>
+                  View Plans →
+                </div>
+              </div>
+            </div>
             <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
               <NavItem label="Settings" icon={<IconSettings />} colors={c} onClick={() => navigate("/settings")} />
             </div>
@@ -797,6 +821,8 @@ const FreelancerDashboard: React.FC = () => {
             {activeView === "Verification" && <VerificationView c={c} />}
 
             {activeView === "Workrooms" && <WorkroomsView c={c} />}
+
+            {activeView === "Upgrade" && <UpgradeNowSection roleType="freelancer" colors={c} />}
 
             {activeView === "Dashboard" && <>
             <div style={{ marginBottom: 18 }}>
