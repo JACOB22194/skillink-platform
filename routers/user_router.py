@@ -382,3 +382,31 @@ def search_freelancers(
             skills        = skill_names,
         ))
     return results
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /users/companies/search?q=   ✅ NEW
+#  Public endpoint — no auth needed (used on register page)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/companies/search",
+    summary="Search existing company names (for registration dropdown)",
+    description="Returns up to 10 distinct company names matching the query. No auth required.",
+)
+def search_companies(
+    q:  str     = Query(..., min_length=1, description="Partial company name match"),
+    db: Session = Depends(get_db),
+):
+    results = (
+        db.query(models.Client.company_name)
+        .filter(
+            models.Client.company_name.isnot(None),
+            models.Client.company_name != "",
+            models.Client.company_name.ilike(f"%{q}%"),
+        )
+        .distinct()
+        .limit(10)
+        .all()
+    )
+    return [{"company_name": row.company_name} for row in results]
