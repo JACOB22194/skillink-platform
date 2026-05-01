@@ -963,6 +963,13 @@ const ClientDashboard: React.FC = () => {
           <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
             {darkMode ? "☀️" : "🌙"}
           </button>
+          {/* Notification Bell */}
+          <div style={{ position: "relative", cursor: "pointer" }} onClick={() => navigate("/messages")}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>🔔</div>
+            {unreadCount > 0 && (
+              <span style={{ position: "absolute", top: -4, right: -4, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 100, minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: `1.5px solid ${c.surface}` }}>{unreadCount > 9 ? "9+" : unreadCount}</span>
+            )}
+          </div>
           <div style={{ position: "relative" }}>
             <div
               onClick={() => setDropdownOpen(v => !v)}
@@ -1046,6 +1053,39 @@ const ClientDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Profile incomplete nudge */}
+              {!loadingProfile && (!profile?.company_name || profile.company_name === "Your Company") && (
+                <div style={{ marginBottom: 14, padding: "12px 16px", borderRadius: 12, background: "linear-gradient(135deg,rgba(59,130,246,.12),rgba(59,130,246,.04))", border: "0.5px solid rgba(59,130,246,.3)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ fontSize: 22 }}>🏢</span>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>Complete your company profile</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Add your company name, industry and size to attract better freelancers.</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setActiveView("Company Profile")} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 500, flexShrink: 0 }}>Complete Profile →</button>
+                </div>
+              )}
+
+              {/* ── Hiring pipeline funnel ── */}
+              {!isLoading && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8, marginBottom: 12 }}>
+                  {[
+                    { icon: "📋", label: "Open Projects",     val: projects.filter(p => p.status === "open").length,       color: "#f59e0b", bg: "rgba(245,158,11,.08)",  border: "rgba(245,158,11,.2)" },
+                    { icon: "⚡", label: "Active Contracts",  val: activeContracts,                                         color: "#22c55e", bg: "rgba(34,197,94,.08)",   border: "rgba(34,197,94,.2)" },
+                    { icon: "✅", label: "Completed",          val: stats.completedProjects,                                 color: "#7F77DD", bg: "rgba(127,119,221,.1)",  border: "rgba(127,119,221,.25)" },
+                  ].map(({ icon, label, val, color, bg, border }) => (
+                    <div key={label} style={{ background: c.surface, border: `0.5px solid ${border}`, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 10, background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, flexShrink: 0 }}>{icon}</div>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color, lineHeight: 1 }}>{val}</div>
+                        <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>{label}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* ── Metric cards ── */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
                 {isLoading ? (
@@ -1108,9 +1148,11 @@ const ClientDashboard: React.FC = () => {
                         {[1,2,3].map(i => <Skeleton key={i} h={40} />)}
                       </div>
                     ) : recentProjects.length === 0 ? (
-                      <div style={{ textAlign: "center", padding: "24px 0", color: c.subtext }}>
-                        <div style={{ fontSize: 24, marginBottom: 8 }}>📋</div>
-                        <div style={{ fontSize: 12 }}>No projects yet. Post your first one!</div>
+                      <div style={{ textAlign: "center", padding: "28px 16px" }}>
+                        <div style={{ width: 56, height: 56, borderRadius: 16, background: c.primarySoft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 12px" }}>📋</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 6 }}>No projects yet</div>
+                        <div style={{ fontSize: 12, color: c.subtext, marginBottom: 14, lineHeight: 1.6 }}>Post your first project and let AI find the best freelancers for you.</div>
+                        <button onClick={() => navigate("/post-project")} style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>+ Post First Project</button>
                       </div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1139,28 +1181,41 @@ const ClientDashboard: React.FC = () => {
                   </>
                 )}
 
-                {/* AI Recommended Talent */}
+                {/* AI Recommended Talent — quick launch */}
                 {card(
                   <>
-                    {sectionHeader("AI Recommended Talent",
-                      <span onClick={() => setActiveView("Find Talent")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>Run matching →</span>
+                    {sectionHeader("AI Match — Quick Launch",
+                      <span onClick={() => setActiveView("Find Talent")} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>Full view →</span>
                     )}
-                    <div style={{ textAlign: "center", padding: "1.5rem 0", color: c.subtext }}>
-                      <div style={{ fontSize: 13, marginBottom: 8 }}>
-                        Select a project from{" "}
-                        <strong style={{ color: c.text, cursor: "pointer" }} onClick={() => setActiveView("Find Talent")}>Find Talent</strong>
-                        {" "}to see AI-matched freelancers.
+                    {isLoading ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{[1,2,3].map(i => <Skeleton key={i} h={44} />)}</div>
+                    ) : projects.filter(p => p.status === "open").length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "28px 16px" }}>
+                        <div style={{ fontSize: 28, marginBottom: 10 }}>🤖</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 6 }}>No open projects</div>
+                        <div style={{ fontSize: 11, color: c.subtext, marginBottom: 14 }}>Post a project to run AI talent matching.</div>
+                        <button onClick={() => navigate("/post-project")} style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>+ Post Project</button>
                       </div>
-                      <div style={{ fontSize: 11, opacity: 0.6 }}>Powered by TF-IDF + skill overlap + GitHub quality scoring</div>
-                      {projects.filter(p => p.status === "open").length > 0 && (
-                        <button
-                          onClick={() => setActiveView("Find Talent")}
-                          style={{ marginTop: 14, background: c.primarySoft, color: c.primary, border: `0.5px solid ${c.primary}40`, borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
-                        >
-                          Match for "{projects.find(p => p.status === "open")?.title?.slice(0, 20)}…"
-                        </button>
-                      )}
-                    </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 11, color: c.subtext, marginBottom: 4 }}>Click a project to find matched freelancers instantly</div>
+                        {projects.filter(p => p.status === "open").slice(0, 4).map(p => (
+                          <div key={p.project_id}
+                            onClick={() => setActiveView("Find Talent")}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: c.bg, border: `0.5px solid ${c.border}`, cursor: "pointer", transition: "border-color .15s" }}
+                            onMouseEnter={e => (e.currentTarget.style.borderColor = c.primary + "60")}
+                            onMouseLeave={e => (e.currentTarget.style.borderColor = c.border)}
+                          >
+                            <div style={{ width: 32, height: 32, borderRadius: 8, background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🔍</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                              <div style={{ fontSize: 10, color: c.subtext, marginTop: 2 }}>{fmt(p.budget)} · {p.category || "Uncategorized"}</div>
+                            </div>
+                            <span style={{ fontSize: 11, color: c.primary, flexShrink: 0 }}>Match →</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1183,7 +1238,7 @@ const ClientDashboard: React.FC = () => {
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
                         <tr>
-                          {["Contract ID", "Project", "Budget", "Status", "Created"].map(h =>
+                          {["Contract ID", "Project", "Budget", "Status", "Created", ""].map(h =>
                             <th key={h} style={thBorder}>{h}</th>
                           )}
                         </tr>
@@ -1199,6 +1254,7 @@ const ClientDashboard: React.FC = () => {
                               <td style={{ ...tdBorder }}>{proj ? fmt(proj.budget) : "—"}</td>
                               <td style={tdBorder}><Badge bg={cs.bg} color={cs.color} border={cs.border} style={{ margin: 0 }}>{ct.status}</Badge></td>
                               <td style={{ ...tdBorder, color: c.subtext }}>{new Date(ct.created_at).toLocaleDateString()}</td>
+                              <td style={tdBorder}><span onClick={() => setActiveView("Active Projects")} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>View →</span></td>
                             </tr>
                           );
                         })}
@@ -1241,11 +1297,13 @@ const ClientDashboard: React.FC = () => {
             <Badge bg="rgba(127,119,221,.1)" color={c.primary} border={`${c.primary}30`} style={{ marginTop: 8 }}>✓ Active Account</Badge>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6, marginTop: 12 }}>
               {[
-                { val: isLoading ? "…" : String(stats.totalProjects), label: "PROJECTS", color: c.text },
-                { val: isLoading ? "…" : String(stats.totalHired), label: "HIRED", color: "#22c55e" },
+                { val: isLoading ? "…" : String(stats.totalProjects),   label: "PROJECTS",  color: c.text },
+                { val: isLoading ? "…" : String(stats.totalHired),      label: "HIRED",     color: "#22c55e" },
+                { val: isLoading ? "…" : String(activeContracts),       label: "ACTIVE",    color: c.primary },
+                { val: isLoading ? "…" : fmt(stats.totalSpent),         label: "SPENT",     color: "#f59e0b" },
               ].map(s => (
                 <div key={s.label} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 4px", textAlign: "center" }}>
-                  <div style={{ fontSize: 16, fontWeight: 500, color: s.color }}>{s.val}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: s.color }}>{s.val}</div>
                   <div style={{ fontSize: 9, color: c.subtext }}>{s.label}</div>
                 </div>
               ))}
@@ -1270,22 +1328,28 @@ const ClientDashboard: React.FC = () => {
             </div>
           ))}
 
-          {/* Spend breakdown (real data) */}
+          {/* Spend breakdown with visual bars */}
           <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginTop: 16, marginBottom: 8 }}>Spend by Category</div>
           {isLoading ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {[1,2,3].map(i => <Skeleton key={i} h={20} />)}
+              {[1,2,3].map(i => <Skeleton key={i} h={36} />)}
             </div>
           ) : spendEntries.length === 0 ? (
             <div style={{ fontSize: 11, color: c.subtext }}>No spend data yet</div>
-          ) : (
-            spendEntries.map(([label, amount]) => (
-              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `0.5px solid ${c.border}`, fontSize: 12 }}>
-                <span style={{ color: c.subtext, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{label}</span>
-                <span style={{ fontWeight: 500, color: c.text, flexShrink: 0 }}>{fmt(amount)}</span>
+          ) : (() => {
+            const maxSpend = Math.max(...spendEntries.map(([,v]) => v));
+            return spendEntries.map(([label, amount]) => (
+              <div key={label} style={{ marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ color: c.subtext, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 110 }}>{label}</span>
+                  <span style={{ fontWeight: 600, color: c.text, flexShrink: 0 }}>{fmt(amount)}</span>
+                </div>
+                <div style={{ height: 4, background: c.bg, borderRadius: 20, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${Math.round((amount / maxSpend) * 100)}%`, background: `linear-gradient(90deg,${c.primary},${c.primary}99)`, borderRadius: 20, transition: "width .5s" }} />
+                </div>
               </div>
-            ))
-          )}
+            ));
+          })()}
 
           {/* Project status summary */}
           {!isLoading && projects.length > 0 && (

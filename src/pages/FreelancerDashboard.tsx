@@ -721,6 +721,7 @@ const FreelancerDashboard: React.FC = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [activeView, setActiveView] = useState("Dashboard");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [proposalStats, setProposalStats] = useState<{ sent: number; accepted: number; response_rate: number } | null>(null);
   const c = getColors(darkMode);
 
   const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
@@ -746,6 +747,16 @@ const FreelancerDashboard: React.FC = () => {
       }
     };
     fetchUnreadCount();
+  }, []);
+
+  // Fetch proposal stats
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/proposals/my/stats`, getAuthHeaders());
+        if (res.ok) setProposalStats(await res.json());
+      } catch { /* silent */ }
+    })();
   }, []);
 
   return (
@@ -898,6 +909,33 @@ const FreelancerDashboard: React.FC = () => {
                 </>
               )}
             </div>
+
+            {/* Proposals / Activity Stats row */}
+            {!profileLoading && !profileError && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
+                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(127,119,221,.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📨</div>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 600, color: c.primary, lineHeight: 1 }}>{proposalStats ? proposalStats.sent : "—"}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Proposals Sent</div>
+                  </div>
+                </div>
+                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(34,197,94,.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>✅</div>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 600, color: "#22c55e", lineHeight: 1 }}>{proposalStats ? proposalStats.accepted : "—"}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Proposals Accepted</div>
+                  </div>
+                </div>
+                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(245,158,11,.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📊</div>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 600, color: "#f59e0b", lineHeight: 1 }}>{proposalStats ? `${proposalStats.response_rate}%` : "—"}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Response Rate</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Middle row */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 12, marginBottom: 12 }}>

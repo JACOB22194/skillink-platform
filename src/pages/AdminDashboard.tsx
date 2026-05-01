@@ -87,50 +87,12 @@ interface AdminVerification {
   submitted_at: string;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const RECENT_USERS: RecentUser[] = [
-  { initials: "AM", name: "Aisha Mwangi",  role: "Freelancer", status: "Vetting",   bg: "#2a2640",               color: "#7F77DD" },
-  { initials: "TC", name: "TechCorp Ltd.", role: "Client",     status: "Active",    bg: "rgba(59,130,246,.15)",  color: "#3b82f6" },
-  { initials: "RK", name: "Ravi Kumar",    role: "Freelancer", status: "Active",    bg: "rgba(34,197,94,.12)",   color: "#22c55e" },
-  { initials: "MX", name: "MaxFlow Inc.",  role: "Client",     status: "Suspended", bg: "rgba(239,68,68,.1)",    color: "#ef4444" },
-  { initials: "JL", name: "Ji-hoon Lee",   role: "Freelancer", status: "Vetting",   bg: "rgba(245,158,11,.1)",   color: "#f59e0b" },
-];
-
-const AI_SYSTEMS: AISystem[] = [
-  { label: "Match Engine accuracy",       pct: 97, color: "#22c55e" },
-  { label: "Vetting Gate pass rate",      pct: 68, color: "#7F77DD" },
-  { label: "Trust Score confidence",      pct: 94, color: "#3b82f6" },
-  { label: "Proposal AI acceptance rate", pct: 74, color: "#f59e0b" },
-];
-
-const FLAGGED: FlaggedItem[] = [
-  { title: "Suspicious activity · Ji-hoon Lee",  meta: "Multiple failed vetting attempts", color: "#ef4444" },
-  { title: "Review conflict · INV-0041",          meta: "Client dispute lodged",            color: "#f59e0b" },
-  { title: "Low match confidence · MaxFlow",      meta: "Below threshold · manual review",  color: "#f59e0b" },
-];
-
-const WORKROOMS: Workroom[] = [
-  { id: "#WR-009", client: "Nexora Labs",    freelancer: "Ahmad Samara", category: "ML Eng",   budget: "$24k", status: "Active",    score: 96 },
-  { id: "#WR-007", client: "DataScale Inc.", freelancer: "Wael Omar",    category: "Data Sci", budget: "$18k", status: "Active",    score: 93 },
-  { id: "#WR-012", client: "TechCorp Ltd.",  freelancer: "Majed Ali",    category: "Frontend", budget: "$12k", status: "Review",    score: 81 },
-  { id: "#WR-004", client: "MaxFlow Inc.",   freelancer: "Priya Nair",   category: "LLM Ops",  budget: "$9k",  status: "Suspended", score: 42 },
-];
-
-const PLATFORM_STATS: PlatformStat[] = [
-  { label: "Total freelancers", value: "1,604" },
-  { label: "Total clients",     value: "814"   },
-  { label: "Verified users",    value: "1,381" },
-  { label: "Pending vetting",   value: "18",   color: "#f59e0b" },
-  { label: "Open disputes",     value: "3",    color: "#ef4444" },
-  { label: "Avg match score",   value: "91%",  color: "#7F77DD" },
-];
-
-const RECENT_ACTIONS: RecentAction[] = [
-  { title: "MaxFlow Inc. suspended",    meta: "By system · 2h ago", color: "#ef4444" },
-  { title: "18 vetting reviews queued", meta: "AI Gate · 4h ago",   color: "#22c55e" },
-  { title: "Match engine retrained",    meta: "Auto · Apr 10",      color: "#7F77DD" },
-];
+interface SystemLog {
+  log_id: number;
+  action: string;
+  performed_by: number;
+  timestamp: string;
+}
 
 const STATUS_COLORS: Record<string, { bg: string; color: string; border: string }> = {
   Vetting:   { bg: "rgba(245,158,11,.1)",  color: "#f59e0b", border: "rgba(245,158,11,.2)" },
@@ -195,19 +157,74 @@ const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUserItem[]>([]);
   const [verifications, setVerifications] = useState<AdminVerification[]>([]);
+  const [recentUsers, setRecentUsers] = useState<AdminUserItem[]>([]);
+  const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
+  const [contracts, setContracts] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [aiMetrics, setAiMetrics] = useState<any>(null);
+  const [disputes, setDisputes] = useState<any[]>([]);
+  const [revenue, setRevenue] = useState<any>(null);
   
   const c = getColors(darkMode);
 
   useEffect(() => {
-    if (activeTab === "Overview") {
-      fetch(`${API_BASE_URL}/admin/stats`, getAuthHeaders())
-        .then(res => res.json())
-        .then(data => setStats(data))
-        .catch(err => console.error("Failed to fetch stats", err));
-    } else if (activeTab === "Users") {
+    // Fetch stats on mount and when activeTab changes
+    fetch(`${API_BASE_URL}/admin/stats`, getAuthHeaders())
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(err => console.error("Failed to fetch stats", err));
+
+    // Fetch recent users for overview
+    fetch(`${API_BASE_URL}/admin/users?limit=5`, getAuthHeaders())
+      .then(res => res.json())
+      .then(data => setRecentUsers(data))
+      .catch(err => console.error("Failed to fetch recent users", err));
+
+    // Fetch system logs for recent actions
+    fetch(`${API_BASE_URL}/admin/logs?limit=3`, getAuthHeaders())
+      .then(res => res.json())
+      .then(data => setSystemLogs(data || []))
+      .catch(err => console.error("Failed to fetch logs", err));
+
+    // Fetch contracts for workrooms
+    fetch(`${API_BASE_URL}/admin/contracts?limit=4`, getAuthHeaders())
+      .then(res => res.json())
+      .then(data => setContracts(data || []))
+      .catch(err => console.error("Failed to fetch contracts", err));
+
+    // Fetch projects
+    fetch(`${API_BASE_URL}/admin/projects?limit=10`, getAuthHeaders())
+      .then(res => res.json())
+      .then(data => setProjects(data || []))
+      .catch(err => console.error("Failed to fetch projects", err));
+
+    // Fetch AI metrics
+    fetch(`${API_BASE_URL}/admin/ai-metrics`, getAuthHeaders())
+      .then(res => res.json())
+      .then(data => setAiMetrics(data))
+      .catch(err => console.error("Failed to fetch AI metrics", err));
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "Users") {
       fetchUsers();
     } else if (activeTab === "Vetting Gate") {
       fetchVerifications();
+    } else if (activeTab === "Audit Logs") {
+      fetch(`${API_BASE_URL}/admin/logs?limit=50`, getAuthHeaders())
+        .then(res => res.json())
+        .then(data => setSystemLogs(data || []))
+        .catch(err => console.error("Failed to fetch logs", err));
+    } else if (activeTab === "Revenue") {
+      fetch(`${API_BASE_URL}/admin/revenue`, getAuthHeaders())
+        .then(res => res.json())
+        .then(data => setRevenue(data))
+        .catch(err => console.error("Failed to fetch revenue", err));
+    } else if (activeTab === "Disputes") {
+      fetch(`${API_BASE_URL}/admin/disputes`, getAuthHeaders())
+        .then(res => res.json())
+        .then(data => setDisputes(data || []))
+        .catch(err => console.error("Failed to fetch disputes", err));
     }
   }, [activeTab]);
 
@@ -270,6 +287,31 @@ const AdminDashboard: React.FC = () => {
     });
   };
 
+  // Helper to get initials from email
+  const getInitials = (email: string): string => {
+    const parts = email.split("@")[0].split(".");
+    return parts.map((p: string) => p[0]).join("").toUpperCase().slice(0, 2);
+  };
+
+  // Helper to get user background color based on role/status
+  const getUserBg = (role: string): { bg: string; color: string } => {
+    if (role === "client") return { bg: "rgba(59,130,246,.15)", color: "#3b82f6" };
+    return { bg: "#2a2640", color: "#7F77DD" };
+  };
+
+  // Helper to format time ago
+  const formatTimeAgo = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (seconds < 60) return "just now";
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+    return date.toLocaleDateString();
+  };
+
   const thStyle: React.CSSProperties = { fontSize: 10, color: c.subtext, textAlign: "left", padding: "0 8px 8px", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 500, borderBottom: `0.5px solid ${c.border}` };
   const tdStyle: React.CSSProperties = { padding: "9px 8px", fontSize: 12, color: c.text, borderBottom: `0.5px solid ${c.border}` };
 
@@ -328,11 +370,11 @@ const AdminDashboard: React.FC = () => {
           <NavItem label="Projects" active={activeTab === "Projects"} onClick={() => setActiveTab("Projects")} badge={stats ? stats.total_projects : undefined} icon={<IconClip />} colors={c} />
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>AI Systems</div>
           <NavItem label="Match Engine" active={activeTab === "Match Engine"} onClick={() => setActiveTab("Match Engine")} icon={<IconBulb />} colors={c} />
-          <NavItem label="Vetting Gate" active={activeTab === "Vetting Gate"} onClick={() => setActiveTab("Vetting Gate")} badge={18} icon={<IconShield />} colors={c} />
+          <NavItem label="Vetting Gate" active={activeTab === "Vetting Gate"} onClick={() => setActiveTab("Vetting Gate")} badge={verifications.length} icon={<IconShield />} colors={c} />
           <NavItem label="Audit Logs" active={activeTab === "Audit Logs"} onClick={() => setActiveTab("Audit Logs")} icon={<IconList />} colors={c} />
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Finance</div>
           <NavItem label="Revenue" active={activeTab === "Revenue"} onClick={() => setActiveTab("Revenue")} icon={<IconDollar />} colors={c} />
-          <NavItem label="Disputes" active={activeTab === "Disputes"} onClick={() => setActiveTab("Disputes")} badge={3} icon={<IconAlert />} colors={c} />
+          <NavItem label="Disputes" active={activeTab === "Disputes"} onClick={() => setActiveTab("Disputes")} badge={disputes.length} icon={<IconAlert />} colors={c} />
           <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
             <div onClick={toggleTheme} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Switch theme</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Contact us</div>
@@ -360,7 +402,7 @@ const AdminDashboard: React.FC = () => {
               { label: "Total Users",      val: stats ? stats.total_users.toLocaleString() : "...", sub: stats ? `${stats.total_freelancers} freelancers · ${stats.total_clients} clients` : "Loading...", badge: <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">Live</Badge> },
               { label: "Active Projects",  val: stats ? stats.total_projects.toLocaleString() : "...",   sub: "Across the platform", badge: <Badge bg="#2a2640" color="#7F77DD" border="rgba(127,119,221,.2)">Active</Badge> },
               { label: "Contracts",        val: stats ? stats.total_contracts.toLocaleString() : "...",sub: "Total signed contracts", badge: <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">Active</Badge> },
-              { label: "Pending Vetting",  val: <span style={{ color: "#f59e0b" }}>18</span>, sub: "awaiting AI Gate review", badge: <Badge bg="rgba(245,158,11,.1)" color="#f59e0b" border="rgba(245,158,11,.2)">Action needed</Badge> },
+              { label: "Pending Vetting",  val: <span style={{ color: "#f59e0b" }}>{verifications.length}</span>, sub: "awaiting AI Gate review", badge: <Badge bg="rgba(245,158,11,.1)" color="#f59e0b" border="rgba(245,158,11,.2)">Action needed</Badge> },
             ].map((m, i) => (
               <div key={i} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
                 <div style={{ fontSize: 10, color: c.subtext, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>{m.label}</div>
@@ -383,24 +425,25 @@ const AdminDashboard: React.FC = () => {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead><tr>{["User", "Role", "Status", "Action"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {RECENT_USERS.map((u) => {
-                    const s = STATUS_COLORS[u.status];
-                    const isSuspended = u.status === "Suspended";
+                  {recentUsers.map((u) => {
+                    const s = STATUS_COLORS[u.status === "suspended" ? "Suspended" : u.status === "active" ? "Active" : "Vetting"];
+                    const userBg = getUserBg(u.role);
+                    const isSuspended = u.status === "suspended";
                     return (
-                      <tr key={u.name}>
+                      <tr key={u.id}>
                         <td style={tdStyle}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ width: 24, height: 24, borderRadius: "50%", background: u.bg, color: u.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 500 }}>{u.initials}</div>
-                            {u.name}
+                            <div style={{ width: 24, height: 24, borderRadius: "50%", background: userBg.bg, color: userBg.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 500 }}>{getInitials(u.email)}</div>
+                            {u.email}
                           </div>
                         </td>
                         <td style={tdStyle}>
-                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: u.role === "Client" ? "rgba(59,130,246,.15)" : c.primarySoft, color: u.role === "Client" ? "#3b82f6" : c.primary }}>{u.role}</span>
+                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: u.role === "client" ? "rgba(59,130,246,.15)" : c.primarySoft, color: u.role === "client" ? "#3b82f6" : c.primary }}>{u.role}</span>
                         </td>
                         <td style={tdStyle}><Badge bg={s.bg} color={s.color} border={s.border} style={{ margin: 0 }}>{u.status}</Badge></td>
                         <td style={tdStyle}>
                           <button style={{ fontSize: 10, padding: "2px 8px", background: "transparent", color: isSuspended ? "#ef4444" : c.text, border: `0.5px solid ${isSuspended ? "#ef4444" : c.border}`, borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
-                            {u.status === "Vetting" ? "Review" : isSuspended ? "Unsuspend" : "View"}
+                            {u.status === "vetting" ? "Review" : isSuspended ? "Unsuspend" : "View"}
                           </button>
                         </td>
                       </tr>
@@ -417,7 +460,12 @@ const AdminDashboard: React.FC = () => {
                 <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)" style={{ margin: 0 }}>All operational</Badge>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {AI_SYSTEMS.map((sys) => (
+                {aiMetrics && [
+                  { label: "Match Engine accuracy",       pct: aiMetrics.match_engine_accuracy, color: "#22c55e" },
+                  { label: "Vetting Gate pass rate",      pct: aiMetrics.vetting_gate_pass_rate, color: "#7F77DD" },
+                  { label: "Trust Score confidence",      pct: aiMetrics.trust_score_confidence, color: "#3b82f6" },
+                  { label: "Proposal AI acceptance rate", pct: aiMetrics.proposal_acceptance_rate, color: "#f59e0b" },
+                ].map((sys) => (
                   <div key={sys.label}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
                       <span style={{ fontSize: 12, color: c.text }}>{sys.label}</span>
@@ -431,8 +479,12 @@ const AdminDashboard: React.FC = () => {
 
                 <div style={{ borderTop: `0.5px solid ${c.border}`, paddingTop: 12, marginTop: 4 }}>
                   <div style={{ fontSize: 11, fontWeight: 500, color: c.text, marginBottom: 8 }}>Flagged Items</div>
-                  {FLAGGED.map((f) => (
-                    <div key={f.title} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: `0.5px solid ${c.border}` }}>
+                  {[
+                    { title: "Suspicious activity",  meta: "Multiple failed vetting attempts", color: "#ef4444" },
+                    { title: "Review conflict",      meta: "Client dispute lodged",            color: "#f59e0b" },
+                    { title: "Low match confidence", meta: "Below threshold · manual review",  color: "#f59e0b" },
+                  ].map((f, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: `0.5px solid ${c.border}` }}>
                       <div style={{ width: 8, height: 8, borderRadius: "50%", background: f.color, marginTop: 4, flexShrink: 0 }} />
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{f.title}</div>
@@ -456,23 +508,29 @@ const AdminDashboard: React.FC = () => {
                 <tr>{["Workroom", "Client", "Freelancer", "Category", "Budget", "Status", "AI Score"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
               </thead>
               <tbody>
-                {WORKROOMS.map((w) => {
-                  const s = STATUS_COLORS[w.status];
-                  const scoreColor = w.score >= 90 ? "#22c55e" : w.score >= 75 ? "#f59e0b" : "#ef4444";
-                  return (
-                    <tr key={w.id}>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>{w.id}</td>
-                      <td style={tdStyle}>{w.client}</td>
-                      <td style={tdStyle}>{w.freelancer}</td>
-                      <td style={tdStyle}>
-                        <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: c.primarySoft, color: c.primary }}>{w.category}</span>
-                      </td>
-                      <td style={tdStyle}>{w.budget}</td>
-                      <td style={tdStyle}><Badge bg={s.bg} color={s.color} border={s.border} style={{ margin: 0 }}>{w.status}</Badge></td>
-                      <td style={{ ...tdStyle, fontWeight: 500, color: scoreColor }}>{w.score}%</td>
-                    </tr>
-                  );
-                })}
+                {contracts.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{...tdStyle, textAlign: "center", color: c.subtext}}>No active contracts yet.</td>
+                  </tr>
+                ) : (
+                  contracts.map((w, i) => {
+                    const s = STATUS_COLORS[w.status === "suspended" ? "Suspended" : w.status === "in_progress" ? "Active" : w.status === "completed" ? "Active" : "Review"];
+                    const scoreColor = w.score >= 90 ? "#22c55e" : w.score >= 75 ? "#f59e0b" : "#ef4444";
+                    return (
+                      <tr key={i}>
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>#{w.id}</td>
+                        <td style={tdStyle}>{w.client_name || "N/A"}</td>
+                        <td style={tdStyle}>{w.freelancer_name || "N/A"}</td>
+                        <td style={tdStyle}>
+                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: c.primarySoft, color: c.primary }}>{w.category || "General"}</span>
+                        </td>
+                        <td style={tdStyle}>${w.total_fee || 0}</td>
+                        <td style={tdStyle}><Badge bg={s.bg} color={s.color} border={s.border} style={{ margin: 0 }}>{w.status || "pending"}</Badge></td>
+                        <td style={{ ...tdStyle, fontWeight: 500, color: scoreColor }}>N/A</td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -521,6 +579,96 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
           
+          {activeTab === "Match Engine" && (
+            <div style={{ animation: "fadeIn 0.4s ease" }}>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 500, color: c.text }}>Match Engine</div>
+                <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>AI-powered freelancer matching system health</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12, marginBottom: 12 }}>
+                {aiMetrics ? [
+                  { label: "Match Engine accuracy",       pct: aiMetrics.match_engine_accuracy, color: "#22c55e" },
+                  { label: "Vetting Gate pass rate",      pct: aiMetrics.vetting_gate_pass_rate, color: "#7F77DD" },
+                  { label: "Trust Score confidence",      pct: aiMetrics.trust_score_confidence, color: "#3b82f6" },
+                  { label: "Proposal AI acceptance rate", pct: aiMetrics.proposal_acceptance_rate, color: "#f59e0b" },
+                ].map(sys => (
+                  <div key={sys.label} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, color: c.text }}>{sys.label}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: sys.color }}>{sys.pct}%</span>
+                    </div>
+                    <div style={{ height: 6, background: c.bg, borderRadius: 20, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${sys.pct}%`, background: sys.color, borderRadius: 20 }} />
+                    </div>
+                  </div>
+                )) : (
+                  <div style={{ gridColumn: "1 / -1", textAlign: "center", color: c.subtext }}>Loading metrics...</div>
+                )}
+              </div>
+              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 12 }}>System Stats</div>
+                {aiMetrics && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
+                    <div style={{ background: c.bg, padding: 12, borderRadius: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: "#22c55e" }}>{aiMetrics.total_proposals}</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>Total Proposals</div>
+                    </div>
+                    <div style={{ background: c.bg, padding: 12, borderRadius: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: "#3b82f6" }}>{aiMetrics.accepted_proposals}</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>Accepted</div>
+                    </div>
+                    <div style={{ background: c.bg, padding: 12, borderRadius: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: "#7F77DD" }}>{aiMetrics.active_contracts}</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>Active Contracts</div>
+                    </div>
+                    <div style={{ background: c.bg, padding: 12, borderRadius: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: "#f59e0b" }}>{aiMetrics.approved_verifications}</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>Verified Users</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "Projects" && (
+            <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, marginBottom: 16 }}>Project Management</div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{["ID", "Title", "Client", "Status", "Budget", "Proposals", "Category", "Created"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {projects.map((p) => {
+                    const statusColor = p.status === "open" ? "rgba(34,197,94,.12)" : p.status === "in_progress" ? "rgba(59,130,246,.15)" : "rgba(239,68,68,.1)";
+                    const statusTextColor = p.status === "open" ? "#22c55e" : p.status === "in_progress" ? "#3b82f6" : "#ef4444";
+                    return (
+                      <tr key={p.id}>
+                        <td style={tdStyle}>{p.id}</td>
+                        <td style={tdStyle}>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: c.text, maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
+                        </td>
+                        <td style={tdStyle}>{p.client_name}</td>
+                        <td style={tdStyle}>
+                          <Badge bg={statusColor} color={statusTextColor} border={statusColor} style={{ margin: 0 }}>
+                            {p.status}
+                          </Badge>
+                        </td>
+                        <td style={tdStyle}>${p.budget.toLocaleString()}</td>
+                        <td style={tdStyle}>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: c.primary }}>{p.proposal_count}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: c.primarySoft, color: c.primary }}>{p.category}</span>
+                        </td>
+                        <td style={tdStyle}>{new Date(p.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    );
+                  })}
+                  {projects.length === 0 && <tr><td colSpan={8} style={{...tdStyle, textAlign: "center", color: c.subtext}}>No projects found.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {activeTab === "Vetting Gate" && (
             <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, marginBottom: 16 }}>Vetting Gate: Identity Verifications</div>
@@ -548,6 +696,84 @@ const AdminDashboard: React.FC = () => {
               </table>
             </div>
           )}
+
+          {activeTab === "Audit Logs" && (
+            <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, marginBottom: 16 }}>System Audit Logs</div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{["Timestamp", "Action", "Performed By", "Details"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {systemLogs.map((log) => (
+                    <tr key={log.log_id}>
+                      <td style={tdStyle}>{new Date(log.timestamp).toLocaleString()}</td>
+                      <td style={{...tdStyle, fontSize: 11}}>{log.action}</td>
+                      <td style={tdStyle}>{log.performed_by || "System"}</td>
+                      <td style={{...tdStyle, fontSize: 10, color: c.subtext}}>{log.action.substring(0, 50)}...</td>
+                    </tr>
+                  ))}
+                  {systemLogs.length === 0 && <tr><td colSpan={4} style={{...tdStyle, textAlign: "center", color: c.subtext}}>No logs found.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === "Revenue" && (
+            <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, marginBottom: 16 }}>Revenue Analytics</div>
+              {revenue ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
+                  <div style={{ background: c.bg, padding: 16, borderRadius: 8, textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 600, color: "#22c55e" }}>${(revenue.total_revenue || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>Total Revenue</div>
+                  </div>
+                  <div style={{ background: c.bg, padding: 16, borderRadius: 8, textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 600, color: "#3b82f6" }}>${(revenue.monthly_revenue || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>This Month</div>
+                  </div>
+                  <div style={{ background: c.bg, padding: 16, borderRadius: 8, textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 600, color: "#7F77DD" }}>${(revenue.pending_revenue || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>Pending</div>
+                  </div>
+                </div>
+              ) : null}
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{["Contract ID", "Amount", "Status", "Date"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {revenue?.transactions?.map((t: any) => (
+                    <tr key={t.id}>
+                      <td style={tdStyle}>{t.contract_id}</td>
+                      <td style={tdStyle}>${t.amount.toLocaleString()}</td>
+                      <td style={tdStyle}><Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)" style={{margin:0}}>{t.status}</Badge></td>
+                      <td style={tdStyle}>{new Date(t.date).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                  {!revenue?.transactions?.length && <tr><td colSpan={4} style={{...tdStyle, textAlign: "center", color: c.subtext}}>No transactions.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === "Disputes" && (
+            <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, marginBottom: 16 }}>Open Disputes</div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{["Dispute ID", "Contract", "Initiator", "Reason", "Status", "Opened"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {disputes.map((d: any) => (
+                    <tr key={d.id}>
+                      <td style={{...tdStyle, fontWeight: 500}}>{d.id}</td>
+                      <td style={tdStyle}>{d.contract_id}</td>
+                      <td style={tdStyle}>{d.initiator}</td>
+                      <td style={{...tdStyle, fontSize: 11}}>{d.reason?.substring(0, 40) || "N/A"}</td>
+                      <td style={tdStyle}><Badge bg={d.status==="open"?"rgba(239,68,68,.1)":"rgba(34,197,94,.12)"} color={d.status==="open"?"#ef4444":"#22c55e"} border={d.status==="open"?"rgba(239,68,68,.2)":"rgba(34,197,94,.2)"} style={{margin:0}}>{d.status}</Badge></td>
+                      <td style={tdStyle}>{new Date(d.opened_at).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                  {disputes.length === 0 && <tr><td colSpan={6} style={{...tdStyle, textAlign: "center", color: c.subtext}}>No disputes.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
         </main>
 
         {/* ── Right Panel ── */}
@@ -570,7 +796,14 @@ const AdminDashboard: React.FC = () => {
 
           {/* Platform stats */}
           <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 8 }}>Platform stats</div>
-          {PLATFORM_STATS.map((s) => (
+          {stats && [
+            { label: "Total freelancers", value: stats.total_freelancers.toLocaleString() },
+            { label: "Total clients", value: stats.total_clients.toLocaleString() },
+            { label: "Verified users", value: stats.total_users.toLocaleString() },
+            { label: "Pending vetting", value: verifications.length.toString(), color: "#f59e0b" },
+            { label: "Open disputes", value: disputes.length.toString(), color: "#ef4444" },
+            { label: "Avg match score", value: aiMetrics?.match_engine_accuracy ? `${aiMetrics.match_engine_accuracy}%` : "N/A", color: "#7F77DD" },
+          ].map((s) => (
             <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `0.5px solid ${c.border}`, fontSize: 12 }}>
               <span style={{ color: c.subtext }}>{s.label}</span>
               <span style={{ fontWeight: 500, color: s.color ?? c.text }}>{s.value}</span>
@@ -579,15 +812,18 @@ const AdminDashboard: React.FC = () => {
 
           {/* Recent actions */}
           <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginTop: 16, marginBottom: 8 }}>Recent actions</div>
-          {RECENT_ACTIONS.map((a) => (
-            <div key={a.title} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: `0.5px solid ${c.border}` }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: a.color, marginTop: 4, flexShrink: 0 }} />
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{a.title}</div>
-                <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>{a.meta}</div>
+          {systemLogs.map((a) => {
+            const actionColor = a.action.includes("suspended") ? "#ef4444" : a.action.includes("activated") ? "#22c55e" : "#7F77DD";
+            return (
+              <div key={a.log_id} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: `0.5px solid ${c.border}` }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: actionColor, marginTop: 4, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{a.action.split("[")[0]?.trim() || a.action}</div>
+                  <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>{formatTimeAgo(a.timestamp)}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </aside>
       </div>
     </div>
