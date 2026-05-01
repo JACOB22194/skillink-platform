@@ -231,6 +231,19 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const deleteUser = async (userId: number) => {
+    if (!window.confirm("Are you sure you want to permanently delete this user? This action cannot be undone.")) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+        method: "DELETE",
+        ...getAuthHeaders()
+      });
+      if (res.ok) fetchUsers();
+    } catch (err) {
+      console.error("Failed to delete user", err);
+    }
+  };
+
   const fetchVerifications = () => {
     fetch(`${API_BASE_URL}/admin/verifications`, getAuthHeaders())
       .then(res => res.json())
@@ -489,9 +502,14 @@ const AdminDashboard: React.FC = () => {
                         <td style={tdStyle}>{new Date(u.created_at).toLocaleDateString()}</td>
                         <td style={tdStyle}>
                           {u.role !== "admin" && (
-                            <button onClick={() => toggleUserStatus(u.id, u.status)} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", color: isSuspended ? c.text : "#ef4444", border: `0.5px solid ${isSuspended ? c.border : "rgba(239,68,68,.4)"}`, borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
-                              {isSuspended ? "Activate" : "Suspend"}
-                            </button>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button onClick={() => toggleUserStatus(u.id, u.status)} style={{ fontSize: 10, padding: "4px 10px", background: "transparent", color: isSuspended ? c.text : "#ef4444", border: `0.5px solid ${isSuspended ? c.border : "rgba(239,68,68,.4)"}`, borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
+                                {isSuspended ? "Activate" : "Suspend"}
+                              </button>
+                              <button onClick={() => deleteUser(u.id)} style={{ fontSize: 10, padding: "4px 10px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
+                                Delete
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
