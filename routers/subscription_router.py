@@ -78,7 +78,7 @@ def subscribe(
             detail="billing_cycle is required for paid plans.",
         )
 
-    sub = _get_or_create_subscription(db, current_user.user_id)
+    sub = _get_or_create_subscription(db, current_user.id)
 
     sub.plan_tier     = payload.plan_tier
     sub.billing_cycle = payload.billing_cycle
@@ -103,7 +103,7 @@ def get_subscription_status(
     Returns the current user's plan tier and status.
     Dashboards call this to decide whether to show the upgrade banner.
     """
-    sub = _get_or_create_subscription(db, current_user.user_id)
+    sub = _get_or_create_subscription(db, current_user.id)
 
     # Auto-expire if past expiry date
     if sub.expires_at and sub.expires_at < datetime.now(timezone.utc) and sub.status == "active":
@@ -126,7 +126,7 @@ def get_my_subscription(
     current_user: models.User = Depends(get_current_user),
 ):
     """Full subscription details for the settings/billing page."""
-    sub = _get_or_create_subscription(db, current_user.user_id)
+    sub = _get_or_create_subscription(db, current_user.id)
     return sub
 
 
@@ -137,7 +137,7 @@ def cancel_subscription(
     current_user: models.User = Depends(get_current_user),
 ):
     """Cancel the active subscription. Access continues until expires_at."""
-    sub = db.query(models.Subscription).filter_by(user_id=current_user.user_id).first()
+    sub = db.query(models.Subscription).filter_by(user_id=current_user.id).first()
     if not sub or sub.plan_tier == "free":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
