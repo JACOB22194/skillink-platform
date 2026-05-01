@@ -114,19 +114,19 @@ class User(Base):
     mfa_secret  = Column(String(64), nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-    freelancer        = relationship("Freelancer",    back_populates="user", uselist=False)
-    client            = relationship("Client",        back_populates="user", uselist=False)
-    trust_scores      = relationship("TrustScore",    back_populates="user")
+    freelancer        = relationship("Freelancer",    back_populates="user", uselist=False, cascade="all, delete")
+    client            = relationship("Client",        back_populates="user", uselist=False, cascade="all, delete")
+    trust_scores      = relationship("TrustScore",    back_populates="user", cascade="all, delete")
     verification      = relationship("Verification",  back_populates="user", uselist=False,
-                                      foreign_keys="Verification.user_id")
-    system_logs       = relationship("SystemLog",     back_populates="performed_by_user")
+                                      foreign_keys="Verification.user_id", cascade="all, delete")
+    system_logs       = relationship("SystemLog",     back_populates="performed_by_user", cascade="all, delete")
     sent_messages     = relationship("Message",       foreign_keys="Message.sender_id",
-                                     back_populates="sender")
+                                     back_populates="sender", cascade="all, delete")
     received_messages = relationship("Message",       foreign_keys="Message.receiver_id",
-                                     back_populates="receiver")
+                                     back_populates="receiver", cascade="all, delete")
     notifications     = relationship("Notification",  back_populates="user",    # ✅ Phase 5
-                                     foreign_keys="Notification.user_id")
-    subscription = relationship("Subscription", back_populates="user", uselist=False)
+                                     foreign_keys="Notification.user_id", cascade="all, delete")
+    subscription = relationship("Subscription", back_populates="user", uselist=False, cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -153,12 +153,12 @@ class Freelancer(Base):
     sub_category_tags  = Column(Text, nullable=True)   # JSON list
 
     user                = relationship("User",              back_populates="freelancer")
-    proposals           = relationship("Proposal",          back_populates="freelancer")
-    contracts           = relationship("Contract",          back_populates="freelancer")
-    reviews             = relationship("Review",            back_populates="freelancer")
-    skills              = relationship("FreelancerSkill",   back_populates="freelancer")
-    wallet_transactions = relationship("WalletTransaction", back_populates="freelancer")
-    recommendations     = relationship("Recommendation",    back_populates="freelancer")
+    proposals           = relationship("Proposal",          back_populates="freelancer", cascade="all, delete")
+    contracts           = relationship("Contract",          back_populates="freelancer", cascade="all, delete")
+    reviews             = relationship("Review",            back_populates="freelancer", cascade="all, delete")
+    skills              = relationship("FreelancerSkill",   back_populates="freelancer", cascade="all, delete")
+    wallet_transactions = relationship("WalletTransaction", back_populates="freelancer", cascade="all, delete")
+    recommendations     = relationship("Recommendation",    back_populates="freelancer", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -173,7 +173,7 @@ class Client(Base):
     company_name = Column(String(255))
 
     user     = relationship("User",    back_populates="client")
-    projects = relationship("Project", back_populates="client")
+    projects = relationship("Project", back_populates="client", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -235,13 +235,13 @@ class Project(Base):
     created_at   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     client          = relationship("Client",         back_populates="projects")
-    proposals       = relationship("Proposal",       back_populates="project")
-    contracts       = relationship("Contract",       back_populates="project")
-    skills          = relationship("ProjectSkill",   back_populates="project")
-    files           = relationship("File",           back_populates="project")
-    reviews         = relationship("Review",         back_populates="project")
-    ai_pricing      = relationship("AIPricing",      back_populates="project", uselist=False)
-    recommendations = relationship("Recommendation", back_populates="project")
+    proposals       = relationship("Proposal",       back_populates="project", cascade="all, delete")
+    contracts       = relationship("Contract",       back_populates="project", cascade="all, delete")
+    skills          = relationship("ProjectSkill",   back_populates="project", cascade="all, delete")
+    files           = relationship("File",           back_populates="project", cascade="all, delete")
+    reviews         = relationship("Review",         back_populates="project", cascade="all, delete")
+    ai_pricing      = relationship("AIPricing",      back_populates="project", uselist=False, cascade="all, delete")
+    recommendations = relationship("Recommendation", back_populates="project", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -293,9 +293,9 @@ class Contract(Base):
 
     project         = relationship("Project",    back_populates="contracts")
     freelancer      = relationship("Freelancer", back_populates="contracts")
-    milestones      = relationship("Milestone",  back_populates="contract")
-    escrow          = relationship("Escrow",     back_populates="contract", uselist=False)
-    dispute         = relationship("Dispute",    back_populates="contract", uselist=False)
+    milestones      = relationship("Milestone",  back_populates="contract", cascade="all, delete")
+    escrow          = relationship("Escrow",     back_populates="contract", uselist=False, cascade="all, delete")
+    dispute         = relationship("Dispute",    back_populates="contract", uselist=False, cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -333,7 +333,7 @@ class Escrow(Base):
     created_at        = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     contract = relationship("Contract", back_populates="escrow")
-    payments = relationship("Payment",  back_populates="escrow")
+    payments = relationship("Payment",  back_populates="escrow", cascade="all, delete")
 
 
 # ─────────────────────────────────────────

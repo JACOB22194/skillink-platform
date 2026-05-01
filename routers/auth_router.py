@@ -25,13 +25,14 @@ import secrets  # cryptographically secure random tokens
 import random   # for OTP digit generation
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from db import get_db
 import models
 import schema
 from auth import create_access_token, create_refresh_token, decode_token, get_current_user
+from services.email_service import send_async_email
 
 router  = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -65,7 +66,7 @@ Rules:
 - A profile row is created automatically (in freelancers or clients table)
 """,
 )
-def register(body: schema.RegisterRequest, db: Session = Depends(get_db)):
+def register(body: schema.RegisterRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
 
     # Block duplicate emails
     if db.query(models.User).filter(models.User.email == body.email).first():
@@ -98,9 +99,16 @@ def register(body: schema.RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     
-    # Simulate Email Send
+    # Send Email via Background Task
     activation_token = create_access_token(user.id, user.role.value)
-    print(f"\n\n{'='*50}\n[SIMULATED EMAIL] To: {user.email}\nSubject: Verify your SkillLink account\nClick here to activate: http://localhost:3000/activate?token={activation_token}\n{'='*50}\n\n")
+    activation_link = f"http://localhost:3000/activate?token={activation_token}"
+    background_tasks.add_task(
+        send_async_email,
+        "Verify your SkillLink account",
+        [user.email],
+        "welcome.html",
+        {"name": user.email, "activation_link": activation_link}
+    )
 
     return user
 
@@ -385,7 +393,11 @@ Always returns 200 even if the email is not found (prevents user enumeration).
 The printed link in the console simulates the email delivery.
 """,
 )
-def forgot_password(body: schema.ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(
+    body: schema.ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     user = db.query(models.User).filter(models.User.email == body.email).first()
 
     if user:
@@ -394,12 +406,13 @@ def forgot_password(body: schema.ForgotPasswordRequest, db: Session = Depends(ge
         _reset_tokens[token] = {"user_id": user.id, "expires_at": expires}
 
         reset_url = f"http://localhost:3000/reset-password?token={token}"
-        print(
-            f"\n\n{'='*50}\n"
-            f"[SIMULATED EMAIL] To: {user.email}\n"
-            f"Subject: Reset your SkillLink password\n"
-            f"Click here to reset (expires in 15 min): {reset_url}\n"
-            f"{'='*50}\n\n"
+        
+        background_tasks.add_task(
+            send_async_email,
+            "Reset your SkillLink password",
+            [user.email],
+            "reset_password.html",
+            {"reset_link": reset_url}
         )
 
     return {"message": "If that email exists, a reset link has been sent."}
@@ -445,7 +458,11 @@ Always returns 200 even if the email is not found (prevents user enumeration).
 The OTP expires in 10 minutes.
 """,
 )
-def forgot_password_otp(body: schema.ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password_otp(
+    body: schema.ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     user = db.query(models.User).filter(models.User.email == body.email).first()
 
     if user:
@@ -453,12 +470,12 @@ def forgot_password_otp(body: schema.ForgotPasswordRequest, db: Session = Depend
         expires = datetime.now(timezone.utc) + timedelta(minutes=10)
         _reset_otps[body.email] = {"otp": otp, "expires_at": expires, "verified": False}
 
-        print(
-            f"\n\n{'='*50}\n"
-            f"[SIMULATED EMAIL] To: {user.email}\n"
-            f"Subject: Your SkillLink password reset code\n"
-            f"Your 6-digit reset code is: {otp}  (expires in 10 minutes)\n"
-            f"{'='*50}\n\n"
+        background_tasks.add_task(
+            send_async_email,
+            "Your SkillLink password reset code",
+            [user.email],
+            "reset_password_otp.html",
+            {"otp": otp}
         )
 
     return {"message": "If that email exists, a reset code has been sent."}
