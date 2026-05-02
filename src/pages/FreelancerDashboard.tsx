@@ -65,6 +65,111 @@ const IconShield = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="n
 const IconTeam = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>;
 const IconSettings = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
 
+// ─── Notification Bell ────────────────────────────────────────────────────────
+
+interface AppNotif {
+  notification_id: number;
+  type: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+const timeAgo = (iso: string) => {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
+
+const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
+  const [open, setOpen]   = React.useState(false);
+  const [notifs, setNotifs] = React.useState<AppNotif[]>([]);
+  const [unread, setUnread] = React.useState(0);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  const fetchCount = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/notifications/unread-count`, getAuthHeaders());
+      if (res.ok) { const d = await res.json(); setUnread(d.count ?? 0); }
+    } catch {}
+  };
+
+  const fetchNotifs = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/notifications?limit=15`, getAuthHeaders());
+      if (res.ok) setNotifs(await res.json());
+    } catch {}
+  };
+
+  const markAllRead = async () => {
+    try {
+      await fetch(`${API_BASE_URL}/notifications/read-all`, { method: "PATCH", ...(getAuthHeaders() as object) });
+      setUnread(0);
+      setNotifs(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchCount();
+    const id = setInterval(fetchCount, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (open) { fetchNotifs(); markAllRead(); }
+  }, [open]);
+
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <div
+        onClick={() => setOpen(v => !v)}
+        style={{ width: 32, height: 32, borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative" }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: unread > 0 ? c.primary : c.subtext }}>
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        {unread > 0 && (
+          <span style={{ position: "absolute", top: -4, right: -4, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 100, minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: `1.5px solid ${c.surface}` }}>
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </div>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: 38, width: 300, background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, zIndex: 300, boxShadow: "0 8px 30px rgba(0,0,0,.2)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderBottom: `0.5px solid ${c.border}` }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Notifications</span>
+            <span onClick={markAllRead} style={{ fontSize: 11, color: c.primary, cursor: "pointer" }}>Mark all read</span>
+          </div>
+          <div style={{ maxHeight: 320, overflowY: "auto" }}>
+            {notifs.length === 0 ? (
+              <div style={{ padding: "28px 16px", textAlign: "center", color: c.subtext, fontSize: 12 }}>No notifications yet</div>
+            ) : notifs.map(n => (
+              <div key={n.notification_id} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: `0.5px solid ${c.border}`, background: n.is_read ? "transparent" : c.primarySoft + "60" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4 }}>{n.message}</div>
+                  <div style={{ fontSize: 10, color: c.subtext, marginTop: 3 }}>{timeAgo(n.created_at)}</div>
+                </div>
+                {!n.is_read && <div style={{ width: 6, height: 6, borderRadius: "50%", background: c.primary, flexShrink: 0, marginTop: 4 }} />}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MatchedProject {
@@ -90,11 +195,13 @@ const MATCH_PALETTE = [
 ];
 
 const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
+  const navigate = useNavigate();
   const [matches, setMatches] = useState<MatchedProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [latency, setLatency] = useState(0);
   const [ran, setRan] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -165,14 +272,27 @@ const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
                     <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5 }}>
                       Budget: <strong style={{ color: c.text }}>${p.budget.toLocaleString()}</strong>
                     </div>
-                    <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 6, opacity: 0.85 }}>{p.description}</div>
+                    {expandedId === p.project_id
+                      ? <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 6 }}>{p.description}</div>
+                      : <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{p.description}</div>
+                    }
                     {p.matched_skills.length > 0 && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
                         {p.matched_skills.map(s => (
                           <span key={s} style={{ fontSize: 9, padding: "2px 8px", borderRadius: 20, background: c.primarySoft, color: c.primary, fontWeight: 500 }}>{s}</span>
                         ))}
                       </div>
                     )}
+                    <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
+                      <button
+                        onClick={() => navigate(`/projects/${p.project_id}`)}
+                        style={{ fontSize: 11, padding: "5px 14px", borderRadius: 8, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}
+                      >Apply →</button>
+                      <button
+                        onClick={() => setExpandedId(expandedId === p.project_id ? null : p.project_id)}
+                        style={{ fontSize: 11, padding: "5px 10px", borderRadius: 8, background: "transparent", color: c.subtext, border: `0.5px solid ${c.border}`, cursor: "pointer", fontFamily: "inherit" }}
+                      >{expandedId === p.project_id ? "Show less" : "View details"}</button>
+                    </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
                     <div style={{ fontSize: 20, fontWeight: 600, color: pct >= 50 ? c.primary : c.subtext, lineHeight: 1 }}>{pct}%</div>
@@ -263,13 +383,51 @@ const ProfilePanel: React.FC<{
         ))}
       </div>
     )}
+
+    {/* Profile completion bar */}
+    {!loading && !ghLoading && (() => {
+      const items = [!!profile?.bio, (profile?.skills?.length ?? 0) > 0, !!ghProfile?.github_score, !!profile?.hourly_rate];
+      const done = items.filter(Boolean).length;
+      const pct  = Math.round((done / items.length) * 100);
+      return (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: c.subtext, marginBottom: 5 }}>
+            <span>Profile complete</span>
+            <span style={{ color: pct === 100 ? "#22c55e" : c.primary, fontWeight: 600 }}>{pct}%</span>
+          </div>
+          <div style={{ height: 4, background: c.border, borderRadius: 4, overflow: "hidden" }}>
+            <div style={{ width: `${pct}%`, height: "100%", background: pct === 100 ? "#22c55e" : c.primary, borderRadius: 4, transition: "width .5s ease" }} />
+          </div>
+          {pct < 100 && (
+            <div style={{ fontSize: 10, color: c.subtext, marginTop: 5, opacity: .8 }}>
+              {[!profile?.bio && "Add bio", !(profile?.skills?.length) && "Add skills", !ghProfile?.github_score && "Connect GitHub", !profile?.hourly_rate && "Set rate"].filter(Boolean).join(" · ")}
+            </div>
+          )}
+        </div>
+      );
+    })()}
+
+    {/* Update GitHub shortcut */}
+    <a href="/github/review"
+      style={{ display: "block", marginTop: 12, textAlign: "center", fontSize: 11, padding: "7px 0", borderRadius: 8, border: `0.5px solid ${c.border}`, color: c.subtext, textDecoration: "none", transition: "all .2s" }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = c.primary; (e.currentTarget as HTMLElement).style.borderColor = c.primary; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = c.subtext; (e.currentTarget as HTMLElement).style.borderColor = c.border; }}
+    >🐙 Update GitHub</a>
   </div>
 );
 
 // ─── Skills Section ───────────────────────────────────────────────────────────
 
 const SkillsSection: React.FC<{ skills: string[]; c: ThemeColors }> = ({ skills, c }) => {
-  if (skills.length === 0) return null;
+  if (skills.length === 0) return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 6 }}>Skills</div>
+      <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.6 }}>
+        No skills yet.{" "}
+        <a href="/settings" style={{ color: c.primary, textDecoration: "none" }}>Add skills to get matched →</a>
+      </div>
+    </div>
+  );
   return (
     <div style={{ marginTop: 12 }}>
       <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 8 }}>Skills</div>
@@ -564,6 +722,7 @@ const WorkroomsView: React.FC<{ c: ThemeColors }> = ({ c }) => {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState("");
   const [expanded, setExpanded]   = useState<number | null>(null);
+  const [filter, setFilter]       = useState<"all" | "active" | "completed">("all");
 
   useEffect(() => {
     (async () => {
@@ -589,9 +748,18 @@ const WorkroomsView: React.FC<{ c: ThemeColors }> = ({ c }) => {
   return (
     <div style={{ animation: "fadeIn 0.5s ease" }}>
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Workrooms</div>
         <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Your active and completed contracts with clients.</div>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {(["all", "active", "completed"] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            style={{ fontSize: 11, padding: "5px 14px", borderRadius: 20, border: `0.5px solid ${filter === f ? c.primary : c.border}`, background: filter === f ? c.primarySoft : "transparent", color: filter === f ? c.primary : c.subtext, cursor: "pointer", fontFamily: "inherit", fontWeight: filter === f ? 600 : 400 }}
+          >{f.charAt(0).toUpperCase() + f.slice(1)}{f !== "all" && ` (${contracts.filter(ct => ct.status === f).length})`}</button>
+        ))}
       </div>
 
       {loading && (
@@ -618,7 +786,7 @@ const WorkroomsView: React.FC<{ c: ThemeColors }> = ({ c }) => {
 
       {!loading && !error && contracts.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {contracts.map(ct => {
+          {contracts.filter(ct => filter === "all" || ct.status === filter).map(ct => {
             const cs   = contractStatusColor[ct.status] ?? { color: c.subtext, bg: "transparent" };
             const isEx = expanded === ct.contract_id;
             const paid = ct.milestones.filter(m => m.status === "paid").length;
@@ -707,6 +875,63 @@ const WorkroomsView: React.FC<{ c: ThemeColors }> = ({ c }) => {
   );
 };
 
+// ─── Earnings Chart ───────────────────────────────────────────────────────────
+
+const EarningsChart: React.FC<{ c: ThemeColors }> = ({ c }) => {
+  const [bars, setBars] = useState<{ label: string; amount: number }[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/contracts/my`, getAuthHeaders());
+        if (res.ok) {
+          const contracts: WorkContract[] = await res.json();
+          const byMonth: Record<string, number> = {};
+          contracts.forEach(ct =>
+            ct.milestones.filter(m => m.status === "paid").forEach(m => {
+              const key = new Date(m.due_date ?? ct.created_at).toLocaleDateString("en", { month: "short", year: "2-digit" });
+              byMonth[key] = (byMonth[key] || 0) + (m.amount || 0);
+            })
+          );
+          const sorted = Object.entries(byMonth).slice(-6).map(([label, amount]) => ({ label, amount }));
+          setBars(sorted);
+          setTotal(sorted.reduce((s, d) => s + d.amount, 0));
+        }
+      } catch {}
+      setLoading(false);
+    })();
+  }, []);
+
+  const max = Math.max(...bars.map(b => b.amount), 1);
+
+  return (
+    <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Earnings</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#22c55e" }}>${total.toLocaleString()}</span>
+      </div>
+      {loading ? (
+        <div style={{ height: 80, background: c.border, borderRadius: 6, animation: "pulse 1.5s infinite" }} />
+      ) : bars.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "20px 0", fontSize: 12, color: c.subtext, opacity: .7 }}>
+          Earnings will appear here once milestones are paid.
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
+          {bars.map(({ label, amount }) => (
+            <div key={label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <div title={`$${amount}`} style={{ width: "100%", minHeight: 4, height: Math.max(4, (amount / max) * 64), background: c.primary, borderRadius: "3px 3px 0 0", opacity: 0.85 }} />
+              <div style={{ fontSize: 9, color: c.subtext }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const FreelancerDashboard: React.FC = () => {
@@ -770,6 +995,7 @@ const FreelancerDashboard: React.FC = () => {
             <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
               {darkMode ? "☀️" : "🌙"}
             </button>
+            <NotificationBell c={c} />
             <div style={{ position: "relative" }}>
               <div onClick={() => setDropdownOpen((v) => !v)} style={{ width: 28, height: 28, borderRadius: "50%", background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 500, border: `0.5px solid ${c.border}`, cursor: "pointer" }}>
                 {initials}
@@ -813,7 +1039,7 @@ const FreelancerDashboard: React.FC = () => {
             <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Skillink</div>
             <NavItem label="AI Matches"   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
             <NavItem label="Verification" active={activeView === "Verification"} icon={<IconShield />} colors={c} onClick={() => setActiveView("Verification")} />
-            <NavItem label="Workrooms" active={activeView === "Workrooms"} badge="—" icon={<IconTeam />} colors={c} onClick={() => setActiveView("Workrooms")} />
+            <NavItem label="Workrooms" active={activeView === "Workrooms"} icon={<IconTeam />} colors={c} onClick={() => setActiveView("Workrooms")} />
             {/* ── Upgrade Banner ── */}
             <div style={{ margin: "10px 12px 0" }}>
               <div

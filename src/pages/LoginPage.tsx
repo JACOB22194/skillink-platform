@@ -368,10 +368,7 @@ const LoginPage: React.FC = () => {
             </div>
 
             <div style={{ marginBottom: "1.5rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <label style={{ ...labelStyle, margin: 0 }}>Password</label>
-                <a href="/forgot-password" style={{ fontSize: 12, color: c.primary, textDecoration: "none" }}>Forgot password?</a>
-              </div>
+              <label style={labelStyle}>Password</label>
               <div style={{ position: "relative" }}>
                 <input
                   style={{ ...inputStyle, paddingRight: 44 }} type={showPassword ? "text" : "password"}
@@ -384,6 +381,9 @@ const LoginPage: React.FC = () => {
                 >
                   {showPassword ? "🙈" : "👁️"}
                 </button>
+              </div>
+              <div style={{ textAlign: "right", marginTop: 6 }}>
+                <a href="/forgot-password" style={{ fontSize: 12, color: c.primary, textDecoration: "none" }}>Forgot password?</a>
               </div>
             </div>
 

@@ -68,6 +68,113 @@ const getColors = (dark: boolean): ThemeColors =>
     ? { bg: "#0f0f0f", surface: "#1a1a1a", border: "#333333", text: "#ffffff", subtext: "#b0b0b0", primary: "#7F77DD", primarySoft: "#2a2640" }
     : { bg: "#f9f9f9", surface: "#ffffff", border: "#e5e5e5", text: "#1a1a1a", subtext: "#888888", primary: "#7F77DD", primarySoft: "#EEEDFE" };
 
+// ─── Notification Bell ────────────────────────────────────────────────────────
+
+interface AppNotif {
+  notification_id: number;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+const _timeAgo = (iso: string) => {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
+
+const API_BASE_CLIENT = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+const authHdr = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
+
+const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
+  const [open, setOpen]     = React.useState(false);
+  const [notifs, setNotifs] = React.useState<AppNotif[]>([]);
+  const [unread, setUnread] = React.useState(0);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  const fetchCount = async () => {
+    try {
+      const res = await fetch(`${API_BASE_CLIENT}/notifications/unread-count`, authHdr());
+      if (res.ok) { const d = await res.json(); setUnread(d.count ?? 0); }
+    } catch {}
+  };
+
+  const markAllRead = async () => {
+    try {
+      await fetch(`${API_BASE_CLIENT}/notifications/read-all`, { method: "PATCH", ...authHdr() });
+      setUnread(0);
+      setNotifs(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch {}
+  };
+
+  React.useEffect(() => {
+    fetchCount();
+    const id = setInterval(fetchCount, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_CLIENT}/notifications?limit=15`, authHdr());
+        if (res.ok) setNotifs(await res.json());
+      } catch {}
+    })();
+    markAllRead();
+  }, [open]);
+
+  React.useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <div
+        onClick={() => setOpen(v => !v)}
+        style={{ width: 32, height: 32, borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative" }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: unread > 0 ? c.primary : c.subtext }}>
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        {unread > 0 && (
+          <span style={{ position: "absolute", top: -4, right: -4, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 100, minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: `1.5px solid ${c.surface}` }}>
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </div>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: 38, width: 300, background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, zIndex: 300, boxShadow: "0 8px 30px rgba(0,0,0,.2)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderBottom: `0.5px solid ${c.border}` }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Notifications</span>
+            <span onClick={markAllRead} style={{ fontSize: 11, color: c.primary, cursor: "pointer" }}>Mark all read</span>
+          </div>
+          <div style={{ maxHeight: 320, overflowY: "auto" }}>
+            {notifs.length === 0 ? (
+              <div style={{ padding: "28px 16px", textAlign: "center", color: c.subtext, fontSize: 12 }}>No notifications yet</div>
+            ) : notifs.map(n => (
+              <div key={n.notification_id} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: `0.5px solid ${c.border}`, background: n.is_read ? "transparent" : c.primarySoft + "60" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4 }}>{n.message}</div>
+                  <div style={{ fontSize: 10, color: c.subtext, marginTop: 3 }}>{_timeAgo(n.created_at)}</div>
+                </div>
+                {!n.is_read && <div style={{ width: 6, height: 6, borderRadius: "50%", background: c.primary, flexShrink: 0, marginTop: 4 }} />}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const getInitials = (name: string): string => {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -156,6 +263,7 @@ const IconSearch = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="n
 const IconClip   = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>;
 const IconInv    = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14l-4-4 4-4M15 10h5M15 6h3a2 2 0 012 2v8a2 2 0 01-2 2h-3"/></svg>;
 const IconRefresh = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>;
+const IconProp    = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
 
 // ─── Company Profile View ─────────────────────────────────────────────────────
 
@@ -381,12 +489,18 @@ const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string)
 
 // ─── My Projects View ─────────────────────────────────────────────────────────
 
-const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contracts: Contract[]; loading: boolean; onRefresh: () => void }> =
-  ({ colors, projects, contracts, loading, onRefresh }) => {
+const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contracts: Contract[]; proposals: Proposal[]; loading: boolean; onRefresh: () => void }> =
+  ({ colors, projects, contracts, proposals, loading, onRefresh }) => {
   const navigate = useNavigate();
   const contractByProject = Object.fromEntries(contracts.map(c => [c.project_id, c]));
+  const proposalsByProject = proposals.reduce<Record<number, number>>((acc, p) => {
+    if (p.status === "pending") acc[p.project_id] = (acc[p.project_id] || 0) + 1;
+    return acc;
+  }, {});
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [confirmId, setConfirmId]   = useState<number | null>(null);
+  const [filter, setFilter] = useState<"all" | "open" | "in_progress" | "completed">("all");
+  const filtered = filter === "all" ? projects : projects.filter(p => p.status === filter);
 
   const handleDelete = async (projectId: number) => {
     setDeletingId(projectId);
@@ -421,15 +535,23 @@ const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contr
         </div>
       </div>
 
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {(["all", "open", "in_progress", "completed"] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            style={{ fontSize: 11, padding: "5px 14px", borderRadius: 20, border: `0.5px solid ${filter === f ? colors.primary : colors.border}`, background: filter === f ? colors.primarySoft : "transparent", color: filter === f ? colors.primary : colors.subtext, cursor: "pointer", fontFamily: "inherit", fontWeight: filter === f ? 600 : 400 }}>
+            {f === "all" ? `All (${projects.length})` : f === "open" ? `Open (${projects.filter(p => p.status === "open").length})` : f === "in_progress" ? `In Progress (${projects.filter(p => p.status === "in_progress").length})` : `Completed (${projects.filter(p => p.status === "completed").length})`}
+          </button>
+        ))}
+      </div>
       <div style={{ background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 12, padding: 16 }}>
         {loading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 8 }}>
             {[1,2,3].map(i => <Skeleton key={i} h={40} />)}
           </div>
-        ) : projects.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: colors.subtext }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: colors.text, marginBottom: 6 }}>No projects yet</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: colors.text, marginBottom: 6 }}>{filter === "all" ? "No projects yet" : `No ${filter.replace("_", " ")} projects`}</div>
             <div style={{ fontSize: 12 }}>Post your first project to start hiring</div>
             <button onClick={() => navigate("/post-project")} style={{ marginTop: 16, background: colors.primary, color: "#fff", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
               + Post Project
@@ -439,13 +561,13 @@ const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contr
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                {["Title", "Budget", "Category", "Status", "Contract", ""].map(h =>
+                {["Title", "Budget", "Category", "Status", "Proposals", "Contract", ""].map(h =>
                   <th key={h} style={thStyle}>{h}</th>
                 )}
               </tr>
             </thead>
             <tbody>
-              {projects.map(p => {
+              {filtered.map(p => {
                 const s = projectStatusColor(p.status);
                 const contract = contractByProject[p.project_id];
                 const cs = contract ? contractStatusColor(contract.status) : null;
@@ -461,6 +583,14 @@ const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contr
                     <td style={{ ...tdStyle, color: colors.subtext }}>{p.category || p.sub_category || "—"}</td>
                     <td style={tdStyle}>
                       <Badge bg={s.bg} color={s.color} border={s.border} style={{ margin: 0 }}>{s.label}</Badge>
+                    </td>
+                    <td style={tdStyle}>
+                      {(() => {
+                        const cnt = proposalsByProject[p.project_id] || 0;
+                        return cnt > 0
+                          ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 100, background: "rgba(245,158,11,.1)", color: "#f59e0b", fontWeight: 500 }}>{cnt} pending</span>
+                          : <span style={{ color: colors.subtext, fontSize: 11 }}>—</span>;
+                      })()}
                     </td>
                     <td style={tdStyle}>
                       {cs ? (
@@ -508,11 +638,14 @@ const MyProjectsView: React.FC<{ colors: ThemeColors; projects: Project[]; contr
 // ─── Find Talent View (unchanged from original — already uses real API) ────────
 
 interface MatchedFreelancer {
-  freelancer_id: number; name: string; professional_title: string;
-  github_url: string; hourly_rate: number; github_score: number;
-  match_score: number; matched_skills: string[]; explanation: string;
-  text_score: number; skill_score: number; quality_score: number;
-  activity_score: number; classifier_weight: number; matched_on: string;
+  freelancer_id: number;
+  user_id: number;
+  email: string;
+  bio: string | null;
+  hourly_rate: number | null;
+  success_score: number;
+  skills: string[];
+  ai_match_score: number | null;
 }
 
 const MATCH_PALETTE = [
@@ -524,11 +657,13 @@ const MATCH_PALETTE = [
 ];
 
 const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projLoading: boolean }> = ({ colors, projects, projLoading }) => {
+  const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [matches, setMatches]       = useState<MatchedFreelancer[]>([]);
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState("");
   const [latency, setLatency]       = useState(0);
+  const [viewProfile, setViewProfile] = useState<MatchedFreelancer | null>(null);
 
   useEffect(() => {
     if (projects.length > 0 && !selectedId) setSelectedId(projects[0].project_id);
@@ -628,7 +763,11 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
           </div>
           {matches.map((m, i) => {
             const pal = MATCH_PALETTE[i % MATCH_PALETTE.length];
-            const initials = getInitials(m.name || m.professional_title || "FL");
+            const displayName = m.email ? m.email.split("@")[0] : `Freelancer #${m.freelancer_id}`;
+            const initials = getInitials(displayName);
+            const scoreDisplay = m.ai_match_score != null
+              ? Math.round(m.ai_match_score)
+              : Math.round(m.success_score * 10);
             return (
               <div key={m.freelancer_id} style={{ background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 12, padding: 16 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -636,30 +775,31 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: colors.text }}>{m.name || `Freelancer #${m.freelancer_id}`}</div>
-                        <div style={{ fontSize: 11, color: colors.subtext, marginTop: 2 }}>{m.professional_title}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: colors.text }}>{displayName}</div>
+                        {m.bio && <div style={{ fontSize: 11, color: colors.subtext, marginTop: 2 }}>{m.bio}</div>}
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 600, color: pal.color }}>{Math.round(m.match_score * 100)}%</div>
-                        <div style={{ fontSize: 10, color: colors.subtext }}>match</div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: pal.color }}>{scoreDisplay}%</div>
+                        <div style={{ fontSize: 10, color: colors.subtext }}>{m.ai_match_score != null ? "AI match" : "score"}</div>
                       </div>
                     </div>
-                    {m.explanation && (
-                      <div style={{ fontSize: 11, color: colors.subtext, marginTop: 8, lineHeight: 1.5, background: colors.bg, borderRadius: 8, padding: "8px 10px" }}>{m.explanation}</div>
-                    )}
-                    {m.matched_skills?.length > 0 && (
+                    {m.skills?.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
-                        {m.matched_skills.map(s => (
+                        {m.skills.map(s => (
                           <span key={s} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: colors.primarySoft, color: colors.primary, border: `0.5px solid ${colors.primary}30` }}>{s}</span>
                         ))}
                       </div>
                     )}
-                    <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 11, color: colors.subtext }}>
-                      {m.hourly_rate > 0 && <span>${m.hourly_rate}/hr</span>}
-                      {m.github_score > 0 && <span>⭐ GitHub {m.github_score.toFixed(0)}</span>}
-                      {m.github_url && (
-                        <a href={m.github_url} target="_blank" rel="noreferrer" style={{ color: colors.primary, textDecoration: "none" }}>GitHub →</a>
-                      )}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                      <div style={{ fontSize: 11, color: colors.subtext }}>
+                        {m.hourly_rate != null && m.hourly_rate > 0 && <span>${m.hourly_rate}/hr</span>}
+                      </div>
+                      <button
+                        onClick={() => setViewProfile(m)}
+                        style={{ fontSize: 11, fontWeight: 500, padding: "5px 14px", borderRadius: 8, background: colors.primary, color: "#fff", border: "none", cursor: "pointer" }}
+                      >
+                        View Profile
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -668,6 +808,90 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
           })}
         </div>
       )}
+
+      {viewProfile && (() => {
+        const m = viewProfile;
+        const pal = MATCH_PALETTE[matches.indexOf(m) % MATCH_PALETTE.length] ?? MATCH_PALETTE[0];
+        const displayName = m.email ? m.email.split("@")[0] : `Freelancer #${m.freelancer_id}`;
+        const initials = getInitials(displayName);
+        const scoreDisplay = m.ai_match_score != null ? Math.round(m.ai_match_score) : Math.round(m.success_score * 10);
+        return (
+          <div
+            onClick={() => setViewProfile(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 16, width: "100%", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,.4)", overflow: "hidden" }}
+            >
+              {/* Header band */}
+              <div style={{ background: `linear-gradient(135deg, ${pal.bg} 0%, ${colors.primarySoft} 100%)`, padding: "24px 24px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 56, height: 56, borderRadius: "50%", background: pal.color + "20", border: `2px solid ${pal.color}40`, color: pal.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700 }}>{initials}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: colors.text }}>{displayName}</div>
+                    <div style={{ fontSize: 11, color: colors.subtext, marginTop: 2 }}>{m.email}</div>
+                  </div>
+                  <div style={{ textAlign: "center", flexShrink: 0, background: pal.color + "18", border: `1px solid ${pal.color}30`, borderRadius: 12, padding: "8px 14px" }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: pal.color }}>{scoreDisplay}%</div>
+                    <div style={{ fontSize: 9, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".08em" }}>{m.ai_match_score != null ? "AI Match" : "Score"}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: "16px 24px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+                {m.bio && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 5 }}>About</div>
+                    <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.6 }}>{m.bio}</div>
+                  </div>
+                )}
+
+                {m.skills?.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>Skills</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {m.skills.map(s => (
+                        <span key={s} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: colors.primarySoft, color: colors.primary, border: `0.5px solid ${colors.primary}30` }}>{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 12 }}>
+                  {m.hourly_rate != null && m.hourly_rate > 0 && (
+                    <div style={{ flex: 1, background: colors.bg, borderRadius: 10, padding: "10px 14px", border: `0.5px solid ${colors.border}` }}>
+                      <div style={{ fontSize: 10, color: colors.subtext, marginBottom: 3 }}>Hourly Rate</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>${m.hourly_rate}<span style={{ fontSize: 11, fontWeight: 400 }}>/hr</span></div>
+                    </div>
+                  )}
+                  <div style={{ flex: 1, background: colors.bg, borderRadius: 10, padding: "10px 14px", border: `0.5px solid ${colors.border}` }}>
+                    <div style={{ fontSize: 10, color: colors.subtext, marginBottom: 3 }}>Success Score</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{m.success_score.toFixed(1)}<span style={{ fontSize: 11, fontWeight: 400 }}>/5</span></div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <button
+                    onClick={() => navigate(`/messages?user=${m.user_id}&email=${encodeURIComponent(m.email)}`)}
+                    style={{ flex: 1, padding: "10px 0", borderRadius: 10, background: colors.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    Message
+                  </button>
+                  <button
+                    onClick={() => setViewProfile(null)}
+                    style={{ padding: "10px 18px", borderRadius: 10, background: "transparent", color: colors.subtext, border: `0.5px solid ${colors.border}`, fontSize: 13, cursor: "pointer" }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {!loading && matches.length === 0 && latency > 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: colors.subtext }}>
@@ -797,6 +1021,92 @@ const InvoicesView: React.FC<{ colors: ThemeColors }> = ({ colors: c }) => {
   );
 };
 
+// ─── Proposals View ───────────────────────────────────────────────────────────
+
+const ProposalsView: React.FC<{ colors: ThemeColors; projects: Project[]; proposals: Proposal[]; loading: boolean; onRefresh: () => void }> =
+  ({ colors: c, projects, proposals, loading, onRefresh }) => {
+  const [actionId, setActionId] = useState<number | null>(null);
+  const [acting,   setActing]   = useState(false);
+
+  const act = async (proposalId: number, action: "accept" | "reject") => {
+    setActing(true); setActionId(proposalId);
+    try {
+      await apiClient.put(`/proposals/${proposalId}/${action}`);
+      onRefresh();
+    } catch (e: any) {
+      alert(e.response?.data?.detail || `Failed to ${action} proposal.`);
+    } finally { setActing(false); setActionId(null); }
+  };
+
+  const pending = proposals.filter(p => p.status === "pending").length;
+
+  return (
+    <div style={{ animation: "fadeIn 0.5s ease" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Proposals</div>
+          <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Review and respond to freelancer proposals</div>
+        </div>
+        <button onClick={onRefresh} style={{ background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+          <IconRefresh /> Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{[1,2,3].map(i => <Skeleton key={i} h={80} />)}</div>
+      ) : proposals.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: c.subtext }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📨</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>No proposals yet</div>
+          <div style={{ fontSize: 12 }}>Freelancers will submit proposals on your open projects.</div>
+        </div>
+      ) : (
+        <>
+          {pending > 0 && (
+            <div style={{ fontSize: 12, color: "#f59e0b", background: "rgba(245,158,11,.08)", border: "0.5px solid rgba(245,158,11,.2)", borderRadius: 8, padding: "8px 14px", marginBottom: 14 }}>
+              {pending} pending proposal{pending !== 1 ? "s" : ""} awaiting review
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {proposals.map(pr => {
+              const proj = projects.find(p => p.project_id === pr.project_id);
+              const sc = STATUS_COLORS[pr.status] ?? STATUS_COLORS["pending"];
+              return (
+                <div key={pr.proposal_id} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{proj?.title ?? `Project #${pr.project_id}`}</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Freelancer #{pr.freelancer_id} · {new Date(pr.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <Badge bg={sc.bg} color={sc.color} border={sc.border} style={{ margin: 0, flexShrink: 0 }}>{pr.status}</Badge>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: "#22c55e" }}>${pr.bid_amount.toFixed(2)}</div>
+                    {pr.status === "pending" && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => act(pr.proposal_id, "accept")} disabled={acting && actionId === pr.proposal_id}
+                          style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "none", background: "#22c55e", color: "#fff", cursor: "pointer", fontWeight: 500, opacity: acting && actionId === pr.proposal_id ? 0.7 : 1 }}>
+                          {acting && actionId === pr.proposal_id ? "…" : "Accept"}
+                        </button>
+                        <button onClick={() => act(pr.proposal_id, "reject")} disabled={acting}
+                          style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: "transparent", color: c.subtext, cursor: "pointer" }}>
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// ─── Stub View ────────────────────────────────────────────────────────────────
+
 const StubView: React.FC<{ colors: ThemeColors; title: string }> = ({ colors, title }) => (
   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", color: colors.subtext, animation: "fadeIn 0.5s ease" }}>
     <div style={{ fontSize: 40, marginBottom: 16 }}>🚧</div>
@@ -829,6 +1139,9 @@ const ClientDashboard: React.FC = () => {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingContracts, setLoadingContracts] = useState(true);
+  const [proposals, setProposals]             = useState<Proposal[]>([]);
+  const [loadingProposals, setLoadingProposals] = useState(true);
+  const [recentActivity, setRecentActivity]   = useState<AppNotif[]>([]);
 
   const companyName = profile?.company_name || "Your Company";
   const initials    = getInitials(companyName);
@@ -860,11 +1173,30 @@ const ClientDashboard: React.FC = () => {
     finally { setLoadingContracts(false); }
   }, []);
 
+  const fetchProposals = useCallback(async () => {
+    setLoadingProposals(true);
+    try {
+      const r = await apiClient.get<Proposal[]>("/proposals/received");
+      setProposals(r.data);
+    } catch { setProposals([]); }
+    finally { setLoadingProposals(false); }
+  }, []);
+
   useEffect(() => {
     fetchProfile();
     fetchProjects();
     fetchContracts();
-  }, [fetchProfile, fetchProjects, fetchContracts]);
+    fetchProposals();
+  }, [fetchProfile, fetchProjects, fetchContracts, fetchProposals]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_CLIENT}/notifications?limit=5`, authHdr());
+        if (res.ok) setRecentActivity(await res.json());
+      } catch {}
+    })();
+  }, []);
 
   // ── Fetch unread message count ──
   useEffect(() => {
@@ -896,7 +1228,7 @@ const ClientDashboard: React.FC = () => {
     totalSpent:         projects
       .filter(p => p.status === "in_progress" || p.status === "completed")
       .reduce((sum, p) => sum + p.budget, 0),
-    pendingProposals: 0, // could be fetched per-project if needed
+    pendingProposals: proposals.filter(p => p.status === "pending").length,
   };
 
   const activeContracts  = contracts.filter(c => c.status === "active").length;
@@ -963,13 +1295,7 @@ const ClientDashboard: React.FC = () => {
           <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
             {darkMode ? "☀️" : "🌙"}
           </button>
-          {/* Notification Bell */}
-          <div style={{ position: "relative", cursor: "pointer" }} onClick={() => navigate("/messages")}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>🔔</div>
-            {unreadCount > 0 && (
-              <span style={{ position: "absolute", top: -4, right: -4, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 100, minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: `1.5px solid ${c.surface}` }}>{unreadCount > 9 ? "9+" : unreadCount}</span>
-            )}
-          </div>
+          <NotificationBell c={c} />
           <div style={{ position: "relative" }}>
             <div
               onClick={() => setDropdownOpen(v => !v)}
@@ -1011,6 +1337,7 @@ const ClientDashboard: React.FC = () => {
           <NavItem label="Messages"        badge={unreadCount} icon={<IconMsg />}    colors={c} onClick={() => navigate("/messages")} />
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Hiring</div>
           <NavItem label="Find Talent"    badge="New" active={activeView === "Find Talent"}    onClick={() => setActiveView("Find Talent")}    icon={<IconSearch />} colors={c} />
+          <NavItem label="Proposals"  badge={proposals.filter(p => p.status === "pending").length || undefined} active={activeView === "Proposals"} onClick={() => setActiveView("Proposals")} icon={<IconProp />} colors={c} />
           <NavItem label="Active Projects"            active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />}   colors={c} />
           <NavItem label="Invoices"                   active={activeView === "Invoices"}        onClick={() => setActiveView("Invoices")}        icon={<IconInv />}    colors={c} />
 
@@ -1066,6 +1393,25 @@ const ClientDashboard: React.FC = () => {
                   <button onClick={() => setActiveView("Company Profile")} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 500, flexShrink: 0 }}>Complete Profile →</button>
                 </div>
               )}
+
+              {/* ── Quick Actions ── */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 12 }}>
+                {[
+                  { icon: "📋", label: "Post Project",  action: () => navigate("/post-project"),    color: c.primary },
+                  { icon: "🔍", label: "Find Talent",   action: () => setActiveView("Find Talent"), color: "#22c55e" },
+                  { icon: "📨", label: "Proposals",     action: () => setActiveView("Proposals"),   color: "#f59e0b" },
+                  { icon: "🧾", label: "Invoices",      action: () => setActiveView("Invoices"),    color: "#3b82f6" },
+                ].map(({ icon, label, action, color }) => (
+                  <div key={label} onClick={action}
+                    style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "14px 12px", cursor: "pointer", textAlign: "center", transition: "border-color .15s" }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = color)}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = c.border)}
+                  >
+                    <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
+                    <div style={{ fontSize: 12, fontWeight: 500, color }}>{label}</div>
+                  </div>
+                ))}
+              </div>
 
               {/* ── Hiring pipeline funnel ── */}
               {!isLoading && (
@@ -1254,7 +1600,7 @@ const ClientDashboard: React.FC = () => {
                               <td style={{ ...tdBorder }}>{proj ? fmt(proj.budget) : "—"}</td>
                               <td style={tdBorder}><Badge bg={cs.bg} color={cs.color} border={cs.border} style={{ margin: 0 }}>{ct.status}</Badge></td>
                               <td style={{ ...tdBorder, color: c.subtext }}>{new Date(ct.created_at).toLocaleDateString()}</td>
-                              <td style={tdBorder}><span onClick={() => setActiveView("Active Projects")} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>View →</span></td>
+                              <td style={tdBorder}><span onClick={() => navigate(`/workroom/${ct.contract_id}`)} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>Workroom →</span></td>
                             </tr>
                           );
                         })}
@@ -1263,6 +1609,47 @@ const ClientDashboard: React.FC = () => {
                   )}
                 </>
               )}
+
+              {/* ── Spend + Activity row ── */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+                {card(
+                  <>
+                    {sectionHeader("Spend by Category")}
+                    {spendEntries.length === 0 ? (
+                      <div style={{ fontSize: 12, color: c.subtext, textAlign: "center", padding: "20px 0" }}>No spend data yet. Budget tracked once a contract is active.</div>
+                    ) : (() => {
+                      const maxS = Math.max(...spendEntries.map(([, v]) => v));
+                      return spendEntries.map(([label, amount]) => (
+                        <div key={label} style={{ marginBottom: 12 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
+                            <span style={{ color: c.subtext, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>{label}</span>
+                            <span style={{ fontWeight: 600, color: c.text }}>{fmt(amount)}</span>
+                          </div>
+                          <div style={{ height: 6, background: c.bg, borderRadius: 20, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${Math.round((amount / maxS) * 100)}%`, background: `linear-gradient(90deg,${c.primary},${c.primary}aa)`, borderRadius: 20, transition: "width .6s" }} />
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </>
+                )}
+                {card(
+                  <>
+                    {sectionHeader("Recent Activity")}
+                    {recentActivity.length === 0 ? (
+                      <div style={{ fontSize: 12, color: c.subtext, textAlign: "center", padding: "20px 0" }}>No recent activity</div>
+                    ) : recentActivity.map(n => (
+                      <div key={n.notification_id} style={{ display: "flex", gap: 8, padding: "8px 0", borderBottom: `0.5px solid ${c.border}` }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: n.is_read ? c.border : c.primary, flexShrink: 0, marginTop: 5 }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4 }}>{n.message}</div>
+                          <div style={{ fontSize: 10, color: c.subtext, marginTop: 2 }}>{_timeAgo(n.created_at)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -1275,11 +1662,15 @@ const ClientDashboard: React.FC = () => {
           )}
 
           {activeView === "Active Projects" && (
-            <MyProjectsView colors={c} projects={projects} contracts={contracts} loading={loadingProjects} onRefresh={() => { fetchProjects(); fetchContracts(); }} />
+            <MyProjectsView colors={c} projects={projects} contracts={contracts} proposals={proposals} loading={loadingProjects} onRefresh={() => { fetchProjects(); fetchContracts(); fetchProposals(); }} />
           )}
 
           {activeView === "Invoices" && (
             <InvoicesView colors={c} />
+          )}
+
+          {activeView === "Proposals" && (
+            <ProposalsView colors={c} projects={projects} proposals={proposals} loading={loadingProposals} onRefresh={() => { fetchProposals(); fetchProjects(); fetchContracts(); }} />
           )}
         </main>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { API_BASE_URL, getAuthHeaders } from "../shared/api";
 import { useAuth } from "../shared/useAuth";
@@ -45,6 +45,7 @@ const getColors = (dark: boolean): C =>
 
 const MessagingPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -97,6 +98,20 @@ const MessagingPage: React.FC = () => {
   }, []);
 
   useEffect(() => { fetchInbox(); }, [fetchInbox]);
+
+  // Open conversation pre-selected from ?user=ID (e.g. from Find Talent)
+  useEffect(() => {
+    const uid = searchParams.get("user");
+    const email = searchParams.get("email");
+    if (!uid) return;
+    const id = parseInt(uid, 10);
+    if (isNaN(id)) return;
+    setConversations(prev => {
+      if (prev.some(c => c.other_user_id === id)) return prev;
+      return [{ other_user_id: id, other_user_email: email ?? `user #${id}`, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 }, ...prev];
+    });
+    setActiveUserId(id);
+  }, [searchParams]);
 
   // ── Thread ────────────────────────────────────────────────────────────────
   useEffect(() => {

@@ -536,6 +536,20 @@ const GitHubReviewPage: React.FC = () => {
     </button>
   );
 
+  const handleSkip = () => {
+    setParsed({
+      name: "", title: "", summary: "", location: "", website: "",
+      skills: [], experience: [], education: [], languages: [],
+      certifications: [], score: 0, suggestions: [],
+      github_stats: { username: "", public_repos: 0, followers: 0, total_stars: 0, top_languages: [] },
+    });
+    setBio("");
+    setTitle("");
+    setSkills([]);
+    setHourlyRate("50");
+    setStep(2);
+  };
+
   if (step === 1) {
     return (
       <>
@@ -544,7 +558,7 @@ const GitHubReviewPage: React.FC = () => {
           c={c} darkMode={darkMode}
           githubUrl={githubUrl} setGithubUrl={setGithubUrl}
           onParse={handleParse} parsing={parsing} error={parseError}
-          onSkip={() => setStep(2)}
+          onSkip={handleSkip}
         />
       </>
     );
