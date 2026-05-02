@@ -24,7 +24,7 @@ PHASE 5:
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from db import get_db
 import models
@@ -48,8 +48,10 @@ def my_contracts(
     me: models.User = Depends(get_current_user),
     db: Session     = Depends(get_db),
 ):
+    opts = [joinedload(models.Contract.project), joinedload(models.Contract.milestones)]
+
     if me.role == models.UserRole.admin:
-        return db.query(models.Contract).all()
+        return db.query(models.Contract).options(*opts).all()
 
     elif me.role == models.UserRole.client:
         client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
@@ -61,7 +63,7 @@ def my_contracts(
         ]
         if not project_ids:
             return []
-        return db.query(models.Contract).filter(
+        return db.query(models.Contract).options(*opts).filter(
             models.Contract.project_id.in_(project_ids)
         ).all()
 
@@ -71,7 +73,7 @@ def my_contracts(
         ).first()
         if not freelancer:
             return []
-        return db.query(models.Contract).filter(
+        return db.query(models.Contract).options(*opts).filter(
             models.Contract.freelancer_id == freelancer.freelancer_id
         ).all()
 
@@ -90,9 +92,10 @@ def get_contract(
     me:          models.User = Depends(get_current_user),
     db:          Session     = Depends(get_db),
 ):
-    contract = db.query(models.Contract).filter(
-        models.Contract.contract_id == contract_id
-    ).first()
+    contract = db.query(models.Contract).options(
+        joinedload(models.Contract.project),
+        joinedload(models.Contract.milestones),
+    ).filter(models.Contract.contract_id == contract_id).first()
     if not contract:
         raise HTTPException(404, "Contract not found.")
     _assert_contract_access(contract, me, db)

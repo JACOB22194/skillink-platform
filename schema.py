@@ -346,12 +346,30 @@ class ProposalStatusUpdateResponse(BaseModel):
 #  CONTRACTS
 # ═══════════════════════════════════════════════════
 
+class ProjectBrief(BaseModel):
+    project_id:  int
+    title:       str
+    description: Optional[str] = None
+    budget:      float
+    status:      str
+    model_config = {"from_attributes": True}
+
+class MilestoneBrief(BaseModel):
+    milestone_id: int
+    title:        Optional[str] = None
+    amount:       float
+    status:       str
+    due_date:     Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
 class ContractResponse(BaseModel):
     contract_id:   int
     project_id:    int
     freelancer_id: int
     status:        ContractStatus
     created_at:    datetime
+    project:       Optional[ProjectBrief] = None
+    milestones:    list[MilestoneBrief] = []
     model_config = {"from_attributes": True}
 
 

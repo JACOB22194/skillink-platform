@@ -169,6 +169,70 @@ def my_proposals(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /proposals/my/stats  — Freelancer proposal statistics
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/my/stats",
+    summary="Proposal statistics for the logged-in freelancer",
+)
+def my_proposal_stats(
+    me: models.User = Depends(require_freelancer),
+    db: Session     = Depends(get_db),
+):
+    freelancer = db.query(models.Freelancer).filter(
+        models.Freelancer.user_id == me.id
+    ).first()
+    if not freelancer:
+        return {"sent": 0, "accepted": 0, "rejected": 0, "response_rate": 0}
+
+    proposals = db.query(models.Proposal).filter(
+        models.Proposal.freelancer_id == freelancer.freelancer_id
+    ).all()
+
+    sent     = len(proposals)
+    accepted = sum(1 for p in proposals if p.status == models.ProposalStatus.accepted)
+    rejected = sum(1 for p in proposals if p.status == models.ProposalStatus.rejected)
+    responded = accepted + rejected
+    response_rate = round(responded / sent * 100) if sent > 0 else 0
+
+    return {"sent": sent, "accepted": accepted, "rejected": rejected, "response_rate": response_rate}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /proposals/received  — All proposals on client's projects
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/received",
+    response_model=list[schema.ProposalResponse],
+    summary="Proposals received by the client",
+    description="**Clients only.** Returns all proposals submitted on any of the client's projects.",
+)
+def received_proposals(
+    me: models.User = Depends(require_client),
+    db: Session     = Depends(get_db),
+):
+    client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+    if not client:
+        return []
+    project_ids = [
+        p.project_id
+        for p in db.query(models.Project).filter(
+            models.Project.client_id == client.client_id
+        ).all()
+    ]
+    if not project_ids:
+        return []
+    return (
+        db.query(models.Proposal)
+        .filter(models.Proposal.project_id.in_(project_ids))
+        .order_by(models.Proposal.created_at.desc())
+        .all()
+    )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  GET /proposals/{proposal_id}
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
