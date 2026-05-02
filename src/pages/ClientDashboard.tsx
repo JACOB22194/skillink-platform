@@ -1031,7 +1031,7 @@ const ProposalsView: React.FC<{ colors: ThemeColors; projects: Project[]; propos
   const act = async (proposalId: number, action: "accept" | "reject") => {
     setActing(true); setActionId(proposalId);
     try {
-      await apiClient.put(`/proposals/${proposalId}/${action}`);
+      await apiClient.put(`/proposals/${proposalId}/status`, { action });
       onRefresh();
     } catch (e: any) {
       alert(e.response?.data?.detail || `Failed to ${action} proposal.`);

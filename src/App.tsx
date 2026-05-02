@@ -17,6 +17,10 @@ import SettingsPage from './pages/SettingsPage';
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import PricingPage from "./pages/PricingPage";
 import PaymentPage from "./pages/PaymentPage";
+import { ProposalsPage }       from "./pages/ProposalsPage";
+import { ClientProposalsPage } from "./pages/ClientProposalsPage";
+import { ContractPage }        from "./pages/ContractPage";
+import { ContractsListPage }   from "./pages/ContractsListPage";
 
 const App = () => {
   return (
@@ -35,7 +39,43 @@ const App = () => {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password"  element={<ForgotPasswordPage />} />
 
-        {/* Dashboard routes */}
+        {/* ── Proposals ── */}
+        <Route
+          path="/proposals"
+          element={
+            <RequireRole role="freelancer">
+              <ProposalsPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/client/proposals"
+          element={
+            <RequireRole role="client">
+              <ClientProposalsPage />
+            </RequireRole>
+          }
+        />
+
+        {/* ── Contracts ── */}
+        <Route
+          path="/contracts"
+          element={
+            <RequireRole role={["freelancer", "client"]}>
+              <ContractsListPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/contract/:contractId"
+          element={
+            <RequireRole role={["freelancer", "client"]}>
+              <ContractPage />
+            </RequireRole>
+          }
+        />
+
+        {/* ── Dashboard routes ── */}
         <Route
           path="/dashboard/freelancer"
           element={

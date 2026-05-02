@@ -64,6 +64,7 @@ const IconBulb = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="non
 const IconShield = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>;
 const IconTeam = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>;
 const IconSettings = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
+const IconDoc = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
 
 // ─── Notification Bell ────────────────────────────────────────────────────────
 
@@ -685,24 +686,26 @@ const VerificationView: React.FC<{ c: ThemeColors }> = ({ c }) => {
 
 // ─── Workrooms View ───────────────────────────────────────────────────────────
 
+interface WorkMilestone {
+  milestone_id: number;
+  title:        string | null;
+  amount:       number;
+  status:       string;
+  due_date:     string | null;
+}
+
 interface WorkContract {
   contract_id:   number;
   status:        string;
   created_at:    string;
-  project: {
+  project?: {
     project_id:  number;
     title:       string;
     description: string;
     budget:      number;
     status:      string;
   };
-  milestones: {
-    milestone_id: number;
-    title:        string | null;
-    amount:       number;
-    status:       string;
-    due_date:     string | null;
-  }[];
+  milestones?: WorkMilestone[];
 }
 
 const contractStatusColor: Record<string, { color: string; bg: string }> = {
@@ -789,8 +792,9 @@ const WorkroomsView: React.FC<{ c: ThemeColors }> = ({ c }) => {
           {contracts.filter(ct => filter === "all" || ct.status === filter).map(ct => {
             const cs   = contractStatusColor[ct.status] ?? { color: c.subtext, bg: "transparent" };
             const isEx = expanded === ct.contract_id;
-            const paid = ct.milestones.filter(m => m.status === "paid").length;
-            const total = ct.milestones.length;
+            const msList = ct.milestones ?? [];
+            const paid = msList.filter((m: { status: string }) => m.status === "paid").length;
+            const total = msList.length;
             const pct  = total > 0 ? Math.round((paid / total) * 100) : 0;
 
             return (
@@ -836,12 +840,12 @@ const WorkroomsView: React.FC<{ c: ThemeColors }> = ({ c }) => {
                       <p style={{ fontSize: 12, color: c.subtext, margin: "0 0 12px", lineHeight: 1.6 }}>{ct.project.description}</p>
                     )}
 
-                    {ct.milestones.length === 0 ? (
+                    {msList.length === 0 ? (
                       <div style={{ fontSize: 12, color: c.subtext, opacity: .7 }}>No milestones added yet.</div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>Milestones</div>
-                        {ct.milestones.map((m, i) => {
+                        {msList.map((m, i) => {
                           const ms = milestoneStatusColor[m.status] ?? { color: c.subtext, bg: "transparent" };
                           return (
                             <div key={m.milestone_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: c.bg, borderRadius: 8, border: `0.5px solid ${c.border}` }}>
@@ -859,7 +863,7 @@ const WorkroomsView: React.FC<{ c: ThemeColors }> = ({ c }) => {
                         })}
                         <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
                           <span style={{ fontSize: 12, color: c.subtext }}>
-                            Total: <strong style={{ color: c.text }}>${ct.milestones.reduce((s, m) => s + (m.amount || 0), 0).toLocaleString()}</strong>
+                            Total: <strong style={{ color: c.text }}>${msList.reduce((s, m) => s + (m.amount || 0), 0).toLocaleString()}</strong>
                           </span>
                         </div>
                       </div>
@@ -890,7 +894,7 @@ const EarningsChart: React.FC<{ c: ThemeColors }> = ({ c }) => {
           const contracts: WorkContract[] = await res.json();
           const byMonth: Record<string, number> = {};
           contracts.forEach(ct =>
-            ct.milestones.filter(m => m.status === "paid").forEach(m => {
+            (ct.milestones ?? []).filter((m: WorkMilestone) => m.status === "paid").forEach((m: WorkMilestone) => {
               const key = new Date(m.due_date ?? ct.created_at).toLocaleDateString("en", { month: "short", year: "2-digit" });
               byMonth[key] = (byMonth[key] || 0) + (m.amount || 0);
             })
@@ -946,7 +950,8 @@ const FreelancerDashboard: React.FC = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [activeView, setActiveView] = useState("Dashboard");
   const [unreadCount, setUnreadCount] = useState(0);
-  const [proposalStats, setProposalStats] = useState<{ sent: number; accepted: number; response_rate: number } | null>(null);
+  const [proposalStats, setProposalStats] = useState<{ sent: number; accepted: number; rejected: number; response_rate: number } | null>(null);
+  const [activeContracts, setActiveContracts] = useState<WorkContract[]>([]);
   const c = getColors(darkMode);
 
   const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
@@ -980,6 +985,19 @@ const FreelancerDashboard: React.FC = () => {
       try {
         const res = await fetch(`${API_BASE_URL}/proposals/my/stats`, getAuthHeaders());
         if (res.ok) setProposalStats(await res.json());
+      } catch { /* silent */ }
+    })();
+  }, []);
+
+  // Fetch active contracts for dashboard
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/contracts/my`, getAuthHeaders());
+        if (res.ok) {
+          const all: WorkContract[] = await res.json();
+          setActiveContracts(all.filter(ct => ct.status === "active"));
+        }
       } catch { /* silent */ }
     })();
   }, []);
@@ -1037,6 +1055,7 @@ const FreelancerDashboard: React.FC = () => {
             <NavItem label="Profile"   icon={<IconUser />} colors={c} onClick={() => navigate("/settings")} />
             <NavItem label="Messages"  badge={unreadCount} icon={<IconMsg />} colors={c} onClick={() => navigate("/messages")} />
             <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Skillink</div>
+            <NavItem label="Proposals" icon={<IconDoc />} colors={c} onClick={() => navigate("/proposals")} />
             <NavItem label="AI Matches"   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
             <NavItem label="Verification" active={activeView === "Verification"} icon={<IconShield />} colors={c} onClick={() => setActiveView("Verification")} />
             <NavItem label="Workrooms" active={activeView === "Workrooms"} icon={<IconTeam />} colors={c} onClick={() => setActiveView("Workrooms")} />
@@ -1138,7 +1157,7 @@ const FreelancerDashboard: React.FC = () => {
 
             {/* Proposals / Activity Stats row */}
             {!profileLoading && !profileError && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
                 <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(127,119,221,.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📨</div>
                   <div>
@@ -1150,7 +1169,14 @@ const FreelancerDashboard: React.FC = () => {
                   <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(34,197,94,.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>✅</div>
                   <div>
                     <div style={{ fontSize: 20, fontWeight: 600, color: "#22c55e", lineHeight: 1 }}>{proposalStats ? proposalStats.accepted : "—"}</div>
-                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Proposals Accepted</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Accepted</div>
+                  </div>
+                </div>
+                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(239,68,68,.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>❌</div>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 600, color: "#ef4444", lineHeight: 1 }}>{proposalStats ? proposalStats.rejected : "—"}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Rejected</div>
                   </div>
                 </div>
                 <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
@@ -1203,9 +1229,35 @@ const FreelancerDashboard: React.FC = () => {
               <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                   <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Projects in Progress</span>
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: c.primarySoft, color: c.primary }}>Coming soon</span>
+                  {activeContracts.length > 0 && (
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: "rgba(34,197,94,.1)", color: "#22c55e" }}>{activeContracts.length} active</span>
+                  )}
                 </div>
-                <EmptyState label="No active projects yet" hint="Your workroom projects will appear here once you land your first contract." c={c} />
+                {activeContracts.length === 0 ? (
+                  <EmptyState label="No active projects yet" hint="You'll see your active contracts here once a client accepts your proposal." c={c} />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {activeContracts.map((ct: WorkContract) => {
+                      const msList = ct.milestones ?? [];
+                      const paid = msList.filter((m: { status: string }) => m.status === "paid").length;
+                      const total = msList.length;
+                      return (
+                        <div key={ct.contract_id} onClick={() => navigate(`/contract/${ct.contract_id}`)}
+                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: c.bg, border: `0.5px solid ${c.border}`, cursor: "pointer" }}
+                          onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = c.primary + "66"}
+                          onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = c.border}
+                        >
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ct.project?.title ?? `Contract #${ct.contract_id}`}</div>
+                            <div style={{ fontSize: 11, color: c.subtext, marginTop: 1 }}>{total > 0 ? `${paid}/${total} milestones paid` : "No milestones yet"}</div>
+                          </div>
+                          <span style={{ fontSize: 11, color: c.primary }}>→</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
