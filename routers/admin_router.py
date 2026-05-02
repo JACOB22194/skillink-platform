@@ -353,7 +353,7 @@ def get_ai_metrics(
     accepted_proposals = db.query(models.Proposal).filter(models.Proposal.status == models.ProposalStatus.accepted).count()
     
     total_contracts = db.query(models.Contract).count()
-    active_contracts = db.query(models.Contract).filter(models.Contract.status.in_([models.ContractStatus.active, models.ContractStatus.in_progress])).count()
+    active_contracts = db.query(models.Contract).filter(models.Contract.status == models.ContractStatus.active).count()
     
     total_verifications = db.query(models.Verification).count()
     approved_verifications = db.query(models.Verification).filter(models.Verification.status == models.VerificationStatus.approved).count()
@@ -500,7 +500,7 @@ def get_disputes(
     db:    Session     = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ):
-    disputes = db.query(models.Dispute).order_by(models.Dispute.opened_at.desc()).limit(20).all()
+    disputes = db.query(models.Dispute).order_by(models.Dispute.created_at.desc()).limit(20).all()
     return [{
         "id": d.dispute_id,
         "contract_id": d.contract_id,
