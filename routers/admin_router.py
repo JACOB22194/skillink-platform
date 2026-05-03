@@ -17,6 +17,7 @@ DELETE /admin/users/{id}             → permanently delete a user
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
+from datetime import datetime, timezone
 
 from db import get_db
 import models
@@ -507,5 +508,59 @@ def get_disputes(
         "initiator": d.initiator_user.email if d.initiator_user else "Unknown",
         "reason": d.reason,
         "status": d.status,
-        "opened_at": d.opened_at
+        "resolution_note": d.resolution_note,
+        "opened_at": d.created_at
     } for d in disputes]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /admin/disputes/{dispute_id}/resolve
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/disputes/{dispute_id}/resolve",
+    response_model=schema.MessageResponse,
+    summary="Resolve a dispute",
+)
+def resolve_dispute(
+    dispute_id: int,
+    body:       schema.DisputeResolveRequest,
+    db:         Session     = Depends(get_db),
+    admin:      models.User = Depends(require_admin),
+):
+    dispute = db.query(models.Dispute).filter(models.Dispute.dispute_id == dispute_id).first()
+    if not dispute:
+        raise HTTPException(404, "Dispute not found.")
+    if dispute.status == models.DisputeStatus.resolved:
+        raise HTTPException(400, "Dispute is already resolved.")
+
+    dispute.status          = models.DisputeStatus.resolved
+    dispute.resolution_note = body.note
+    dispute.resolved_by     = admin.id
+    dispute.resolved_at     = datetime.now(timezone.utc)
+
+    contract = dispute.contract
+    escrow   = db.query(models.Escrow).filter(
+        models.Escrow.contract_id == contract.contract_id
+    ).first()
+
+    if body.resolution == "release_to_freelancer" and escrow:
+        remaining = (escrow.amount or 0) - (escrow.released_amount or 0)
+        if remaining > 0:
+            freelancer = contract.freelancer
+            freelancer.wallet_balance = (freelancer.wallet_balance or 0) + remaining
+            db.add(models.WalletTransaction(
+                freelancer_id = freelancer.freelancer_id,
+                amount        = remaining,
+                type          = models.TransactionType.deposit,
+                description   = f"Dispute #{dispute_id} resolved in freelancer's favor",
+            ))
+            escrow.released_amount = escrow.amount
+
+    contract.status = models.ContractStatus.completed
+    db.add(models.SystemLog(
+        action       = f"Admin [{admin.email}] resolved dispute #{dispute_id}: {body.resolution}",
+        performed_by = admin.id,
+    ))
+    db.commit()
+    return {"message": f"Dispute #{dispute_id} resolved: {body.resolution}."}

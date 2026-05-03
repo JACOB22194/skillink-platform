@@ -260,8 +260,9 @@ class ProjectCreate(BaseModel):
     description:     Optional[str] = None
     budget:          float
     required_skills: Optional[List[str]] = None
-    sub_category:    Optional[str] = None   # AI primary output (e.g. "Logo Design")
-    category:        Optional[str] = None   # AI secondary output (e.g. "Design")
+    sub_category:    Optional[str] = None
+    category:        Optional[str] = None
+    contract_type:   Optional[str] = "fixed"
 
     @field_validator("budget")
     @classmethod
@@ -301,6 +302,7 @@ class ProjectResponse(BaseModel):
     sub_category:    Optional[str] = None
     category:        Optional[str] = None
     status:          ProjectStatus
+    contract_type:   Optional[str] = "fixed"
     required_skills: List[str] = []
     model_config = {"from_attributes": True}
 
@@ -332,6 +334,17 @@ class ProposalResponse(BaseModel):
     created_at:         datetime
     model_config = {"from_attributes": True}
 
+class ProposalUpdate(BaseModel):
+    bid_amount:   Optional[float] = None
+    cover_letter: Optional[str]   = None
+
+    @field_validator("bid_amount")
+    @classmethod
+    def bid_positive(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v < 1.0:
+            raise ValueError("Bid amount must be at least $1.00.")
+        return v
+
 class ProposalStatusUpdate(BaseModel):
     action: str  # "accept" or "reject"
 
@@ -347,11 +360,12 @@ class ProposalStatusUpdateResponse(BaseModel):
 # ═══════════════════════════════════════════════════
 
 class ProjectBrief(BaseModel):
-    project_id:  int
-    title:       str
-    description: Optional[str] = None
-    budget:      float
-    status:      str
+    project_id:    int
+    title:         str
+    description:   Optional[str] = None
+    budget:        float
+    status:        str
+    contract_type: Optional[str] = "fixed"
     model_config = {"from_attributes": True}
 
 class MilestoneBrief(BaseModel):
@@ -494,10 +508,34 @@ class ReviewResponse(BaseModel):
     created_at:    datetime
     model_config = {"from_attributes": True}
 
+class ClientReviewCreate(BaseModel):
+    rating:  int
+    comment: Optional[str] = None
+
+    @field_validator("rating")
+    @classmethod
+    def rating_range(cls, v: int) -> int:
+        if v < 1 or v > 5:
+            raise ValueError("Rating must be between 1 and 5.")
+        return v
+
+class ClientReviewResponse(BaseModel):
+    review_id:     int
+    contract_id:   int
+    freelancer_id: int
+    client_id:     int
+    rating:        int
+    comment:       Optional[str]
+    created_at:    datetime
+    model_config = {"from_attributes": True}
+
 
 # ═══════════════════════════════════════════════════
 #  DISPUTES
 # ═══════════════════════════════════════════════════
+
+class DisputeRequest(BaseModel):
+    message: Optional[str] = None
 
 class DisputeResponse(BaseModel):
     dispute_id:      int

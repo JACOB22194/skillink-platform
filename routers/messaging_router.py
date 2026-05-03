@@ -404,10 +404,14 @@ async def websocket_chat(
     await ws_manager.connect(user_id, websocket)
 
     # Send a welcome confirmation so the client knows it's live
-    await websocket.send_text(json.dumps({
-        "type":    "connected",
-        "payload": {"user_id": user_id, "message": "WebSocket connection established."},
-    }))
+    try:
+        await websocket.send_text(json.dumps({
+            "type":    "connected",
+            "payload": {"user_id": user_id, "message": "WebSocket connection established."},
+        }))
+    except Exception:
+        ws_manager.disconnect(user_id, websocket)
+        return
 
     # ── Message loop ───────────────────────────────────────────────
     try:

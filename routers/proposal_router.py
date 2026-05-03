@@ -412,3 +412,36 @@ def withdraw_proposal(
     db.delete(proposal)
     db.commit()
     return {"message": "Proposal withdrawn successfully."}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  PATCH /proposals/{proposal_id}  — Edit
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.patch(
+    "/{proposal_id}",
+    response_model=schema.ProposalResponse,
+    summary="Edit a pending proposal (freelancer only)",
+)
+def edit_proposal(
+    proposal_id: int,
+    body:        schema.ProposalUpdate,
+    me:          models.User = Depends(require_freelancer),
+    db:          Session     = Depends(get_db),
+):
+    freelancer = db.query(models.Freelancer).filter(models.Freelancer.user_id == me.id).first()
+    proposal = db.query(models.Proposal).filter(
+        models.Proposal.proposal_id   == proposal_id,
+        models.Proposal.freelancer_id == freelancer.freelancer_id,
+    ).first()
+    if not proposal:
+        raise HTTPException(404, "Proposal not found.")
+    if proposal.status != models.ProposalStatus.pending:
+        raise HTTPException(400, "Only pending proposals can be edited.")
+    if body.bid_amount is not None:
+        proposal.bid_amount = body.bid_amount
+    if body.cover_letter is not None:
+        proposal.cover_letter = body.cover_letter
+    db.commit()
+    db.refresh(proposal)
+    return proposal

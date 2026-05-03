@@ -61,6 +61,10 @@ class ContractStatus(str, enum.Enum):
     completed = "completed"
     disputed  = "disputed"
 
+class ContractType(str, enum.Enum):
+    fixed  = "fixed"
+    hourly = "hourly"
+
 class MilestoneStatus(str, enum.Enum):
     pending  = "pending"
     approved = "approved"
@@ -231,8 +235,9 @@ class Project(Base):
     budget       = Column(Float, index=True)
     sub_category = Column(String(150), nullable=True, index=True)   # AI primary output (e.g. "Logo Design")
     category     = Column(String(150), nullable=True, index=True)   # AI secondary output via sub_to_cat lookup (e.g. "Design")
-    status       = Column(Enum(ProjectStatus), default=ProjectStatus.open, index=True)
-    created_at   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    status        = Column(Enum(ProjectStatus), default=ProjectStatus.open, index=True)
+    contract_type = Column(Enum(ContractType), default=ContractType.fixed, nullable=True, index=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     client          = relationship("Client",         back_populates="projects")
     proposals       = relationship("Proposal",       back_populates="project", cascade="all, delete")
@@ -369,6 +374,26 @@ class Review(Base):
 
     project    = relationship("Project",    back_populates="reviews")
     freelancer = relationship("Freelancer", back_populates="reviews")
+    client     = relationship("Client")
+
+
+# ─────────────────────────────────────────
+#  TABLE: client_reviews  (freelancer → client)
+# ─────────────────────────────────────────
+
+class ClientReview(Base):
+    __tablename__ = "client_reviews"
+
+    review_id     = Column(Integer, primary_key=True, index=True)
+    contract_id   = Column(Integer, ForeignKey("contracts.contract_id"), unique=True, nullable=False, index=True)
+    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)
+    client_id     = Column(Integer, ForeignKey("clients.client_id"),         nullable=False, index=True)
+    rating        = Column(Integer, nullable=False)   # 1–5
+    comment       = Column(Text)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    contract   = relationship("Contract")
+    freelancer = relationship("Freelancer")
     client     = relationship("Client")
 
 

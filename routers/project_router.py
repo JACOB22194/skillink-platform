@@ -60,13 +60,14 @@ def create_project(
 
     # Create project
     project = models.Project(
-        client_id    = client.client_id,
-        title        = body.title,
-        description  = body.description,
-        budget       = body.budget,
-        sub_category = body.sub_category,
-        category     = body.category,
-        status       = models.ProjectStatus.open,
+        client_id     = client.client_id,
+        title         = body.title,
+        description   = body.description,
+        budget        = body.budget,
+        sub_category  = body.sub_category,
+        category      = body.category,
+        status        = models.ProjectStatus.open,
+        contract_type = models.ContractType(body.contract_type) if body.contract_type else models.ContractType.fixed,
     )
     db.add(project)
     db.flush()  # get project_id

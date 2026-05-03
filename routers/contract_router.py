@@ -383,7 +383,7 @@ def complete_contract(
 )
 def open_dispute(
     contract_id: int,
-    reason:      schema.MessageResponse = None,
+    reason:      schema.DisputeRequest = None,
     me:          models.User = Depends(get_current_user),
     db:          Session     = Depends(get_db),
 ):
@@ -551,6 +551,164 @@ def get_review(
     if not review:
         raise HTTPException(404, "No review found for this contract.")
     return review
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /contracts/{contract_id}/client-review  (freelancer → client)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/contracts/{contract_id}/client-review",
+    response_model=schema.ClientReviewResponse,
+    status_code=201,
+    summary="Freelancer reviews the client",
+)
+def submit_client_review(
+    contract_id: int,
+    body:        schema.ClientReviewCreate,
+    me:          models.User = Depends(get_current_user),
+    db:          Session     = Depends(get_db),
+):
+    contract = db.query(models.Contract).filter(
+        models.Contract.contract_id == contract_id
+    ).first()
+    if not contract:
+        raise HTTPException(404, "Contract not found.")
+    if contract.status != models.ContractStatus.completed:
+        raise HTTPException(400, "You can only review completed contracts.")
+
+    freelancer = db.query(models.Freelancer).filter(models.Freelancer.user_id == me.id).first()
+    if not freelancer or freelancer.freelancer_id != contract.freelancer_id:
+        raise HTTPException(403, "Only the freelancer on this contract can submit a client review.")
+
+    existing = db.query(models.ClientReview).filter(
+        models.ClientReview.contract_id == contract_id
+    ).first()
+    if existing:
+        raise HTTPException(409, "You have already reviewed this client.")
+
+    review = models.ClientReview(
+        contract_id   = contract_id,
+        freelancer_id = freelancer.freelancer_id,
+        client_id     = contract.project.client_id,
+        rating        = body.rating,
+        comment       = body.comment,
+    )
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+
+    notify(
+        db        = db,
+        user_id   = contract.project.client.user_id,
+        type      = models.NotificationType.review,
+        title     = f"You received a {body.rating}★ rating from your freelancer",
+        body      = body.comment[:80] if body.comment else f"{body.rating} out of 5 stars.",
+        entity_id = contract_id,
+    )
+    return review
+
+
+@router.get(
+    "/contracts/{contract_id}/client-review",
+    response_model=schema.ClientReviewResponse,
+    summary="Get the freelancer's review of the client",
+)
+def get_client_review(
+    contract_id: int,
+    me:          models.User = Depends(get_current_user),
+    db:          Session     = Depends(get_db),
+):
+    contract = db.query(models.Contract).filter(
+        models.Contract.contract_id == contract_id
+    ).first()
+    if not contract:
+        raise HTTPException(404, "Contract not found.")
+    _assert_contract_access(contract, me, db)
+    review = db.query(models.ClientReview).filter(
+        models.ClientReview.contract_id == contract_id
+    ).first()
+    if not review:
+        raise HTTPException(404, "No client review found for this contract.")
+    return review
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /contracts/{contract_id}/cancel  — Cancel before work starts
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/contracts/{contract_id}/cancel",
+    response_model=schema.MessageResponse,
+    summary="Cancel a contract before work starts",
+)
+def cancel_contract(
+    contract_id: int,
+    me:          models.User = Depends(get_current_user),
+    db:          Session     = Depends(get_db),
+):
+    contract = db.query(models.Contract).options(
+        joinedload(models.Contract.project),
+        joinedload(models.Contract.milestones),
+    ).filter(models.Contract.contract_id == contract_id).first()
+    if not contract:
+        raise HTTPException(404, "Contract not found.")
+
+    _assert_contract_access(contract, me, db)
+
+    if contract.status != models.ContractStatus.active:
+        raise HTTPException(400, "Only active contracts can be cancelled.")
+
+    # Block if any milestone has been approved/paid — work has started
+    started = any(m.status in (models.MilestoneStatus.approved, models.MilestoneStatus.paid)
+                  for m in contract.milestones)
+    if started:
+        raise HTTPException(400, "Cannot cancel — work has already started (milestones approved).")
+
+    # Determine who is cancelling and who to notify
+    freelancer = db.query(models.Freelancer).filter(
+        models.Freelancer.user_id == me.id
+    ).first()
+    client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+
+    is_client = client and contract.project.client_id == client.client_id
+    is_freelancer = freelancer and freelancer.freelancer_id == contract.freelancer_id
+
+    if not is_client and not is_freelancer and me.role != models.UserRole.admin:
+        raise HTTPException(403, "You do not have access to this contract.")
+
+    # Revert project to open so new proposals can come in
+    project = contract.project
+    project.status = models.ProjectStatus.open
+
+    # Revert the accepted proposal back to pending so client can re-select
+    accepted_proposal = db.query(models.Proposal).filter(
+        models.Proposal.project_id    == project.project_id,
+        models.Proposal.status        == models.ProposalStatus.accepted,
+    ).first()
+    if accepted_proposal:
+        accepted_proposal.status = models.ProposalStatus.rejected
+
+    db.delete(contract)
+    db.commit()
+
+    # Notify the other party
+    if is_client:
+        notify(db=db, user_id=contract.freelancer.user_id,
+               type=models.NotificationType.contract,
+               title="Contract cancelled by client",
+               body=f"The client cancelled contract #{contract_id} for '{project.title}'. The project is now open again.",
+               entity_id=contract_id)
+        actor = "client"
+    else:
+        notify(db=db, user_id=project.client.user_id,
+               type=models.NotificationType.contract,
+               title="Freelancer withdrew from contract",
+               body=f"The freelancer withdrew from contract #{contract_id} for '{project.title}'. The project is now open again.",
+               entity_id=contract_id)
+        actor = "freelancer"
+
+    return {"message": f"Contract #{contract_id} cancelled by {actor}. Project is now open for new proposals."}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

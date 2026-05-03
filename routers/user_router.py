@@ -385,6 +385,40 @@ def search_freelancers(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /freelancers/user/{user_id}  — Public profile by user ID
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@freelancer_router.get(
+    "/user/{user_id}",
+    response_model=schema.FreelancerSearchResult,
+    summary="Get a freelancer's public profile by user ID",
+)
+def get_freelancer_by_user(
+    user_id: int,
+    me:      models.User = Depends(get_current_user),
+    db:      Session     = Depends(get_db),
+):
+    freelancer = db.query(models.Freelancer).filter(
+        models.Freelancer.user_id == user_id
+    ).first()
+    if not freelancer:
+        raise HTTPException(404, "Freelancer profile not found.")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found.")
+    skill_names = [fs.skill.name for fs in freelancer.skills if fs.skill]
+    return schema.FreelancerSearchResult(
+        freelancer_id = freelancer.freelancer_id,
+        user_id       = user_id,
+        email         = user.email,
+        bio           = freelancer.bio,
+        hourly_rate   = freelancer.hourly_rate,
+        success_score = freelancer.success_score or 0.0,
+        skills        = skill_names,
+    )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  GET /users/companies/search?q=   ✅ NEW
 #  Public endpoint — no auth needed (used on register page)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
