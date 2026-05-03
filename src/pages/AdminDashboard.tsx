@@ -164,7 +164,10 @@ const AdminDashboard: React.FC = () => {
   const [aiMetrics, setAiMetrics] = useState<any>(null);
   const [disputes, setDisputes] = useState<any[]>([]);
   const [revenue, setRevenue] = useState<any>(null);
-  
+  const [resolveModal, setResolveModal] = useState<{ id: number; contractId: number } | null>(null);
+  const [resolveForm, setResolveForm] = useState({ resolution: "release_to_freelancer", note: "", split: "" });
+  const [resolveLoading, setResolveLoading] = useState(false);
+
   const c = getColors(darkMode);
 
   useEffect(() => {
@@ -278,6 +281,29 @@ const AdminDashboard: React.FC = () => {
     } catch (err) {
       console.error(`Failed to ${action} verification`, err);
     }
+  };
+
+  const submitResolve = async () => {
+    if (!resolveModal || !resolveForm.note.trim()) return;
+    setResolveLoading(true);
+    try {
+      const body: any = { resolution: resolveForm.resolution, note: resolveForm.note };
+      if (resolveForm.resolution === "split" && resolveForm.split) body.split_percentage = parseFloat(resolveForm.split);
+      const res = await fetch(`${API_BASE_URL}/admin/disputes/${resolveModal.id}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders().headers },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setResolveModal(null);
+        setResolveForm({ resolution: "release_to_freelancer", note: "", split: "" });
+        const data = await fetch(`${API_BASE_URL}/admin/disputes`, getAuthHeaders()).then(r => r.json());
+        setDisputes(data || []);
+      }
+    } catch (err) {
+      console.error("Failed to resolve dispute", err);
+    }
+    setResolveLoading(false);
   };
 
   const toggleTheme = () => {
@@ -757,7 +783,7 @@ const AdminDashboard: React.FC = () => {
             <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, marginBottom: 16 }}>Open Disputes</div>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead><tr>{["Dispute ID", "Contract", "Initiator", "Reason", "Status", "Opened"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <thead><tr>{["ID", "Contract", "Initiator", "Reason", "Status", "Opened", "Action"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
                 <tbody>
                   {disputes.map((d: any) => (
                     <tr key={d.id}>
@@ -766,15 +792,55 @@ const AdminDashboard: React.FC = () => {
                       <td style={tdStyle}>{d.initiator}</td>
                       <td style={{...tdStyle, fontSize: 11}}>{d.reason?.substring(0, 40) || "N/A"}</td>
                       <td style={tdStyle}><Badge bg={d.status==="open"?"rgba(239,68,68,.1)":"rgba(34,197,94,.12)"} color={d.status==="open"?"#ef4444":"#22c55e"} border={d.status==="open"?"rgba(239,68,68,.2)":"rgba(34,197,94,.2)"} style={{margin:0}}>{d.status}</Badge></td>
-                      <td style={tdStyle}>{new Date(d.opened_at).toLocaleDateString()}</td>
+                      <td style={tdStyle}>{d.opened_at ? new Date(d.opened_at).toLocaleDateString() : "—"}</td>
+                      <td style={tdStyle}>
+                        {d.status === "open" && (
+                          <button onClick={() => setResolveModal({ id: d.id, contractId: d.contract_id })} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: c.primarySoft, color: c.primary, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Resolve</button>
+                        )}
+                        {d.status === "resolved" && <span style={{ fontSize: 11, color: c.subtext }}>{d.resolution_note?.substring(0, 30) || "Resolved"}</span>}
+                      </td>
                     </tr>
                   ))}
-                  {disputes.length === 0 && <tr><td colSpan={6} style={{...tdStyle, textAlign: "center", color: c.subtext}}>No disputes.</td></tr>}
+                  {disputes.length === 0 && <tr><td colSpan={7} style={{...tdStyle, textAlign: "center", color: c.subtext}}>No disputes.</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
         </main>
+
+        {/* Resolve Dispute Modal */}
+        {resolveModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 16, padding: 28, width: 420, maxWidth: "90vw" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 4 }}>Resolve Dispute #{resolveModal.id}</div>
+              <div style={{ fontSize: 12, color: c.subtext, marginBottom: 20 }}>Contract #{resolveModal.contractId}</div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em" }}>Resolution</label>
+                <select value={resolveForm.resolution} onChange={e => setResolveForm(f => ({...f, resolution: e.target.value}))} style={{ display: "block", width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 13 }}>
+                  <option value="release_to_freelancer">Release to Freelancer</option>
+                  <option value="refund_to_client">Refund to Client</option>
+                  <option value="split">Split</option>
+                </select>
+              </div>
+              {resolveForm.resolution === "split" && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em" }}>Freelancer % (0–100)</label>
+                  <input type="number" min="0" max="100" value={resolveForm.split} onChange={e => setResolveForm(f => ({...f, split: e.target.value}))} placeholder="e.g. 50" style={{ display: "block", width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 13 }} />
+                </div>
+              )}
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em" }}>Resolution Note</label>
+                <textarea value={resolveForm.note} onChange={e => setResolveForm(f => ({...f, note: e.target.value}))} placeholder="Explain the resolution decision..." rows={3} style={{ display: "block", width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 13, resize: "vertical" }} />
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setResolveModal(null)} style={{ flex: 1, padding: "9px", borderRadius: 8, border: `1px solid ${c.border}`, background: "transparent", color: c.subtext, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+                <button onClick={submitResolve} disabled={resolveLoading || !resolveForm.note.trim()} style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: c.primary, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, opacity: resolveLoading || !resolveForm.note.trim() ? 0.6 : 1 }}>
+                  {resolveLoading ? "Resolving…" : "Confirm"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Right Panel ── */}
         <aside style={{ width: 220, borderLeft: `0.5px solid ${c.border}`, background: c.surface, padding: 16, overflowY: "auto", flexShrink: 0 }}>

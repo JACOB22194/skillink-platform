@@ -21,6 +21,7 @@ import { ProposalsPage }       from "./pages/ProposalsPage";
 import { ClientProposalsPage } from "./pages/ClientProposalsPage";
 import { ContractPage }        from "./pages/ContractPage";
 import { ContractsListPage }   from "./pages/ContractsListPage";
+import { FreelancerProfilePage } from "./pages/FreelancerProfilePage";
 
 const App = () => {
   return (
@@ -38,6 +39,9 @@ const App = () => {
         {/* ── Forgot / Reset Password ── */}
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password"  element={<ForgotPasswordPage />} />
+
+        {/* ── Freelancer Public Profile ── */}
+        <Route path="/freelancer/:userId" element={<FreelancerProfilePage />} />
 
         {/* ── Proposals ── */}
         <Route

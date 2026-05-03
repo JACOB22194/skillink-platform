@@ -4,7 +4,7 @@
  * Shows all proposals submitted + allows submitting new ones
  */
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
@@ -156,6 +156,68 @@ const SubmitModal: React.FC<{
   );
 };
 
+// ── Edit Proposal Modal ───────────────────────────────────────────────────────
+
+const EditModal: React.FC<{
+  proposal: Proposal;
+  onClose: () => void;
+  onSuccess: () => void;
+}> = ({ proposal, onClose, onSuccess }) => {
+  const [bid, setBid]       = useState(String(proposal.bid_amount));
+  const [letter, setLetter] = useState(proposal.cover_letter ?? "");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]       = useState("");
+
+  const submit = async () => {
+    const amount = parseFloat(bid);
+    if (!amount || amount < 1) { setErr("Bid must be at least $1"); return; }
+    setLoading(true); setErr("");
+    try {
+      const r = await fetch(`${API}/proposals/${proposal.proposal_id}`, {
+        method: "PATCH",
+        headers: { ...auth().headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ bid_amount: amount, cover_letter: letter || null }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "Failed"); }
+      onSuccess();
+    } catch (e: any) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000000cc", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 32, width: "100%", maxWidth: 520 }}>
+        <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>Edit Proposal</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 20 }}>Update Your Bid</div>
+
+        <label style={{ display: "block", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Your Bid Amount (USD)</div>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: T.sub, fontSize: 14 }}>$</span>
+            <input type="number" value={bid} onChange={e => setBid(e.target.value)} min={1}
+              style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px 12px 28px", color: T.text, fontSize: 16, fontWeight: 600, outline: "none", boxSizing: "border-box" }} />
+          </div>
+        </label>
+
+        <label style={{ display: "block", marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Cover Letter <span style={{ color: T.border }}>(optional)</span></div>
+          <textarea value={letter} onChange={e => setLetter(e.target.value)} rows={5}
+            style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box" }} />
+        </label>
+
+        {err && <div style={{ background: T.redSoft, border: `1px solid ${T.red}33`, borderRadius: 8, padding: "10px 14px", color: T.red, fontSize: 13, marginBottom: 16 }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+          <button onClick={submit} disabled={loading} style={{ flex: 2, padding: "12px", background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, opacity: loading ? 0.7 : 1 }}>
+            {loading ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Withdraw Confirm ──────────────────────────────────────────────────────────
 
 const WithdrawConfirm: React.FC<{ id: number; onClose: () => void; onDone: () => void }> = ({ id, onClose, onDone }) => {
@@ -186,14 +248,20 @@ const WithdrawConfirm: React.FC<{ id: number; onClose: () => void; onDone: () =>
 
 export const ProposalsPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [proposals, setProposals]       = useState<Proposal[]>([]);
   const [openProjects, setOpenProjects] = useState<Project[]>([]);
   const [tab, setTab]                   = useState<"my" | "browse">("my");
   const [submitFor, setSubmitFor]       = useState<Project | null>(null);
   const [withdrawId, setWithdrawId]     = useState<number | null>(null);
+  const [editProposal, setEditProposal] = useState<Proposal | null>(null);
+  const [filterText, setFilterText]     = useState("");
+  const [filterMin, setFilterMin]       = useState("");
+  const [filterMax, setFilterMax]       = useState("");
   const [loading, setLoading]           = useState(true);
   const [projLoading, setProjLoading]   = useState(false);
   const [toast, setToast]               = useState<{ msg: string; ok: boolean } | null>(null);
+  const applyProjectId = searchParams.get("apply") ? Number(searchParams.get("apply")) : null;
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -222,6 +290,15 @@ export const ProposalsPage: React.FC = () => {
 
   useEffect(() => { fetchMyProposals(); }, [fetchMyProposals]);
   useEffect(() => { if (tab === "browse") fetchOpenProjects(); }, [tab, fetchOpenProjects]);
+  useEffect(() => {
+    if (applyProjectId) { setTab("browse"); }
+  }, [applyProjectId]);
+  useEffect(() => {
+    if (applyProjectId && openProjects.length > 0 && !submitFor) {
+      const p = openProjects.find((x: Project) => x.project_id === applyProjectId);
+      if (p) setSubmitFor(p);
+    }
+  }, [applyProjectId, openProjects, submitFor]);
 
   const stats = {
     total: proposals.length,
@@ -323,9 +400,14 @@ export const ProposalsPage: React.FC = () => {
                       </button>
                     )}
                     {p.status === "pending" && (
-                      <button onClick={() => setWithdrawId(p.proposal_id)} style={{ marginLeft: "auto", padding: "6px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 8, color: T.red, fontSize: 11, cursor: "pointer" }}>
-                        Withdraw
-                      </button>
+                      <>
+                        <button onClick={() => setEditProposal(p)} style={{ padding: "6px 14px", background: "transparent", border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontSize: 11, cursor: "pointer" }}>
+                          Edit
+                        </button>
+                        <button onClick={() => setWithdrawId(p.proposal_id)} style={{ marginLeft: "auto", padding: "6px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 8, color: T.red, fontSize: 11, cursor: "pointer" }}>
+                          Withdraw
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -338,6 +420,29 @@ export const ProposalsPage: React.FC = () => {
       {/* Browse Projects Tab */}
       {tab === "browse" && (
         <div>
+          {/* Filters */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+            <input
+              placeholder="Search by title or description…"
+              value={filterText} onChange={e => setFilterText(e.target.value)}
+              style={{ flex: "2 1 200px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", color: T.text, fontSize: 13, outline: "none" }}
+            />
+            <input
+              type="number" placeholder="Min $" value={filterMin} onChange={e => setFilterMin(e.target.value)}
+              style={{ flex: "1 1 80px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontSize: 13, outline: "none" }}
+            />
+            <input
+              type="number" placeholder="Max $" value={filterMax} onChange={e => setFilterMax(e.target.value)}
+              style={{ flex: "1 1 80px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontSize: 13, outline: "none" }}
+            />
+            {(filterText || filterMin || filterMax) && (
+              <button onClick={() => { setFilterText(""); setFilterMin(""); setFilterMax(""); }}
+                style={{ padding: "10px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 12 }}>
+                Clear
+              </button>
+            )}
+          </div>
+
           {projLoading ? (
             <div style={{ textAlign: "center", padding: 60, color: T.sub }}>Finding open projects…</div>
           ) : openProjects.length === 0 ? (
@@ -348,7 +453,11 @@ export const ProposalsPage: React.FC = () => {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {openProjects.map(proj => (
+              {openProjects
+                .filter((p: Project) => !filterText || p.title.toLowerCase().includes(filterText.toLowerCase()) || (p.description ?? "").toLowerCase().includes(filterText.toLowerCase()))
+                .filter((p: Project) => !filterMin || p.budget >= Number(filterMin))
+                .filter((p: Project) => !filterMax || p.budget <= Number(filterMax))
+                .map((proj: Project) => (
                 <div key={proj.project_id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
                     <div>
@@ -392,6 +501,13 @@ export const ProposalsPage: React.FC = () => {
           id={withdrawId}
           onClose={() => setWithdrawId(null)}
           onDone={() => { setWithdrawId(null); fetchMyProposals(); showToast("Proposal withdrawn.", false); }}
+        />
+      )}
+      {editProposal && (
+        <EditModal
+          proposal={editProposal}
+          onClose={() => setEditProposal(null)}
+          onSuccess={() => { setEditProposal(null); fetchMyProposals(); showToast("Proposal updated!"); }}
         />
       )}
     </div>

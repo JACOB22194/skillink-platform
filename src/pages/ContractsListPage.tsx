@@ -66,8 +66,9 @@ export const ContractsListPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'Plus Jakarta Sans', sans-serif", padding: "32px 24px", maxWidth: 800, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap'); *{box-sizing:border-box} button{font-family:inherit}`}</style>
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 24px" }}>
 
       <button onClick={() => navigate(-1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 28 }}>← Back</button>
 
@@ -141,6 +142,7 @@ export const ContractsListPage: React.FC = () => {
           })}
         </div>
       )}
+      </div>
     </div>
   );
 };

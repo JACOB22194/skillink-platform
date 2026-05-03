@@ -186,12 +186,56 @@ const SecurityTab: React.FC<{ c: C }> = ({ c }) => {
   );
 };
 
+interface WalletTx { transaction_id: number; amount: number; type: string; description: string; created_at: string; }
+
 const PaymentTab: React.FC<{ c: C }> = ({ c }) => {
-  const { data: profile, isLoading } = useProfile();
+  const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+  const auth = () => ({ Authorization: `Bearer ${localStorage.getItem("access_token")}` });
+
+  const { data: profile, isLoading, refetch } = useProfile();
+  const [amount, setAmount]   = useState("");
+  const [txs, setTxs]         = useState<WalletTx[]>([]);
+  const [txLoading, setTxLoading] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [msg, setMsg]         = useState<{ text: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    setTxLoading(true);
+    fetch(`${API}/wallet/transactions`, { headers: auth() })
+      .then(r => r.ok ? r.json() : [])
+      .then(setTxs)
+      .finally(() => setTxLoading(false));
+  }, []);
+
+  const withdraw = async () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt < 5) { setMsg({ text: "Minimum withdrawal is $5.00", ok: false }); return; }
+    setWithdrawing(true); setMsg(null);
+    try {
+      const r = await fetch(`${API}/wallet/withdraw`, {
+        method: "POST",
+        headers: { ...auth(), "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amt }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail);
+      setMsg({ text: d.message, ok: true });
+      setAmount("");
+      refetch();
+      const tr = await fetch(`${API}/wallet/transactions`, { headers: auth() });
+      if (tr.ok) setTxs(await tr.json());
+    } catch (e: any) {
+      setMsg({ text: e.message, ok: false });
+    } finally { setWithdrawing(false); }
+  };
+
+  const inputStyle: React.CSSProperties = { padding: "10px 12px", fontSize: 14, border: `0.5px solid ${c.inputBorder}`, borderRadius: 8, background: c.inputBg, color: c.text, fontFamily: "inherit", outline: "none", boxSizing: "border-box" as const };
+
   return (
     <div>
       <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>Payment & Withdrawal</h2>
 
+      {/* Balance */}
       <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem" }}>
         <div style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Wallet Balance</div>
         {isLoading
@@ -200,9 +244,39 @@ const PaymentTab: React.FC<{ c: C }> = ({ c }) => {
         }
       </div>
 
-      <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.25rem", textAlign: "center" }}>
-        <div style={{ fontSize: 14, color: c.subtext, marginBottom: 8 }}>Withdrawal methods coming soon.</div>
-        <div style={{ fontSize: 12, color: c.subtext }}>Bank transfer, PayPal, and crypto withdrawals are in development.</div>
+      {/* Withdraw form */}
+      <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem" }}>
+        <div style={{ fontSize: 15, fontWeight: 500, color: c.text, marginBottom: "1rem" }}>Withdraw Funds</div>
+        {msg && <Alert type={msg.ok ? "success" : "error"} msg={msg.text} c={c} />}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: "0.75rem" }}>
+          <span style={{ color: c.subtext, fontSize: 14 }}>$</span>
+          <input type="number" min={5} step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
+            placeholder="0.00" style={{ ...inputStyle, width: 140 }} />
+          <span style={{ fontSize: 12, color: c.subtext }}>min. $5.00</span>
+        </div>
+        <button onClick={withdraw} disabled={withdrawing} style={{ padding: "10px 24px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: withdrawing ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: withdrawing ? 0.7 : 1 }}>
+          {withdrawing ? "Processing…" : "Withdraw"}
+        </button>
+      </div>
+
+      {/* Transaction history */}
+      <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ padding: "1rem 1.25rem", borderBottom: `0.5px solid ${c.border}`, fontSize: 15, fontWeight: 500, color: c.text }}>Transaction History</div>
+        {txLoading ? (
+          <div style={{ padding: "1.5rem", textAlign: "center", color: c.subtext, fontSize: 13 }}>Loading…</div>
+        ) : txs.length === 0 ? (
+          <div style={{ padding: "1.5rem", textAlign: "center", color: c.subtext, fontSize: 13 }}>No transactions yet.</div>
+        ) : txs.map((tx, i) => (
+          <div key={tx.transaction_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 1.25rem", borderBottom: i < txs.length - 1 ? `0.5px solid ${c.border}` : "none" }}>
+            <div>
+              <div style={{ fontSize: 13, color: c.text, fontWeight: 500 }}>{tx.description}</div>
+              <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>{new Date(tx.created_at).toLocaleDateString()}</div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: tx.type === "withdraw" ? "#f05070" : "#22d3a0" }}>
+              {tx.type === "withdraw" ? "-" : "+"}${tx.amount.toFixed(2)}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

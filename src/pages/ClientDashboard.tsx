@@ -1600,7 +1600,7 @@ const ClientDashboard: React.FC = () => {
                               <td style={{ ...tdBorder }}>{proj ? fmt(proj.budget) : "—"}</td>
                               <td style={tdBorder}><Badge bg={cs.bg} color={cs.color} border={cs.border} style={{ margin: 0 }}>{ct.status}</Badge></td>
                               <td style={{ ...tdBorder, color: c.subtext }}>{new Date(ct.created_at).toLocaleDateString()}</td>
-                              <td style={tdBorder}><span onClick={() => navigate(`/workroom/${ct.contract_id}`)} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>Workroom →</span></td>
+                              <td style={tdBorder}><span onClick={() => navigate(`/contract/${ct.contract_id}`)} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>Workroom →</span></td>
                             </tr>
                           );
                         })}

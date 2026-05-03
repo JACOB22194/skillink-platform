@@ -190,7 +190,7 @@ const ProposalCard: React.FC<{
         {proposal.cover_letter && (
           <div>
             <div style={{ fontSize: 12, color: T.sub, marginBottom: 6 }}>Cover Letter</div>
-            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.7, borderLeft: `3px solid ${T.accent}55`, paddingLeft: 12, color: T.sub }}>
+            <div style={{ fontSize: 13, lineHeight: 1.7, borderLeft: `3px solid ${T.accent}55`, paddingLeft: 12, color: T.sub }}>
               {expanded || proposal.cover_letter.length <= 180
                 ? proposal.cover_letter
                 : proposal.cover_letter.slice(0, 180) + "…"}

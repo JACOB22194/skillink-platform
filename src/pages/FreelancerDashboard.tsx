@@ -273,10 +273,29 @@ const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
                     <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5 }}>
                       Budget: <strong style={{ color: c.text }}>${p.budget.toLocaleString()}</strong>
                     </div>
-                    {expandedId === p.project_id
-                      ? <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 6 }}>{p.description}</div>
-                      : <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{p.description}</div>
-                    }
+                    {expandedId === p.project_id ? (
+                      <>
+                        <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 10 }}>{p.description}</div>
+                        <div style={{ marginBottom: 8 }}>
+                          <div style={{ fontSize: 10, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>Score Breakdown</div>
+                          {[
+                            { label: "Text Relevance", val: p.text_score },
+                            { label: "Skill Match",    val: p.skill_score },
+                            { label: "GitHub Quality", val: p.quality_score },
+                          ].map(({ label, val }) => (
+                            <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                              <div style={{ fontSize: 10, color: c.subtext, width: 100, flexShrink: 0 }}>{label}</div>
+                              <div style={{ flex: 1, height: 4, background: c.border, borderRadius: 4, overflow: "hidden" }}>
+                                <div style={{ width: `${Math.round(val * 100)}%`, height: "100%", background: c.primary, borderRadius: 4 }} />
+                              </div>
+                              <div style={{ fontSize: 10, color: c.primary, width: 28, textAlign: "right" }}>{Math.round(val * 100)}%</div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{p.description}</div>
+                    )}
                     {p.matched_skills.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
                         {p.matched_skills.map(s => (
@@ -286,7 +305,7 @@ const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
                     )}
                     <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
                       <button
-                        onClick={() => navigate(`/projects/${p.project_id}`)}
+                        onClick={() => navigate(`/proposals?apply=${p.project_id}`)}
                         style={{ fontSize: 11, padding: "5px 14px", borderRadius: 8, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}
                       >Apply →</button>
                       <button
@@ -952,6 +971,11 @@ const FreelancerDashboard: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [proposalStats, setProposalStats] = useState<{ sent: number; accepted: number; rejected: number; response_rate: number } | null>(null);
   const [activeContracts, setActiveContracts] = useState<WorkContract[]>([]);
+  const [showWallet, setShowWallet] = useState(false);
+  const [walletAmount, setWalletAmount] = useState("");
+  const [walletMsg, setWalletMsg] = useState("");
+  const [walletTx, setWalletTx] = useState<any[]>([]);
+  const [walletLoading, setWalletLoading] = useState(false);
   const c = getColors(darkMode);
 
   const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
@@ -960,6 +984,32 @@ const FreelancerDashboard: React.FC = () => {
 
   const toggleTheme = () => {
     setDarkMode((d) => { localStorage.setItem("skilllink-darkMode", JSON.stringify(!d)); return !d; });
+  };
+
+  const openWallet = async () => {
+    setShowWallet(true);
+    setWalletMsg("");
+    const data = await fetch(`${API_BASE_URL}/wallet/transactions`, getAuthHeaders()).then(r => r.json()).catch(() => []);
+    setWalletTx(Array.isArray(data) ? data : []);
+  };
+
+  const doWithdraw = async () => {
+    const amt = parseFloat(walletAmount);
+    if (!amt || amt < 5) { setWalletMsg("Minimum $5.00"); return; }
+    setWalletLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/wallet/withdraw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders().headers },
+        body: JSON.stringify({ amount: amt }),
+      });
+      const d = await res.json();
+      setWalletMsg(d.message || d.detail || "Done");
+      setWalletAmount("");
+      const tx = await fetch(`${API_BASE_URL}/wallet/transactions`, getAuthHeaders()).then(r => r.json()).catch(() => []);
+      setWalletTx(Array.isArray(tx) ? tx : []);
+    } catch { setWalletMsg("Request failed"); }
+    setWalletLoading(false);
   };
 
   // Fetch unread message count
@@ -1141,7 +1191,11 @@ const FreelancerDashboard: React.FC = () => {
                     label="Wallet Balance"
                     value={`$${profile?.wallet_balance?.toFixed(2) ?? "0.00"}`}
                     sub="Available balance"
-                    badge={<Badge bg={c.primarySoft} color={c.primary} border="rgba(127,119,221,.2)">· Withdraw coming soon</Badge>}
+                    badge={
+                      <button onClick={openWallet} style={{ marginTop: 4, padding: "4px 10px", borderRadius: 6, border: "none", background: c.primarySoft, color: c.primary, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                        Withdraw →
+                      </button>
+                    }
                     colors={c}
                   />
                   <MetricCard
@@ -1307,6 +1361,42 @@ const FreelancerDashboard: React.FC = () => {
           </aside>
         </div>
       </div>
+
+      {/* Wallet Modal */}
+      {showWallet && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 18, padding: 28, width: 420, maxWidth: "92vw", maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: c.text }}>Wallet</div>
+              <button onClick={() => setShowWallet(false)} style={{ background: "none", border: "none", color: c.subtext, fontSize: 18, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: "#22c55e", marginBottom: 4 }}>${profile?.wallet_balance?.toFixed(2) ?? "0.00"}</div>
+            <div style={{ fontSize: 12, color: c.subtext, marginBottom: 20 }}>Available balance</div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em" }}>Withdraw Amount (min $5)</label>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <input type="number" min="5" value={walletAmount} onChange={e => setWalletAmount(e.target.value)} placeholder="0.00" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 14 }} />
+                <button onClick={doWithdraw} disabled={walletLoading} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#22c55e", color: "#fff", fontWeight: 700, cursor: walletLoading ? "not-allowed" : "pointer", opacity: walletLoading ? 0.6 : 1, fontSize: 13 }}>
+                  {walletLoading ? "…" : "Withdraw"}
+                </button>
+              </div>
+              {walletMsg && <div style={{ marginTop: 8, fontSize: 12, color: walletMsg.includes("fail") || walletMsg.includes("Min") ? "#ef4444" : "#22c55e" }}>{walletMsg}</div>}
+            </div>
+            <div style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Transaction History</div>
+            {walletTx.length === 0 ? (
+              <div style={{ fontSize: 12, color: c.subtext, opacity: .6 }}>No transactions yet.</div>
+            ) : walletTx.map((tx: any) => (
+              <div key={tx.transaction_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `0.5px solid ${c.border}` }}>
+                <div>
+                  <div style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{tx.description || (tx.type === "deposit" ? "Payment received" : "Withdrawal")}</div>
+                  <div style={{ fontSize: 10, color: c.subtext }}>{tx.created_at ? new Date(tx.created_at).toLocaleDateString() : ""}</div>
+                </div>
+                <div style={{ fontWeight: 700, color: tx.type === "deposit" ? "#22c55e" : "#ef4444", fontSize: 13 }}>{tx.type === "deposit" ? "+" : "−"}${tx.amount?.toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </ErrorBoundary>
   );
 };

@@ -103,6 +103,7 @@ const PostProjectPage: React.FC = () => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [budget, setBudget] = useState("");
+  const [contractType, setContractType] = useState<"fixed" | "hourly">("fixed");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [extraLabels, setExtraLabels] = useState<string[]>([]);
   const [removedPrimaryLabel, setRemovedPrimaryLabel] = useState(false);
@@ -241,6 +242,7 @@ const PostProjectPage: React.FC = () => {
           required_skills: (analysisResult?.label && !removedPrimaryLabel) ? [analysisResult.label, ...extraLabels] : extraLabels,
           sub_category: removedPrimaryLabel ? null : (analysisResult?.label || null),
           category: removedPrimaryLabel ? null : (analysisResult?.category || null),
+          contract_type: contractType,
         })
       });
 
@@ -346,8 +348,19 @@ const PostProjectPage: React.FC = () => {
               />
 
               <div style={{ marginBottom: "1.5rem" }}>
+                <label style={{ display: "block", fontSize: 14, fontWeight: 500, color: colors.text, marginBottom: "0.5rem" }}>Contract Type</label>
+                <div style={{ display: "flex", gap: 10 }}>
+                  {(["fixed", "hourly"] as const).map(t => (
+                    <button key={t} onClick={() => setContractType(t)} type="button" style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1.5px solid ${contractType === t ? colors.primary : colors.border}`, background: contractType === t ? (darkMode ? "#2a2640" : "#EEEDFE") : "transparent", color: contractType === t ? colors.primary : colors.subtext, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
+                      {t === "fixed" ? "Fixed Price" : "Hourly Rate"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "1.5rem" }}>
                 <label style={{ display: "block", fontSize: 14, fontWeight: 500, color: colors.text, marginBottom: "0.5rem" }}>
-                  Budget (minimum $10)
+                  {contractType === "hourly" ? "Hourly Budget Cap (minimum $10)" : "Budget (minimum $10)"}
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                   <span style={{ color: colors.subtext, fontSize: 16 }}>$</span>
