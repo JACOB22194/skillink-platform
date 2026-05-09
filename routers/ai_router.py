@@ -36,13 +36,15 @@ HOW AI CALLS WORK:
 """
 
 import os
+import json
 import httpx
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -63,6 +65,28 @@ UPLOAD_DIR     = os.getenv("UPLOAD_DIR", "uploads")
 # ════════════════════════════════════════════════════════════════════
 #  AI ENDPOINTS
 # ════════════════════════════════════════════════════════════════════
+
+class OptimizeBioPayload(BaseModel):
+    bio: str = ""
+    skills: List[str] = []
+
+@router.post("/ai/optimize-bio", summary="Optimize freelancer bio using AI")
+def optimize_bio(
+    payload: OptimizeBioPayload,
+    me: models.User = Depends(get_current_user),
+):
+    try:
+        response = httpx.post(
+            f"{AI_SERVICE_URL}/optimize-bio",
+            json={"bio": payload.bio, "skills": payload.skills},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error("optimize-bio failed: %s", e)
+        raise HTTPException(status_code=503, detail="Could not reach AI service. Try again.")
+
 
 @router.get(
     "/projects/{project_id}/ai-match",
@@ -172,6 +196,26 @@ def ai_match_freelancers(
             )
             for m in ai_data.get("matches", [])
         ]
+        # Cache results so freelancers can see their matches in /recommend/my-matches
+        try:
+            db.query(models.Recommendation).filter(
+                models.Recommendation.project_id == project_id
+            ).delete()
+            for m in ai_data.get("matches", []):
+                db.add(models.Recommendation(
+                    project_id    = project_id,
+                    freelancer_id = m["freelancer_id"],
+                    match_score   = m.get("match_score", 0),
+                    text_score    = m.get("text_score", 0),
+                    skill_score   = m.get("skill_score", 0),
+                    quality_score = m.get("quality_score", 0),
+                    matched_skills= json.dumps(m.get("matched_skills", [])),
+                ))
+            db.commit()
+        except Exception as cache_exc:
+            logger.warning("Failed to cache recommendations: %s", cache_exc)
+            db.rollback()
+
         return schema.AIMatchResponse(project_id=project_id, matches=matches, source="ai")
 
     except Exception as exc:

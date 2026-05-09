@@ -76,6 +76,7 @@ class MatchedProject(BaseModel):
     title:          str
     description:    str
     budget:         float
+    contract_type:  str
     match_score:    float
     matched_skills: list[str]
     text_score:     float
@@ -402,13 +403,17 @@ def get_cached_recommendations(
 
 @router.get("/my-matches", response_model=FreelancerMatchResponse)
 def get_my_project_matches(
-    top_k: int         = Query(default=10, ge=1, le=20),
-    me:    models.User = Depends(require_freelancer),
-    db:    Session     = Depends(get_db),
+    top_k:         int            = Query(default=10, ge=1, le=20),
+    min_budget:    Optional[float] = Query(default=None, ge=0),
+    max_budget:    Optional[float] = Query(default=None, ge=0),
+    contract_type: Optional[str]   = Query(default=None),
+    me:            models.User    = Depends(require_freelancer),
+    db:            Session        = Depends(get_db),
 ):
     """
     Return open projects that best match the current freelancer, drawn from
     cached client-triggered recommendations (fast — no AI call required).
+    Supports optional filters: min_budget, max_budget, contract_type.
     """
     t0 = time.perf_counter()
 
@@ -420,15 +425,21 @@ def get_my_project_matches(
     if not freelancer:
         raise HTTPException(status_code=404, detail="Freelancer profile not found.")
 
-    recs = (
+    query = (
         db.query(models.Recommendation)
         .join(models.Project, models.Recommendation.project_id == models.Project.project_id)
         .filter(models.Recommendation.freelancer_id == freelancer.freelancer_id)
         .filter(models.Project.status == models.ProjectStatus.open)
-        .order_by(models.Recommendation.match_score.desc())
-        .limit(top_k)
-        .all()
     )
+
+    if min_budget is not None:
+        query = query.filter(models.Project.budget >= min_budget)
+    if max_budget is not None:
+        query = query.filter(models.Project.budget <= max_budget)
+    if contract_type and contract_type in ("fixed", "hourly"):
+        query = query.filter(models.Project.contract_type == contract_type)
+
+    recs = query.order_by(models.Recommendation.match_score.desc()).limit(top_k).all()
 
     matches = []
     for rec in recs:
@@ -442,6 +453,7 @@ def get_my_project_matches(
             title          = project.title,
             description    = (project.description or "")[:300],
             budget         = float(project.budget or 0),
+            contract_type  = (project.contract_type.value if project.contract_type else "fixed"),
             match_score    = rec.match_score,
             matched_skills = json.loads(rec.matched_skills or "[]"),
             text_score     = rec.text_score,
