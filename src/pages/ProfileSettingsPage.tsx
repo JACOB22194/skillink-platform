@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { API_BASE_URL, getAuthHeaders } from "../shared/api";
+import type { AvailabilityStatus } from "../api/types";
 
 interface ThemeColors {
   bg: string;
@@ -60,12 +61,15 @@ const ProfileSettingsPage: React.FC = () => {
   const [skills, setSkills]         = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState("");
   const [parsed, setParsed]         = useState<ParsedGitHub | null>(null);
+  const [availability, setAvailability] = useState<AvailabilityStatus>("available");
 
   const [parsing, setParsing]         = useState(false);
   const [saving, setSaving]           = useState(false);
+  const [optimizing, setOptimizing]   = useState(false);
   const [parseError, setParseError]   = useState("");
   const [saveError, setSaveError]     = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [optimizeMsg, setOptimizeMsg] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -73,9 +77,10 @@ const ProfileSettingsPage: React.FC = () => {
         const res = await fetch(`${API_BASE_URL}/users/me/profile`, getAuthHeaders());
         if (res.ok) {
           const data = await res.json();
-          if (data.bio)         setBio(data.bio);
-          if (data.hourly_rate) setHourlyRate(String(data.hourly_rate));
-          if (data.skills)      setSkills(data.skills);
+          if (data.bio)                 setBio(data.bio);
+          if (data.hourly_rate)         setHourlyRate(String(data.hourly_rate));
+          if (data.skills)              setSkills(data.skills);
+          if (data.availability_status) setAvailability(data.availability_status);
         }
       } catch {}
     };
@@ -119,14 +124,36 @@ const ProfileSettingsPage: React.FC = () => {
 
   const removeSkill = (skill: string) => setSkills(prev => prev.filter(s => s !== skill));
 
+  const handleOptimizeBio = async () => {
+    if (!bio.trim() && skills.length === 0) return;
+    setOptimizing(true);
+    setOptimizeMsg("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/ai/optimize-bio`, {
+        method: "POST",
+        headers: { ...getAuthHeaders().headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ bio, skills }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setBio(data.optimized_bio);
+      setOptimizeMsg("Bio optimized — review and save when ready.");
+    } catch {
+      setOptimizeMsg("Could not reach AI service. Try again.");
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSaveError("");
     setSaveSuccess(false);
     try {
       const params = new URLSearchParams();
-      if (bio)        params.append("bio", bio);
-      if (hourlyRate) params.append("hourly_rate", hourlyRate);
+      if (bio)          params.append("bio", bio);
+      if (hourlyRate)   params.append("hourly_rate", hourlyRate);
+      if (availability) params.append("availability_status", availability);
 
       const profileRes = await fetch(`${API_BASE_URL}/users/me/profile?${params}`, {
         method: "PUT",
@@ -283,15 +310,60 @@ const ProfileSettingsPage: React.FC = () => {
         <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 18 }}>Profile Details</div>
 
+          {/* Availability Status */}
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 8 }}>Availability Status</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {([
+                { value: "available",   label: "Available",   color: "#16a34a", bg: "#dcfce7" },
+                { value: "busy",        label: "Busy",        color: "#b45309", bg: "#fef3c7" },
+                { value: "unavailable", label: "Unavailable", color: "#6b7280", bg: "#f3f4f6" },
+              ] as { value: AvailabilityStatus; label: string; color: string; bg: string }[]).map(({ value, label, color, bg }) => (
+                <button
+                  key={value}
+                  onClick={() => setAvailability(value)}
+                  style={{
+                    padding: "6px 14px", borderRadius: 100, fontSize: 12, fontWeight: 500,
+                    cursor: "pointer", fontFamily: "inherit", transition: "all .15s",
+                    background: availability === value ? bg : c.bg,
+                    color: availability === value ? color : c.subtext,
+                    border: `0.5px solid ${availability === value ? color : c.border}`,
+                  }}
+                >
+                  {availability === value ? "● " : "○ "}{label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Bio */}
           <div style={{ marginBottom: 18 }}>
-            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 6 }}>Bio / Summary</label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <label style={{ fontSize: 11, color: c.subtext }}>Bio / Summary</label>
+              <button
+                onClick={handleOptimizeBio}
+                disabled={optimizing}
+                style={{
+                  padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 500,
+                  background: c.primarySoft, color: c.primary, border: `0.5px solid ${c.border}`,
+                  cursor: optimizing ? "not-allowed" : "pointer", fontFamily: "inherit",
+                  opacity: optimizing ? 0.6 : 1,
+                }}
+              >
+                {optimizing ? "Optimizing…" : "✦ Optimize Bio"}
+              </button>
+            </div>
             <textarea
               value={bio}
               onChange={e => setBio(e.target.value)}
               rows={5}
               style={{ ...input, width: "100%", resize: "vertical", boxSizing: "border-box" }}
             />
+            {optimizeMsg && (
+              <div style={{ marginTop: 6, fontSize: 11, color: optimizeMsg.includes("Could not") ? "#ef4444" : "#16a34a" }}>
+                {optimizeMsg}
+              </div>
+            )}
           </div>
 
           {/* Hourly rate */}

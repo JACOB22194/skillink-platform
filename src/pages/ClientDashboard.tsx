@@ -72,10 +72,24 @@ const getColors = (dark: boolean): ThemeColors =>
 
 interface AppNotif {
   notification_id: number;
-  message: string;
+  type: string;
+  title: string;
+  body?: string;
   is_read: boolean;
   created_at: string;
 }
+
+const NOTIF_ICON: Record<string, string> = {
+  message:      "💬",
+  proposal:     "📄",
+  contract:     "📝",
+  milestone:    "✅",
+  dispute:      "⚠️",
+  verification: "🛡️",
+  review:       "⭐",
+  payment:      "💰",
+  system:       "📢",
+};
 
 const _timeAgo = (iso: string) => {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -96,6 +110,7 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
   const ref = React.useRef<HTMLDivElement>(null);
 
   const fetchCount = async () => {
+    if (!localStorage.getItem("access_token")) return;
     try {
       const res = await fetch(`${API_BASE_CLIENT}/notifications/unread-count`, authHdr());
       if (res.ok) { const d = await res.json(); setUnread(d.count ?? 0); }
@@ -103,10 +118,16 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
   };
 
   const markAllRead = async () => {
+    if (!localStorage.getItem("access_token")) return;
     try {
-      await fetch(`${API_BASE_CLIENT}/notifications/read-all`, { method: "PATCH", ...authHdr() });
-      setUnread(0);
-      setNotifs(prev => prev.map(n => ({ ...n, is_read: true })));
+      const res = await fetch(`${API_BASE_CLIENT}/notifications/read-all`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      });
+      if (res.ok) {
+        setUnread(0);
+        setNotifs((prev: AppNotif[]) => prev.map((n: AppNotif) => ({ ...n, is_read: true })));
+      }
     } catch {}
   };
 
@@ -124,7 +145,6 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
         if (res.ok) setNotifs(await res.json());
       } catch {}
     })();
-    markAllRead();
   }, [open]);
 
   React.useEffect(() => {
@@ -161,8 +181,10 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
               <div style={{ padding: "28px 16px", textAlign: "center", color: c.subtext, fontSize: 12 }}>No notifications yet</div>
             ) : notifs.map(n => (
               <div key={n.notification_id} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: `0.5px solid ${c.border}`, background: n.is_read ? "transparent" : c.primarySoft + "60" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4 }}>{n.message}</div>
+                <div style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{NOTIF_ICON[n.type] ?? "🔔"}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text, lineHeight: 1.4 }}>{n.title}</div>
+                  {n.body && <div style={{ fontSize: 11, color: c.subtext, marginTop: 2, lineHeight: 1.4 }}>{n.body}</div>}
                   <div style={{ fontSize: 10, color: c.subtext, marginTop: 3 }}>{_timeAgo(n.created_at)}</div>
                 </div>
                 {!n.is_read && <div style={{ width: 6, height: 6, borderRadius: "50%", background: c.primary, flexShrink: 0, marginTop: 4 }} />}

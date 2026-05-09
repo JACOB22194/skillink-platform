@@ -1,6 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useProfile, useProfileMutation, useChangePassword } from "../api/hooks";
+import {
+  useProfile, useProfileMutation, useChangePassword,
+  useOptimizeBio, usePortfolio, usePortfolioAddLink,
+  usePortfolioUpload, usePortfolioDelete,
+} from "../api/hooks";
+import type { AvailabilityStatus, PortfolioItem } from "../api/types";
 import { Skeleton } from "../components/ui/Skeleton";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -41,26 +46,109 @@ const Alert: React.FC<{ type: "error" | "success"; msg: string; c: C }> = ({ typ
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
+const AVAILABILITY_OPTIONS: { value: AvailabilityStatus; label: string; color: string; bg: string }[] = [
+  { value: "available",   label: "Available",   color: "#16a34a", bg: "#dcfce7" },
+  { value: "busy",        label: "Busy",        color: "#b45309", bg: "#fef3c7" },
+  { value: "unavailable", label: "Unavailable", color: "#6b7280", bg: "#f3f4f6" },
+];
+
 const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
-  const { data: profile, isLoading } = useProfile();
+  const { data: profile, isLoading, refetch } = useProfile();
   const { mutate: save, isLoading: saving, isSuccess, isError, error } = useProfileMutation();
+  const { mutate: optimizeBio, isLoading: optimizing } = useOptimizeBio();
+  const { data: portfolioItems, isLoading: portfolioLoading, refetch: refetchPortfolio } = usePortfolio();
+  const { mutate: addLink, isLoading: addingLink } = usePortfolioAddLink();
+  const { mutate: uploadFile, isLoading: uploading } = usePortfolioUpload();
+  const { mutate: deleteItem } = usePortfolioDelete();
 
   const [bio, setBio] = useState("");
   const [rate, setRate] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
+  const [availability, setAvailability] = useState<AvailabilityStatus>("available");
+
+  const [bioOptimizeMsg, setBioOptimizeMsg] = useState<string | null>(null);
+
+  const [portfolioMode, setPortfolioMode] = useState<"idle" | "link" | "file">("idle");
+  const [linkTitle, setLinkTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [fileTitle, setFileTitle] = useState("");
+  const [selectedPortfolioFile, setSelectedPortfolioFile] = useState<File | null>(null);
+  const [portfolioMsg, setPortfolioMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!profile) return;
     setBio(profile.bio ?? "");
     setRate(profile.hourly_rate?.toString() ?? "");
     setSkills(profile.skills ?? []);
+    setAvailability(profile.availability_status ?? "available");
   }, [profile]);
 
   const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: `0.5px solid ${c.inputBorder}`, borderRadius: 8, background: c.inputBg, color: c.text, fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
   const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 6 };
 
   const handleSave = async () => {
-    await save({ profile: { bio, hourly_rate: parseFloat(rate) || 0 }, skills });
+    await save({ profile: { bio, hourly_rate: parseFloat(rate) || 0, availability_status: availability }, skills });
+    refetch();
+  };
+
+  const handleOptimizeBio = async () => {
+    setBioOptimizeMsg(null);
+    try {
+      const result = await optimizeBio({ bio, skills });
+      setBio(result.optimized_bio);
+      setBioOptimizeMsg("Bio optimized — review and save when ready.");
+    } catch {
+      setBioOptimizeMsg("Could not reach AI service. Try again.");
+    }
+  };
+
+  const handleAddLink = async () => {
+    if (!linkTitle.trim() || !linkUrl.trim()) return;
+    setPortfolioMsg(null);
+    try {
+      await addLink({ title: linkTitle.trim(), url: linkUrl.trim() });
+      setLinkTitle(""); setLinkUrl(""); setPortfolioMode("idle");
+      refetchPortfolio();
+      setPortfolioMsg({ text: "Link added.", ok: true });
+    } catch {
+      setPortfolioMsg({ text: "Failed to add link.", ok: false });
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) setSelectedPortfolioFile(f);
+  };
+
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (f) setSelectedPortfolioFile(f);
+  };
+
+  const handleUploadFile = async () => {
+    if (!selectedPortfolioFile || !fileTitle.trim()) {
+      setPortfolioMsg({ text: !fileTitle.trim() ? "Please enter a title first." : "Please select a file.", ok: false });
+      return;
+    }
+    setPortfolioMsg(null);
+    try {
+      await uploadFile({ file: selectedPortfolioFile, title: fileTitle.trim() });
+      setFileTitle(""); setSelectedPortfolioFile(null); setPortfolioMode("idle");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      refetchPortfolio();
+      setPortfolioMsg({ text: "File uploaded.", ok: true });
+    } catch {
+      setPortfolioMsg({ text: "Upload failed.", ok: false });
+    }
+  };
+
+  const handleDelete = async (itemId: number) => {
+    try {
+      await deleteItem(itemId);
+      refetchPortfolio();
+    } catch {}
   };
 
   if (isLoading) return (
@@ -75,11 +163,54 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
       {isSuccess && <Alert type="success" msg="Profile saved successfully." c={c} />}
       {isError && <Alert type="error" msg={error ?? "Failed to save."} c={c} />}
 
-      <div style={{ marginBottom: "1.25rem" }}>
-        <label style={labelStyle}>Professional Bio</label>
-        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={5} placeholder="Tell clients about your experience…" style={{ ...inputStyle, resize: "vertical" }} />
+      {/* ── Availability Status ── */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <label style={labelStyle}>Availability Status</label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {AVAILABILITY_OPTIONS.map(({ value, label, color, bg }) => (
+            <button
+              key={value}
+              onClick={() => setAvailability(value)}
+              style={{
+                padding: "7px 16px", borderRadius: 100, fontSize: 13, fontWeight: 500,
+                cursor: "pointer", fontFamily: "inherit", transition: "all .15s",
+                background: availability === value ? bg : c.inputBg,
+                color: availability === value ? color : c.subtext,
+                border: `0.5px solid ${availability === value ? color : c.inputBorder}`,
+              }}
+            >
+              {availability === value ? "● " : "○ "}{label}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* ── Bio + Optimize ── */}
+      <div style={{ marginBottom: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <label style={{ ...labelStyle, marginBottom: 0 }}>Professional Bio</label>
+          <button
+            onClick={handleOptimizeBio}
+            disabled={optimizing}
+            style={{
+              padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 500,
+              background: c.primarySoft, color: c.primary, border: `0.5px solid ${c.primaryBorder}`,
+              cursor: optimizing ? "not-allowed" : "pointer", fontFamily: "inherit",
+              opacity: optimizing ? 0.6 : 1,
+            }}
+          >
+            {optimizing ? "Optimizing…" : "✦ Optimize Bio"}
+          </button>
+        </div>
+        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={5} placeholder="Tell clients about your experience…" style={{ ...inputStyle, resize: "vertical" }} />
+        {bioOptimizeMsg && (
+          <div style={{ fontSize: 12, marginTop: 6, color: bioOptimizeMsg.includes("Could not") ? "#ef4444" : "#16a34a" }}>
+            {bioOptimizeMsg}
+          </div>
+        )}
+      </div>
+
+      {/* ── Hourly Rate ── */}
       <div style={{ marginBottom: "1.25rem" }}>
         <label style={labelStyle}>Hourly Rate (USD)</label>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -89,6 +220,7 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
         </div>
       </div>
 
+      {/* ── Skills ── */}
       <div style={{ marginBottom: "1.75rem" }}>
         <label style={labelStyle}>Skills</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -115,9 +247,117 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
         />
       </div>
 
-      <button onClick={handleSave} disabled={saving} style={{ padding: "11px 28px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.7 : 1, transition: "opacity .15s" }}>
+      {/* ── Save Profile ── */}
+      <button onClick={handleSave} disabled={saving} style={{ padding: "11px 28px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.7 : 1, transition: "opacity .15s", marginBottom: "2rem" }}>
         {saving ? "Saving…" : "Save Profile"}
       </button>
+
+      {/* ── Portfolio ── */}
+      <div style={{ borderTop: `0.5px solid ${c.border}`, paddingTop: "1.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: c.text }}>Portfolio</div>
+            <div style={{ fontSize: 12, color: c.subtext, marginTop: 2 }}>Upload files or add external links (GitHub, Behance, etc.)</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setPortfolioMode(m => m === "link" ? "idle" : "link")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: portfolioMode === "link" ? c.primarySoft : c.bg, color: portfolioMode === "link" ? c.primary : c.text, border: `0.5px solid ${portfolioMode === "link" ? c.primaryBorder : c.border}`, cursor: "pointer", fontFamily: "inherit" }}>
+              + Add Link
+            </button>
+            <button onClick={() => setPortfolioMode(m => m === "file" ? "idle" : "file")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: portfolioMode === "file" ? c.primarySoft : c.bg, color: portfolioMode === "file" ? c.primary : c.text, border: `0.5px solid ${portfolioMode === "file" ? c.primaryBorder : c.border}`, cursor: "pointer", fontFamily: "inherit" }}>
+              + Upload File
+            </button>
+          </div>
+        </div>
+
+        {portfolioMsg && (
+          <div style={{ fontSize: 12, marginBottom: 10, color: portfolioMsg.ok ? "#16a34a" : "#ef4444" }}>{portfolioMsg.text}</div>
+        )}
+
+        {/* Add link form */}
+        {portfolioMode === "link" && (
+          <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "1rem", marginBottom: "1rem" }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 10 }}>Add External Link</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <input type="text" placeholder="Title (e.g. GitHub Profile, Behance Portfolio)" value={linkTitle} onChange={e => setLinkTitle(e.target.value)} style={inputStyle} />
+              <input type="url" placeholder="https://github.com/username" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} style={inputStyle} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={handleAddLink} disabled={addingLink || !linkTitle.trim() || !linkUrl.trim()} style={{ padding: "8px 18px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontFamily: "inherit", opacity: addingLink ? 0.6 : 1 }}>
+                  {addingLink ? "Adding…" : "Add"}
+                </button>
+                <button onClick={() => { setPortfolioMode("idle"); setLinkTitle(""); setLinkUrl(""); }} style={{ padding: "8px 14px", background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, borderRadius: 8, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Upload file form */}
+        {portfolioMode === "file" && (
+          <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "1rem", marginBottom: "1rem" }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 10 }}>Upload Portfolio File</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <input type="text" placeholder="Title (e.g. UI Design Mockup)" value={fileTitle} onChange={e => setFileTitle(e.target.value)} style={inputStyle} />
+              {/* Custom drop zone */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={handleFileDrop}
+                style={{ border: `1.5px dashed ${selectedPortfolioFile ? c.primary : c.inputBorder}`, borderRadius: 8, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: selectedPortfolioFile ? c.primarySoft : "transparent", transition: "border-color .2s" }}
+              >
+                {selectedPortfolioFile ? (
+                  <div>
+                    <div style={{ fontSize: 13, color: c.primary, fontWeight: 500 }}>📎 {selectedPortfolioFile.name}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>{(selectedPortfolioFile.size / 1024).toFixed(0)} KB · Click to change</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 13, color: c.subtext }}>Click to select file</div>
+                    <div style={{ fontSize: 11, color: c.subtext, opacity: .6, marginTop: 3 }}>or drag and drop · PDF, PNG, JPG, ZIP, Word</div>
+                  </div>
+                )}
+              </div>
+              <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.zip,.doc,.docx" onChange={handleFileSelect} style={{ display: "none" }} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={handleUploadFile} disabled={uploading || !selectedPortfolioFile || !fileTitle.trim()} style={{ padding: "8px 18px", background: uploading || !selectedPortfolioFile || !fileTitle.trim() ? c.inputBorder : c.primary, color: uploading || !selectedPortfolioFile || !fileTitle.trim() ? c.subtext : "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: uploading || !selectedPortfolioFile || !fileTitle.trim() ? "not-allowed" : "pointer", fontFamily: "inherit", fontWeight: 500, transition: "background .2s" }}>
+                  {uploading ? "Uploading…" : "Upload"}
+                </button>
+                <button onClick={() => { setPortfolioMode("idle"); setFileTitle(""); setSelectedPortfolioFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ padding: "8px 14px", background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, borderRadius: 8, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Portfolio items list */}
+        {portfolioLoading ? (
+          <div style={{ fontSize: 13, color: c.subtext }}>Loading portfolio…</div>
+        ) : !portfolioItems || portfolioItems.length === 0 ? (
+          <div style={{ padding: "20px", textAlign: "center", background: c.bg, border: `0.5px dashed ${c.border}`, borderRadius: 10, fontSize: 13, color: c.subtext }}>
+            No portfolio items yet. Add links or upload files above.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {portfolioItems.map((item: PortfolioItem) => (
+              <div key={item.item_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <span style={{ fontSize: 16 }}>{item.type === "file" ? "📎" : "🔗"}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
+                    {item.url && (
+                      <a href={item.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: c.primary, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
+                        {item.url}
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => handleDelete(item.item_id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, padding: "0 4px", flexShrink: 0, fontFamily: "inherit" }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

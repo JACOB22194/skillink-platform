@@ -71,10 +71,23 @@ const IconDoc = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none
 interface AppNotif {
   notification_id: number;
   type: string;
-  message: string;
+  title: string;
+  body?: string;
   is_read: boolean;
   created_at: string;
 }
+
+const NOTIF_ICON: Record<string, string> = {
+  message:      "💬",
+  proposal:     "📄",
+  contract:     "📝",
+  milestone:    "✅",
+  dispute:      "⚠️",
+  verification: "🛡️",
+  review:       "⭐",
+  payment:      "💰",
+  system:       "📢",
+};
 
 const timeAgo = (iso: string) => {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -92,6 +105,7 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
   const ref = React.useRef<HTMLDivElement>(null);
 
   const fetchCount = async () => {
+    if (!localStorage.getItem("access_token")) return;
     try {
       const res = await fetch(`${API_BASE_URL}/notifications/unread-count`, getAuthHeaders());
       if (res.ok) { const d = await res.json(); setUnread(d.count ?? 0); }
@@ -106,10 +120,16 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
   };
 
   const markAllRead = async () => {
+    if (!localStorage.getItem("access_token")) return;
     try {
-      await fetch(`${API_BASE_URL}/notifications/read-all`, { method: "PATCH", ...(getAuthHeaders() as object) });
-      setUnread(0);
-      setNotifs(prev => prev.map(n => ({ ...n, is_read: true })));
+      const res = await fetch(`${API_BASE_URL}/notifications/read-all`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      });
+      if (res.ok) {
+        setUnread(0);
+        setNotifs((prev: AppNotif[]) => prev.map((n: AppNotif) => ({ ...n, is_read: true })));
+      }
     } catch {}
   };
 
@@ -120,7 +140,7 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
   }, []);
 
   useEffect(() => {
-    if (open) { fetchNotifs(); markAllRead(); }
+    if (open) fetchNotifs();
   }, [open]);
 
   useEffect(() => {
@@ -157,8 +177,10 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
               <div style={{ padding: "28px 16px", textAlign: "center", color: c.subtext, fontSize: 12 }}>No notifications yet</div>
             ) : notifs.map(n => (
               <div key={n.notification_id} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: `0.5px solid ${c.border}`, background: n.is_read ? "transparent" : c.primarySoft + "60" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4 }}>{n.message}</div>
+                <div style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{NOTIF_ICON[n.type] ?? "🔔"}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text, lineHeight: 1.4 }}>{n.title}</div>
+                  {n.body && <div style={{ fontSize: 11, color: c.subtext, marginTop: 2, lineHeight: 1.4 }}>{n.body}</div>}
                   <div style={{ fontSize: 10, color: c.subtext, marginTop: 3 }}>{timeAgo(n.created_at)}</div>
                 </div>
                 {!n.is_read && <div style={{ width: 6, height: 6, borderRadius: "50%", background: c.primary, flexShrink: 0, marginTop: 4 }} />}
@@ -178,12 +200,16 @@ interface MatchedProject {
   title:          string;
   description:    string;
   budget:         number;
+  contract_type:  string;
   match_score:    number;
   matched_skills: string[];
   text_score:     number;
   skill_score:    number;
   quality_score:  number;
 }
+
+type DifficultyFilter = "all" | "beginner" | "intermediate" | "expert";
+type ContractFilter   = "all" | "fixed" | "hourly";
 
 // ─── Project Match View ───────────────────────────────────────────────────────
 
@@ -195,41 +221,135 @@ const MATCH_PALETTE = [
   { bg: "rgba(239,68,68,.1)", color: "#ef4444" },
 ];
 
+const DIFFICULTY_RANGES: Record<DifficultyFilter, [number, number]> = {
+  all:          [0,    Infinity],
+  beginner:     [0,    500],
+  intermediate: [500,  2000],
+  expert:       [2000, Infinity],
+};
+
 const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
   const navigate = useNavigate();
-  const [matches, setMatches] = useState<MatchedProject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [latency, setLatency] = useState(0);
-  const [ran, setRan] = useState(false);
+  const [allMatches, setAllMatches] = useState<MatchedProject[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState("");
+  const [latency, setLatency]       = useState(0);
+  const [ran, setRan]               = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/recommend/my-matches?top_k=10`, getAuthHeaders());
-        if (res.ok) {
-          const data = await res.json();
-          setMatches(data.matches || []);
-          setLatency(data.latency_ms || 0);
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setError(err.detail || "Failed to load matches.");
-        }
-      } catch {
-        setError("Could not reach the recommendation service.");
-      } finally {
-        setLoading(false);
-        setRan(true);
+  // ── Filter state ──────────────────────────────────────────────────
+  const [minBudget,    setMinBudget]    = useState("");
+  const [maxBudget,    setMaxBudget]    = useState("");
+  const [difficulty,   setDifficulty]   = useState<DifficultyFilter>("all");
+  const [contractType, setContractType] = useState<ContractFilter>("all");
+
+  const fetchMatches = async (minB?: string, maxB?: string, ct?: ContractFilter) => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ top_k: "20" });
+      if (minB && !isNaN(Number(minB))) params.set("min_budget", minB);
+      if (maxB && !isNaN(Number(maxB))) params.set("max_budget", maxB);
+      if (ct && ct !== "all") params.set("contract_type", ct);
+
+      const res = await fetch(`${API_BASE_URL}/recommend/my-matches?${params}`, getAuthHeaders());
+      if (res.ok) {
+        const data = await res.json();
+        setAllMatches(data.matches || []);
+        setLatency(data.latency_ms || 0);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(err.detail || "Failed to load matches.");
       }
-    })();
-  }, []);
+    } catch {
+      setError("Could not reach the recommendation service.");
+    } finally {
+      setLoading(false);
+      setRan(true);
+    }
+  };
+
+  useEffect(() => { fetchMatches(); }, []);
+
+  const applyFilters = () => fetchMatches(minBudget, maxBudget, contractType);
+
+  const resetFilters = () => {
+    setMinBudget(""); setMaxBudget("");
+    setDifficulty("all"); setContractType("all");
+    fetchMatches();
+  };
+
+  // Client-side difficulty filter applied on top of server-side budget/contract filters
+  const [diffMin, diffMax] = DIFFICULTY_RANGES[difficulty as DifficultyFilter];
+  const matches = allMatches.filter((p: MatchedProject) => p.budget >= diffMin && p.budget <= diffMax);
+
+  const pillStyle = (active: boolean) => ({
+    fontSize: 11, padding: "4px 12px", borderRadius: 20, cursor: "pointer" as const,
+    border: `0.5px solid ${active ? c.primary : c.border}`,
+    background: active ? c.primarySoft : "transparent",
+    color: active ? c.primary : c.subtext,
+    fontFamily: "inherit",
+  });
+
+  const inputStyle: React.CSSProperties = {
+    width: 90, padding: "5px 8px", borderRadius: 8, fontSize: 11,
+    background: c.surface, border: `0.5px solid ${c.border}`,
+    color: c.text, fontFamily: "inherit", outline: "none",
+  };
 
   return (
     <div style={{ animation: "fadeIn 0.5s ease" }}>
-      <div style={{ marginBottom: 18 }}>
+      <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>AI Matches</div>
         <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Open projects matched to your profile by TF-IDF · skill overlap · GitHub quality.</div>
+      </div>
+
+      {/* ── Filter Bar ── */}
+      <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Budget row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: c.subtext, width: 56 }}>Budget</span>
+          <input
+            type="number" placeholder="Min $" value={minBudget}
+            onChange={e => setMinBudget(e.target.value)}
+            style={inputStyle}
+          />
+          <span style={{ fontSize: 11, color: c.subtext }}>–</span>
+          <input
+            type="number" placeholder="Max $" value={maxBudget}
+            onChange={e => setMaxBudget(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+
+        {/* Difficulty row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: c.subtext, width: 56 }}>Difficulty</span>
+          {(["all", "beginner", "intermediate", "expert"] as DifficultyFilter[]).map(d => (
+            <button key={d} style={pillStyle(difficulty === d)} onClick={() => setDifficulty(d)}>
+              {d === "all" ? "All" : d === "beginner" ? "Beginner (<$500)" : d === "intermediate" ? "Intermediate ($500–$2k)" : "Expert (>$2k)"}
+            </button>
+          ))}
+        </div>
+
+        {/* Duration row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: c.subtext, width: 56 }}>Type</span>
+          {(["all", "fixed", "hourly"] as ContractFilter[]).map(ct => (
+            <button key={ct} style={pillStyle(contractType === ct)} onClick={() => setContractType(ct)}>
+              {ct === "all" ? "All" : ct === "fixed" ? "Fixed Price" : "Hourly"}
+            </button>
+          ))}
+        </div>
+
+        {/* Action row */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={resetFilters} style={{ ...pillStyle(false), padding: "5px 14px" }}>Reset</button>
+          <button
+            onClick={applyFilters}
+            style={{ fontSize: 11, padding: "5px 16px", borderRadius: 20, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
+          >Apply Filters</button>
+        </div>
       </div>
 
       {loading && (
@@ -246,9 +366,11 @@ const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
       {!loading && !error && ran && matches.length === 0 && (
         <div style={{ textAlign: "center", padding: "3rem 0", color: c.subtext }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
-          <div style={{ fontSize: 16, fontWeight: 500, color: c.text, marginBottom: 8 }}>No matches yet</div>
+          <div style={{ fontSize: 16, fontWeight: 500, color: c.text, marginBottom: 8 }}>No matches found</div>
           <div style={{ fontSize: 13, maxWidth: 320, margin: "0 auto", lineHeight: 1.6 }}>
-            Matches appear here once clients run AI scoring for their projects. Make sure your GitHub profile is connected and your skills are up to date.
+            {allMatches.length > 0
+              ? "No projects match the active filters. Try adjusting or resetting them."
+              : "Matches appear here once clients run AI scoring. Keep your profile and GitHub up to date."}
           </div>
         </div>
       )}
@@ -256,7 +378,7 @@ const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
       {!loading && matches.length > 0 && (
         <>
           <div style={{ fontSize: 12, color: c.subtext, marginBottom: 12 }}>
-            Found <strong style={{ color: c.text }}>{matches.length}</strong> matching project{matches.length !== 1 ? "s" : ""} in <strong style={{ color: c.primary }}>{latency.toFixed(0)}ms</strong>
+            Showing <strong style={{ color: c.text }}>{matches.length}</strong> of {allMatches.length} match{allMatches.length !== 1 ? "es" : ""} · <strong style={{ color: c.primary }}>{latency.toFixed(0)}ms</strong>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {matches.map((p, i) => {
@@ -270,8 +392,9 @@ const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
                       <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{p.title}</span>
                       {i === 0 && <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 20, background: c.primary, color: "#fff", fontWeight: 600 }}>BEST FIT</span>}
                     </div>
-                    <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5 }}>
-                      Budget: <strong style={{ color: c.text }}>${p.budget.toLocaleString()}</strong>
+                    <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5, display: "flex", gap: 10 }}>
+                      <span>Budget: <strong style={{ color: c.text }}>${p.budget.toLocaleString()}</strong></span>
+                      <span style={{ textTransform: "capitalize", color: c.subtext }}>{p.contract_type}</span>
                     </div>
                     {expandedId === p.project_id ? (
                       <>
@@ -649,6 +772,8 @@ const VerificationView: React.FC<{ c: ThemeColors }> = ({ c }) => {
             <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 6 }}>Document File <span style={{ opacity: .6 }}>(PDF, JPEG, PNG, Word · max 10 MB)</span></label>
             <div
               onClick={() => fileRef.current?.click()}
+              onDragOver={(e: React.DragEvent<HTMLDivElement>) => e.preventDefault()}
+              onDrop={(e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) setFile(f); }}
               style={{ border: `1.5px dashed ${file ? c.primary : c.border}`, borderRadius: 10, padding: "20px 16px", textAlign: "center", cursor: "pointer", transition: "border-color .2s", background: file ? c.primarySoft : "transparent" }}
             >
               {file ? (

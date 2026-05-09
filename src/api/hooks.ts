@@ -6,6 +6,7 @@ import type {
   GitHubStoredProfile,
   ProfileUpdatePayload,
   ChangePasswordPayload,
+  PortfolioItem,
 } from "./types";
 
 // ─── Generic Primitives ───────────────────────────────────────────────────────
@@ -130,5 +131,41 @@ export function useChangePassword(): MutationResult<ChangePasswordPayload, { mes
   return useMutation<ChangePasswordPayload, { message: string }>(async (payload) => {
     const res = await apiClient.post<{ message: string }>("/auth/change-password", payload);
     return res.data;
+  });
+}
+
+export function useOptimizeBio(): MutationResult<{ bio: string; skills: string[] }, { optimized_bio: string }> {
+  return useMutation<{ bio: string; skills: string[] }, { optimized_bio: string }>(async (payload) => {
+    const res = await apiClient.post<{ optimized_bio: string }>("/ai/optimize-bio", payload);
+    return res.data;
+  });
+}
+
+export function usePortfolio(): QueryResult<PortfolioItem[]> {
+  return useQuery<PortfolioItem[]>("/users/me/portfolio");
+}
+
+export function usePortfolioAddLink(): MutationResult<{ title: string; url: string; description?: string }, PortfolioItem> {
+  return useMutation<{ title: string; url: string; description?: string }, PortfolioItem>(async (payload) => {
+    const res = await apiClient.post<PortfolioItem>("/users/me/portfolio", { ...payload, type: "link" });
+    return res.data;
+  });
+}
+
+export function usePortfolioUpload(): MutationResult<{ file: File; title: string }, PortfolioItem> {
+  return useMutation<{ file: File; title: string }, PortfolioItem>(async ({ file, title }) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("title", title);
+    const res = await apiClient.post<PortfolioItem>("/users/me/portfolio/upload", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  });
+}
+
+export function usePortfolioDelete(): MutationResult<number, void> {
+  return useMutation<number, void>(async (itemId) => {
+    await apiClient.delete(`/users/me/portfolio/${itemId}`);
   });
 }

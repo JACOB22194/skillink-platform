@@ -12,14 +12,27 @@ export interface User {
 
 // ─── Profiles ─────────────────────────────────────────────────────────────────
 
+export type AvailabilityStatus = "available" | "busy" | "unavailable";
+
 export interface FreelancerProfile {
   freelancer_id: number;
   bio: string | null;
   hourly_rate: number | null;
+  availability_status: AvailabilityStatus | null;
   success_score: number;
   wallet_balance: number;
   portfolio_file: string | null;
   skills: string[];
+}
+
+export interface PortfolioItem {
+  item_id: number;
+  title: string;
+  description: string | null;
+  url: string | null;
+  file_path: string | null;
+  type: "link" | "file";
+  created_at: string;
 }
 
 export interface ClientProfile {
@@ -99,6 +112,7 @@ export interface GitHubParseResult {
 export interface ProfileUpdatePayload {
   bio?: string;
   hourly_rate?: number;
+  availability_status?: AvailabilityStatus;
 }
 
 export interface SkillsUpdatePayload {
