@@ -1,4 +1,4 @@
-import re, json, time, joblib, numpy as np, scipy.sparse as sp
+import os, re, json, time, joblib, numpy as np, scipy.sparse as sp
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +62,13 @@ class PredictResponse(BaseModel):
 
 class GitHubRequest(BaseModel):
     url: str = Field(..., example="https://github.com/torvalds")
+
+class OptimizeBioRequest(BaseModel):
+    bio: str = Field("", example="I am a developer.")
+    skills: list[str] = Field([], example=["Python", "React"])
+
+class OptimizeBioResponse(BaseModel):
+    optimized_bio: str
 
 
 # ── Classifier helpers ────────────────────────────────────────────────────────
@@ -160,6 +167,32 @@ def predict_batch(jobs: list[PredictRequest]):
     if len(jobs) > 100:
         raise HTTPException(status_code=422, detail="max 100 jobs per batch")
     return [_predict(j.title, j.description, j.category_hint, j.top_k) for j in jobs]
+
+
+# ── Bio Optimizer ────────────────────────────────────────────────────────────
+
+@app.post("/optimize-bio", response_model=OptimizeBioResponse)
+def optimize_bio(req: OptimizeBioRequest):
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured")
+
+    from google import genai
+    skills_text = ", ".join(req.skills) if req.skills else "general freelancing"
+    prompt = (
+        "You are a professional profile writer for a freelance platform.\n"
+        "Rewrite the bio below to be compelling and professional, weaving in the listed skills naturally.\n"
+        "Keep it 2-4 sentences, first person, no buzzwords. Return ONLY the rewritten bio — no quotes, no explanation.\n\n"
+        f"Current bio: {req.bio or 'No bio provided'}\n"
+        f"Skills: {skills_text}\n\n"
+        "Optimized bio:"
+    )
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        return {"optimized_bio": response.text.strip()}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Gemini error: {e}")
 
 
 # ── GitHub Parser ─────────────────────────────────────────────────────────────
