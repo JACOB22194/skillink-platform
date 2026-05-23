@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from parse_github import parse_github
 from ai_match_endpoint import router as match_router
+from routers.launchpad_router import router as launchpad_router
 
 # ── Load model artefacts once at startup ─────────────────────────────────────
 MODEL_DIR = Path("./skillink_model")
@@ -171,28 +172,36 @@ def predict_batch(jobs: list[PredictRequest]):
 
 # ── Bio Optimizer ────────────────────────────────────────────────────────────
 
+_GEMINI_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash",
+]
+
 @app.post("/optimize-bio", response_model=OptimizeBioResponse)
 def optimize_bio(req: OptimizeBioRequest):
+    import logging
     api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured")
-
-    from google import genai
-    skills_text = ", ".join(req.skills) if req.skills else "general freelancing"
-    prompt = (
-        "You are a professional profile writer for a freelance platform.\n"
-        "Rewrite the bio below to be compelling and professional, weaving in the listed skills naturally.\n"
-        "Keep it 2-4 sentences, first person, no buzzwords. Return ONLY the rewritten bio — no quotes, no explanation.\n\n"
-        f"Current bio: {req.bio or 'No bio provided'}\n"
-        f"Skills: {skills_text}\n\n"
-        "Optimized bio:"
-    )
-    try:
+    if api_key:
+        from google import genai
+        skills_text = ", ".join(req.skills) if req.skills else "general freelancing"
+        prompt = (
+            "You are a professional profile writer for a freelance platform.\n"
+            "Rewrite the bio below to be compelling and professional, weaving in the listed skills naturally.\n"
+            "Keep it 2-4 sentences, first person, no buzzwords. Return ONLY the rewritten bio — no quotes, no explanation.\n\n"
+            f"Current bio: {req.bio or 'No bio provided'}\n"
+            f"Skills: {skills_text}\n\n"
+            "Optimized bio:"
+        )
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        return {"optimized_bio": response.text.strip()}
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Gemini error: {e}")
+        for model in _GEMINI_MODELS:
+            try:
+                response = client.models.generate_content(model=model, contents=prompt)
+                return {"optimized_bio": response.text.strip()}
+            except Exception as e:
+                logging.warning("optimize-bio: model %s failed: %s", model, e)
+    # Graceful fallback: return the original bio unchanged
+    return {"optimized_bio": req.bio or ""}
 
 
 # ── GitHub Parser ─────────────────────────────────────────────────────────────
@@ -206,6 +215,7 @@ def parse_github_endpoint(req: GitHubRequest):
 
 
 app.include_router(match_router)            # POST /match
+app.include_router(launchpad_router)        # POST /launchpad/recommend
 
 
 if __name__ == "__main__":
