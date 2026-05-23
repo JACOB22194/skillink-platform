@@ -1,0 +1,105 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "last_updated": "2025",
+    "source": "Skillink IT Skill Taxonomy - based on Stack Overflow Survey 2024, LinkedIn Trends 2024",
+    "total_skills": 80
+  },
+  "categories": {
+    "Web Development": {
+      "demand_score": 95,
+      "skills": {
+        "HTML": { "demand_score": 80, "trending": false, "level": "Beginner", "aliases": ["html5"] },
+        "CSS": { "demand_score": 80, "trending": false, "level": "Beginner", "aliases": ["css3"] },
+        "JavaScript": { "demand_score": 98, "trending": true, "level": "Beginner", "aliases": ["js"] },
+        "TypeScript": { "demand_score": 92, "trending": true, "level": "Intermediate", "aliases": ["ts"] },
+        "React": { "demand_score": 95, "trending": true, "level": "Intermediate", "aliases": ["react.js", "reactjs"] },
+        "Vue": { "demand_score": 78, "trending": false, "level": "Intermediate", "aliases": ["vue.js", "vuejs"] },
+        "Angular": { "demand_score": 75, "trending": false, "level": "Intermediate", "aliases": ["angularjs"] },
+        "Next.js": { "demand_score": 90, "trending": true, "level": "Intermediate", "aliases": ["nextjs"] },
+        "Node.js": { "demand_score": 90, "trending": true, "level": "Intermediate", "aliases": ["nodejs", "node"] },
+        "Express": { "demand_score": 82, "trending": false, "level": "Intermediate", "aliases": ["express.js"] },
+        "Django": { "demand_score": 80, "trending": false, "level": "Intermediate", "aliases": [] },
+        "FastAPI": { "demand_score": 88, "trending": true, "level": "Intermediate", "aliases": ["fast api"] },
+        "Flask": { "demand_score": 75, "trending": false, "level": "Beginner", "aliases": [] },
+        "REST API": { "demand_score": 92, "trending": true, "level": "Intermediate", "aliases": ["restful api", "rest"] },
+        "GraphQL": { "demand_score": 82, "trending": true, "level": "Advanced", "aliases": [] },
+        "Tailwind CSS": { "demand_score": 88, "trending": true, "level": "Beginner", "aliases": ["tailwind"] }
+      }
+    },
+    "Data Science & ML": {
+      "demand_score": 97,
+      "skills": {
+        "Python": { "demand_score": 99, "trending": true, "level": "Beginner", "aliases": ["python programming"] },
+        "R": { "demand_score": 65, "trending": false, "level": "Intermediate", "aliases": ["r programming"] },
+        "SQL": { "demand_score": 93, "trending": true, "level": "Beginner", "aliases": ["mysql", "structured query language"] },
+        "Machine Learning": { "demand_score": 95, "trending": true, "level": "Intermediate", "aliases": ["ml"] },
+        "Deep Learning": { "demand_score": 90, "trending": true, "level": "Advanced", "aliases": [] },
+        "TensorFlow": { "demand_score": 85, "trending": true, "level": "Advanced", "aliases": [] },
+        "PyTorch": { "demand_score": 88, "trending": true, "level": "Advanced", "aliases": [] },
+        "Scikit-learn": { "demand_score": 87, "trending": true, "level": "Intermediate", "aliases": ["sklearn"] },
+        "Pandas": { "demand_score": 90, "trending": true, "level": "Intermediate", "aliases": [] },
+        "NumPy": { "demand_score": 88, "trending": false, "level": "Intermediate", "aliases": ["numpy"] },
+        "Data Visualization": { "demand_score": 85, "trending": true, "level": "Intermediate", "aliases": ["matplotlib", "seaborn", "plotly"] },
+        "NLP": { "demand_score": 91, "trending": true, "level": "Advanced", "aliases": ["natural language processing"] },
+        "Computer Vision": { "demand_score": 88, "trending": true, "level": "Advanced", "aliases": [] },
+        "Generative AI": { "demand_score": 98, "trending": true, "level": "Advanced", "aliases": ["genai", "llm", "large language models"] },
+        "LangChain": { "demand_score": 90, "trending": true, "level": "Advanced", "aliases": [] },
+        "Data Analysis": { "demand_score": 92, "trending": true, "level": "Intermediate", "aliases": ["data analytics"] }
+      }
+    },
+    "Cloud & DevOps": {
+      "demand_score": 96,
+      "skills": {
+        "AWS": { "demand_score": 95, "trending": true, "level": "Intermediate", "aliases": ["amazon web services"] },
+        "Google Cloud": { "demand_score": 88, "trending": true, "level": "Intermediate", "aliases": ["gcp", "google cloud platform"] },
+        "Azure": { "demand_score": 90, "trending": true, "level": "Intermediate", "aliases": ["microsoft azure"] },
+        "Docker": { "demand_score": 93, "trending": true, "level": "Intermediate", "aliases": ["containerization"] },
+        "Kubernetes": { "demand_score": 91, "trending": true, "level": "Advanced", "aliases": ["k8s"] },
+        "CI/CD": { "demand_score": 90, "trending": true, "level": "Intermediate", "aliases": ["cicd", "continuous integration"] },
+        "Terraform": { "demand_score": 88, "trending": true, "level": "Advanced", "aliases": ["infrastructure as code", "iac"] },
+        "Ansible": { "demand_score": 78, "trending": false, "level": "Advanced", "aliases": [] },
+        "Jenkins": { "demand_score": 75, "trending": false, "level": "Intermediate", "aliases": [] },
+        "Linux": { "demand_score": 90, "trending": false, "level": "Intermediate", "aliases": ["unix", "bash"] },
+        "Git": { "demand_score": 95, "trending": false, "level": "Beginner", "aliases": ["github", "version control"] },
+        "Microservices": { "demand_score": 88, "trending": true, "level": "Advanced", "aliases": ["microservice architecture"] },
+        "Serverless": { "demand_score": 85, "trending": true, "level": "Advanced", "aliases": ["lambda", "cloud functions"] }
+      }
+    },
+    "Cybersecurity": {
+      "demand_score": 94,
+      "skills": {
+        "Network Security": { "demand_score": 88, "trending": true, "level": "Intermediate", "aliases": ["networking"] },
+        "Penetration Testing": { "demand_score": 85, "trending": true, "level": "Advanced", "aliases": ["pentesting", "ethical hacking"] },
+        "Cryptography": { "demand_score": 82, "trending": false, "level": "Advanced", "aliases": [] },
+        "SIEM": { "demand_score": 83, "trending": true, "level": "Advanced", "aliases": [] },
+        "SOC": { "demand_score": 82, "trending": true, "level": "Intermediate", "aliases": ["security operations"] },
+        "Identity Management": { "demand_score": 84, "trending": true, "level": "Intermediate", "aliases": ["iam"] },
+        "Digital Forensics": { "demand_score": 78, "trending": false, "level": "Advanced", "aliases": ["forensics"] },
+        "Zero Trust": { "demand_score": 86, "trending": true, "level": "Advanced", "aliases": [] }
+      }
+    },
+    "Mobile Development": {
+      "demand_score": 88,
+      "skills": {
+        "React Native": { "demand_score": 88, "trending": true, "level": "Intermediate", "aliases": [] },
+        "Flutter": { "demand_score": 87, "trending": true, "level": "Intermediate", "aliases": ["dart"] },
+        "Swift": { "demand_score": 82, "trending": false, "level": "Intermediate", "aliases": ["ios development"] },
+        "Kotlin": { "demand_score": 83, "trending": true, "level": "Intermediate", "aliases": ["android development"] }
+      }
+    },
+    "Databases": {
+      "demand_score": 91,
+      "skills": {
+        "PostgreSQL": { "demand_score": 90, "trending": true, "level": "Intermediate", "aliases": ["postgres"] },
+        "MongoDB": { "demand_score": 85, "trending": true, "level": "Intermediate", "aliases": ["mongo"] },
+        "Redis": { "demand_score": 83, "trending": true, "level": "Intermediate", "aliases": [] },
+        "MySQL": { "demand_score": 85, "trending": false, "level": "Beginner", "aliases": [] },
+        "Elasticsearch": { "demand_score": 82, "trending": true, "level": "Advanced", "aliases": [] },
+        "Firebase": { "demand_score": 80, "trending": true, "level": "Intermediate", "aliases": [] },
+        "Supabase": { "demand_score": 82, "trending": true, "level": "Intermediate", "aliases": [] },
+        "Vector Databases": { "demand_score": 90, "trending": true, "level": "Advanced", "aliases": ["pinecone", "weaviate", "qdrant"] }
+      }
+    }
+  }
+}

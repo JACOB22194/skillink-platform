@@ -7,6 +7,7 @@ from typing import Optional
 from parse_github import parse_github
 from ai_match_endpoint import router as match_router
 from routers.launchpad_router import router as launchpad_router
+from routers.skill_growth_router import router as skill_growth_router
 
 # ── Load model artefacts once at startup ─────────────────────────────────────
 MODEL_DIR = Path("./skillink_model")
@@ -216,6 +217,7 @@ def parse_github_endpoint(req: GitHubRequest):
 
 app.include_router(match_router)            # POST /match
 app.include_router(launchpad_router)        # POST /launchpad/recommend
+app.include_router(skill_growth_router)   # POST /skill-growth/analyze
 
 
 if __name__ == "__main__":
