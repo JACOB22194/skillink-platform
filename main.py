@@ -43,6 +43,7 @@ from routers.github_router       import router as github_router
 from routers.recommend_router    import router as recommend_router
 from routers.subscription_router import router as subscription_router
 from routers.launchpad_router    import router as launchpad_router
+from routers.skill_growth_router import router as skill_growth_router
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -224,6 +225,7 @@ app.include_router(github_router)           # POST /github/parse, GET /github/pr
 app.include_router(recommend_router)        # POST /recommend/job/{id}, POST /recommend/preview, GET /recommend/job/{id}/cached
 app.include_router(subscription_router)
 app.include_router(launchpad_router)        # Phase 4: GET /launchpad, POST /launchpad/reserve/{id}
+app.include_router(skill_growth_router)   # GET /skill-growth/my, POST /skill-growth/analyze
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])
