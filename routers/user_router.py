@@ -21,7 +21,8 @@ import os
 import uuid
 import aiofiles
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional, List
 
@@ -223,19 +224,81 @@ def remove_skills(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  POST /users/me/portfolio
+#  GET /users/me/portfolio  — list items
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/me/portfolio",
+    response_model=list[schema.PortfolioItemResponse],
+    summary="List your portfolio items (freelancers only)",
+)
+def list_portfolio(
+    me: models.User = Depends(require_freelancer),
+    db: Session     = Depends(get_db),
+):
+    profile = db.query(models.Freelancer).filter(
+        models.Freelancer.user_id == me.id
+    ).first()
+    if not profile:
+        raise HTTPException(404, "Freelancer profile not found.")
+    return db.query(models.PortfolioItem).filter(
+        models.PortfolioItem.freelancer_id == profile.freelancer_id
+    ).order_by(models.PortfolioItem.created_at.desc()).all()
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /users/me/portfolio  — add a link
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class _PortfolioLinkIn(BaseModel):
+    title:       str
+    url:         str
+    description: Optional[str] = None
+    type:        str = "link"
 
 @router.post(
     "/me/portfolio",
-    response_model=schema.MessageResponse,
-    summary="Upload your portfolio file (freelancers only)",
-    description="Accepted: PDF, JPEG, PNG, ZIP, Word. Max 10 MB.",
+    response_model=schema.PortfolioItemResponse,
+    summary="Add a portfolio link (freelancers only)",
 )
-async def upload_portfolio(
-    file: UploadFile  = File(..., description="Portfolio file (max 10MB)"),
+def add_portfolio_link(
+    body: _PortfolioLinkIn,
     me:   models.User = Depends(require_freelancer),
     db:   Session     = Depends(get_db),
+):
+    profile = db.query(models.Freelancer).filter(
+        models.Freelancer.user_id == me.id
+    ).first()
+    if not profile:
+        raise HTTPException(404, "Freelancer profile not found.")
+    item = models.PortfolioItem(
+        freelancer_id = profile.freelancer_id,
+        type          = models.PortfolioItemType.link,
+        title         = body.title.strip(),
+        description   = body.description,
+        url           = body.url.strip(),
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /users/me/portfolio/upload  — upload a file
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/me/portfolio/upload",
+    response_model=schema.PortfolioItemResponse,
+    summary="Upload a portfolio file (freelancers only)",
+    description="Accepted: PDF, JPEG, PNG, ZIP, Word. Max 10 MB.",
+)
+async def upload_portfolio_file(
+    file:  UploadFile = File(..., description="Portfolio file (max 10MB)"),
+    title: str        = Form(..., description="Display title for this file"),
+    me:    models.User = Depends(require_freelancer),
+    db:    Session     = Depends(get_db),
 ):
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(
@@ -262,10 +325,48 @@ async def upload_portfolio(
     if not profile:
         raise HTTPException(404, "Freelancer profile not found.")
 
-    profile.portfolio_file = f"/uploads/portfolios/{filename}"
+    file_path = f"/uploads/portfolios/{filename}"
+    item = models.PortfolioItem(
+        freelancer_id = profile.freelancer_id,
+        type          = models.PortfolioItemType.file,
+        title         = title.strip(),
+        file_path     = file_path,
+        url           = file_path,
+    )
+    db.add(item)
     db.commit()
+    db.refresh(item)
+    return item
 
-    return {"message": f"Portfolio uploaded. Access at: {profile.portfolio_file}"}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  DELETE /users/me/portfolio/{item_id}
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.delete(
+    "/me/portfolio/{item_id}",
+    response_model=schema.MessageResponse,
+    summary="Delete a portfolio item (freelancers only)",
+)
+def delete_portfolio_item(
+    item_id: int,
+    me:  models.User = Depends(require_freelancer),
+    db:  Session     = Depends(get_db),
+):
+    profile = db.query(models.Freelancer).filter(
+        models.Freelancer.user_id == me.id
+    ).first()
+    if not profile:
+        raise HTTPException(404, "Freelancer profile not found.")
+    item = db.query(models.PortfolioItem).filter(
+        models.PortfolioItem.item_id       == item_id,
+        models.PortfolioItem.freelancer_id == profile.freelancer_id,
+    ).first()
+    if not item:
+        raise HTTPException(404, "Portfolio item not found.")
+    db.delete(item)
+    db.commit()
+    return {"message": "Portfolio item deleted."}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

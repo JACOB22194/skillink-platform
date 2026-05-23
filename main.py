@@ -27,21 +27,22 @@ from sqlalchemy.exc import OperationalError
 
 from db import engine, SessionLocal
 import models
-from routers.auth_router        import router as auth_router
-from routers.user_router        import router as user_router
-from routers.user_router        import freelancer_router
-from routers.admin_router       import router as admin_router
-from routers.project_router     import router as project_router
-from routers.proposal_router    import router as proposal_router
-from routers.contract_router    import router as contract_router
-from routers.escrow_router      import router as escrow_router
-from routers.file_router        import router as file_router
-from routers.ai_router          import router as ai_router
-from routers.messaging_router   import router as messaging_router
+from routers.auth_router         import router as auth_router
+from routers.user_router         import router as user_router
+from routers.user_router         import freelancer_router
+from routers.admin_router        import router as admin_router
+from routers.project_router      import router as project_router
+from routers.proposal_router     import router as proposal_router
+from routers.contract_router     import router as contract_router
+from routers.escrow_router       import router as escrow_router
+from routers.file_router         import router as file_router
+from routers.ai_router           import router as ai_router
+from routers.messaging_router    import router as messaging_router
 from routers.notification_router import router as notification_router
 from routers.github_router       import router as github_router
 from routers.recommend_router    import router as recommend_router
 from routers.subscription_router import router as subscription_router
+from routers.launchpad_router    import router as launchpad_router
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -222,6 +223,7 @@ app.include_router(notification_router)     # Phase 5: /notifications/*
 app.include_router(github_router)           # POST /github/parse, GET /github/profile
 app.include_router(recommend_router)        # POST /recommend/job/{id}, POST /recommend/preview, GET /recommend/job/{id}/cached
 app.include_router(subscription_router)
+app.include_router(launchpad_router)        # Phase 4: GET /launchpad, POST /launchpad/reserve/{id}
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])

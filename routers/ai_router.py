@@ -7,9 +7,10 @@ Phase 5 update:
     so users receive real-time notifications when these events happen
 
 AI ENDPOINTS:
-  GET  /projects/{id}/ai-match        → AI ranks freelancers for a project
-  POST /projects/{id}/ai-pricing      → AI suggests a budget range for a project
-  POST /proposals/{id}/score          → AI scores a proposal's relevance (0–100)
+  GET  /projects/{id}/ai-match                    → AI ranks freelancers for a project
+  POST /projects/{id}/ai-pricing                  → AI suggests a budget range for a project
+  POST /proposals/{id}/score                      → AI scores a proposal's relevance (0–100)
+  POST /milestones/{id}/verify-deliverable        → AI Verification Report for a milestone deliverable
 
 DISPUTE RESOLUTION (Admin):
   GET  /admin/disputes                → list all disputes
@@ -70,6 +71,20 @@ class OptimizeBioPayload(BaseModel):
     bio: str = ""
     skills: List[str] = []
 
+class DraftScorePayload(BaseModel):
+    project_id: int
+    cover_letter: str = ""
+    bid_amount: float
+
+class DraftScoreResponse(BaseModel):
+    score: float       # 0.0 – 1.0
+    reasoning: str
+    passes: bool
+
+PROPOSAL_SCORE_THRESHOLD = 0.40
+
+_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
+
 @router.post("/ai/optimize-bio", summary="Optimize freelancer bio using AI")
 def optimize_bio(
     payload: OptimizeBioPayload,
@@ -84,8 +99,34 @@ def optimize_bio(
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        logger.error("optimize-bio failed: %s", e)
-        raise HTTPException(status_code=503, detail="Could not reach AI service. Try again.")
+        logger.warning("AI service unavailable for optimize-bio, falling back to Gemini. Error: %s", e)
+
+    # Fallback: call Gemini directly from the backend
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if api_key:
+        try:
+            from google import genai
+            skills_text = ", ".join(payload.skills) if payload.skills else "general freelancing"
+            prompt = (
+                "You are a professional profile writer for a freelance platform.\n"
+                "Rewrite the bio below to be compelling and professional, weaving in the listed skills naturally.\n"
+                "Keep it 2-4 sentences, first person, no buzzwords. Return ONLY the rewritten bio — no quotes, no explanation.\n\n"
+                f"Current bio: {payload.bio or 'No bio provided'}\n"
+                f"Skills: {skills_text}\n\n"
+                "Optimized bio:"
+            )
+            client = genai.Client(api_key=api_key)
+            for model in _GEMINI_MODELS:
+                try:
+                    resp = client.models.generate_content(model=model, contents=prompt)
+                    return {"optimized_bio": resp.text.strip()}
+                except Exception as gemini_err:
+                    logger.warning("optimize-bio fallback: model %s failed: %s", model, gemini_err)
+        except Exception as e:
+            logger.error("optimize-bio Gemini fallback failed: %s", e)
+
+    # Last resort: return the original bio unchanged rather than failing with 503
+    return {"optimized_bio": payload.bio or ""}
 
 
 @router.get(
@@ -380,6 +421,205 @@ def ai_score_proposal(
     )
 
 
+@router.post(
+    "/proposals/score-draft",
+    response_model=DraftScoreResponse,
+    summary="Score a proposal draft before submission (freelancer)",
+    description="""
+**Freelancer only — no proposal is created.**
+Sends the draft cover letter + bid to the AI service and returns a relevance score (0.0–1.0).
+`passes` is `true` when `score >= 0.40`. The submission form blocks final submission until `passes` is true.
+""",
+)
+def score_draft_proposal(
+    body: DraftScorePayload,
+    me:   models.User = Depends(get_current_user),
+    db:   Session     = Depends(get_db),
+):
+    project = db.query(models.Project).filter(
+        models.Project.project_id == body.project_id
+    ).first()
+    if not project:
+        raise HTTPException(404, "Project not found.")
+
+    freelancer  = db.query(models.Freelancer).filter(models.Freelancer.user_id == me.id).first()
+    skill_names = [fs.skill.name for fs in freelancer.skills if fs.skill] if freelancer else []
+    bio          = (freelancer.bio or "") if freelancer else ""
+    success_score= (freelancer.success_score or 0) if freelancer else 0
+
+    required_skills = [ps.skill.name for ps in project.skills if ps.skill]
+    score     = None
+    reasoning = None
+
+    try:
+        response = httpx.post(
+            f"{AI_SERVICE_URL}/score",
+            json={
+                "project_title":       project.title,
+                "project_description": project.description or "",
+                "required_skills":     required_skills,
+                "budget":              project.budget,
+                "bid_amount":          body.bid_amount,
+                "cover_letter":        body.cover_letter,
+                "freelancer_skills":   skill_names,
+                "freelancer_bio":      bio,
+                "success_score":       success_score,
+            },
+            timeout=AI_TIMEOUT,
+        )
+        response.raise_for_status()
+        ai_data   = response.json()
+        score     = float(ai_data.get("score", 0))
+        reasoning = ai_data.get("reasoning", "")
+    except Exception as exc:
+        logger.warning("AI service unavailable for /proposals/score-draft. Error: %s", exc)
+        required = {s.lower() for s in required_skills}
+        has      = {s.lower() for s in skill_names}
+        overlap  = len(required & has)
+        score    = round((overlap / max(len(required), 1)) * 0.80 + 0.10, 2)
+        reasoning = "AI service unavailable. Score estimated from skill overlap with project requirements."
+
+    # Normalise in case the AI service returns 0–100 instead of 0–1
+    if score is not None and score > 1.0:
+        score = round(score / 100, 4)
+
+    return DraftScoreResponse(
+        score     = score,
+        reasoning = reasoning,
+        passes    = score >= PROPOSAL_SCORE_THRESHOLD,
+    )
+
+
+# ════════════════════════════════════════════════════════════════════
+#  AI DELIVERABLE VERIFICATION
+# ════════════════════════════════════════════════════════════════════
+
+@router.post(
+    "/milestones/{milestone_id}/verify-deliverable",
+    response_model=schema.DeliverableVerificationResponse,
+    summary="AI Verification Report for a milestone deliverable",
+    description="""
+**Client or admin only.**
+Generates an AI Verification Report for the files submitted under this milestone's project.
+The AI reviews the uploaded file list against the milestone description and project context,
+then returns a verdict: `passed`, `flagged`, or `insufficient_evidence`.
+
+The report and verdict are saved on the milestone record.
+""",
+)
+def verify_deliverable(
+    milestone_id: int,
+    me:           models.User = Depends(get_current_user),
+    db:           Session     = Depends(get_db),
+):
+    milestone = db.query(models.Milestone).filter(
+        models.Milestone.milestone_id == milestone_id
+    ).first()
+    if not milestone:
+        raise HTTPException(404, "Milestone not found.")
+
+    contract = milestone.contract
+    if not contract:
+        raise HTTPException(404, "Contract not found for this milestone.")
+
+    # Only client who owns the contract or admin may request verification
+    if me.role != models.UserRole.admin:
+        client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+        if not client or contract.project.client_id != client.client_id:
+            raise HTTPException(403, "Only the project client or admin can request AI verification.")
+
+    project = contract.project
+    files   = db.query(models.File).filter(models.File.project_id == project.project_id).all()
+
+    files_summary = "\n".join(
+        f"  - {f.original_name or 'unnamed'} ({f.file_size_kb or 0} KB)"
+        for f in files
+    ) if files else "  (no files uploaded)"
+
+    prompt = (
+        "You are an AI deliverable verification assistant for a freelance platform.\n"
+        "Your job: review the submitted files for a project milestone and decide if the deliverable "
+        "appears complete and relevant.\n\n"
+        f"Project: {project.title}\n"
+        f"Project description: {project.description or 'N/A'}\n\n"
+        f"Milestone: {milestone.title or f'Milestone #{milestone_id}'}\n"
+        f"Milestone description: {milestone.description or 'N/A'}\n"
+        f"Milestone amount: ${milestone.amount:.2f}\n\n"
+        f"Uploaded files:\n{files_summary}\n\n"
+        "Based on the file names, types, and sizes relative to the milestone scope, provide:\n"
+        "1. A one-word VERDICT on the first line: 'passed', 'flagged', or 'insufficient_evidence'\n"
+        "   - passed: files appear to match the milestone requirements\n"
+        "   - flagged: files are suspicious, mismatched, or raise concerns\n"
+        "   - insufficient_evidence: too few or no files to make a determination\n"
+        "2. A concise 2-4 sentence explanation of your verdict.\n\n"
+        "Format your response EXACTLY as:\n"
+        "VERDICT: <word>\n"
+        "REPORT: <explanation>"
+    )
+
+    verdict = "insufficient_evidence"
+    report  = "No files were submitted for this milestone."
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    if files and api_key:
+        try:
+            from google import genai
+            client_ai = genai.Client(api_key=api_key)
+            for model in _GEMINI_MODELS:
+                try:
+                    resp = client_ai.models.generate_content(model=model, contents=prompt)
+                    raw  = resp.text.strip()
+                    lines = raw.splitlines()
+                    for line in lines:
+                        if line.upper().startswith("VERDICT:"):
+                            v = line.split(":", 1)[1].strip().lower()
+                            if v in ("passed", "flagged", "insufficient_evidence"):
+                                verdict = v
+                        elif line.upper().startswith("REPORT:"):
+                            report = line.split(":", 1)[1].strip()
+                    break
+                except Exception as gemini_err:
+                    logger.warning("verify-deliverable: model %s failed: %s", model, gemini_err)
+        except Exception as e:
+            logger.error("verify-deliverable Gemini call failed: %s", e)
+            # Heuristic fallback: if files exist, mark as passed with note
+            verdict = "passed"
+            report  = (
+                f"AI service unavailable. {len(files)} file(s) detected. "
+                "Manual review recommended before approving the milestone."
+            )
+    elif not files:
+        verdict = "insufficient_evidence"
+        report  = "No files have been uploaded for this project. Ask the freelancer to submit deliverables."
+    else:
+        # Files exist but no Gemini key — simple heuristic
+        verdict = "passed" if len(files) >= 1 else "insufficient_evidence"
+        report  = (
+            f"{len(files)} file(s) uploaded. AI key not configured — "
+            "verdict based on file presence only. Manual review recommended."
+        )
+
+    milestone.ai_verification_status = verdict
+    milestone.ai_verification_report = report
+    db.commit()
+
+    notify(
+        db        = db,
+        user_id   = contract.freelancer.user_id,
+        type      = models.NotificationType.milestone,
+        title     = f"AI Verification: Milestone #{milestone_id} — {verdict}",
+        body      = report[:120],
+        entity_id = contract.contract_id,
+    )
+
+    return schema.DeliverableVerificationResponse(
+        milestone_id           = milestone_id,
+        ai_verification_status = verdict,
+        ai_verification_report = report,
+        files_checked          = len(files),
+    )
+
+
 # ════════════════════════════════════════════════════════════════════
 #  DISPUTE RESOLUTION
 # ════════════════════════════════════════════════════════════════════
@@ -603,7 +843,6 @@ async def submit_verification(
 
 @router.get(
     "/verification/status",
-    response_model=schema.VerificationResponse,
     summary="Check your verification status",
 )
 def my_verification_status(
@@ -614,8 +853,38 @@ def my_verification_status(
         models.Verification.user_id == me.id
     ).first()
     if not v:
-        raise HTTPException(404, "No verification request found. Submit one via POST /verification/submit.")
+        return {
+            "status":          "not_submitted",
+            "document_type":   None,
+            "document_path":   None,
+            "rejection_note":  None,
+            "reviewed_by":     None,
+            "reviewed_at":     None,
+            "created_at":      None,
+            "verification_id": None,
+            "user_id":         me.id,
+        }
     return v
+
+
+@router.delete(
+    "/verification/cancel",
+    summary="Cancel a pending verification submission",
+)
+def cancel_verification(
+    me: models.User = Depends(get_current_user),
+    db: Session     = Depends(get_db),
+):
+    v = db.query(models.Verification).filter(
+        models.Verification.user_id == me.id
+    ).first()
+    if not v:
+        raise HTTPException(404, "No verification submission found.")
+    if v.status != models.VerificationStatus.pending:
+        raise HTTPException(400, "Only pending submissions can be cancelled.")
+    db.delete(v)
+    db.commit()
+    return {"message": "Verification submission cancelled."}
 
 
 @router.get(

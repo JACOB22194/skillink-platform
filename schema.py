@@ -405,18 +405,26 @@ class MilestoneCreate(BaseModel):
         return v
 
 class MilestoneResponse(BaseModel):
-    milestone_id: int
-    contract_id:  int
-    title:        Optional[str]
-    description:  Optional[str]
-    amount:       float
-    status:       MilestoneStatus
-    due_date:     Optional[datetime]
-    created_at:   datetime
+    milestone_id:           int
+    contract_id:            int
+    title:                  Optional[str]
+    description:            Optional[str]
+    amount:                 float
+    status:                 MilestoneStatus
+    due_date:               Optional[datetime]
+    created_at:             datetime
+    ai_verification_status: Optional[str] = None
+    ai_verification_report: Optional[str] = None
     model_config = {"from_attributes": True}
 
 class MilestoneStatusUpdate(BaseModel):
     status: MilestoneStatus
+
+class DeliverableVerificationResponse(BaseModel):
+    milestone_id:           int
+    ai_verification_status: str
+    ai_verification_report: str
+    files_checked:          int
 
 
 # ═══════════════════════════════════════════════════
@@ -588,6 +596,17 @@ class AIScoreResponse(BaseModel):
 # ═══════════════════════════════════════════════════
 #  VERIFICATION (Phase 4)
 # ═══════════════════════════════════════════════════
+
+class PortfolioItemResponse(BaseModel):
+    item_id:     int
+    type:        str
+    title:       str
+    description: Optional[str] = None
+    url:         Optional[str] = None
+    file_path:   Optional[str] = None
+    created_at:  datetime
+    model_config = {"from_attributes": True}
+
 
 class VerificationResponse(BaseModel):
     verification_id: int

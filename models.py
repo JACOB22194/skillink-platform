@@ -83,6 +83,10 @@ class VerificationStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
 
+class PortfolioItemType(str, enum.Enum):
+    link = "link"
+    file = "file"
+
 class TransactionType(str, enum.Enum):
     deposit  = "deposit"
     withdraw = "withdraw"
@@ -163,6 +167,7 @@ class Freelancer(Base):
     skills              = relationship("FreelancerSkill",   back_populates="freelancer", cascade="all, delete")
     wallet_transactions = relationship("WalletTransaction", back_populates="freelancer", cascade="all, delete")
     recommendations     = relationship("Recommendation",    back_populates="freelancer", cascade="all, delete")
+    portfolio_items     = relationship("PortfolioItem",     back_populates="freelancer", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -310,14 +315,16 @@ class Contract(Base):
 class Milestone(Base):
     __tablename__ = "milestones"
 
-    milestone_id = Column(Integer, primary_key=True, index=True)
-    contract_id  = Column(Integer, ForeignKey("contracts.contract_id"), nullable=False, index=True)
-    title        = Column(String(255), nullable=True)
-    description  = Column(Text, nullable=True)
-    amount       = Column(Float)
-    status       = Column(Enum(MilestoneStatus), default=MilestoneStatus.pending, index=True)
-    due_date     = Column(DateTime(timezone=True), nullable=True)
-    created_at   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    milestone_id             = Column(Integer, primary_key=True, index=True)
+    contract_id              = Column(Integer, ForeignKey("contracts.contract_id"), nullable=False, index=True)
+    title                    = Column(String(255), nullable=True)
+    description              = Column(Text, nullable=True)
+    amount                   = Column(Float)
+    status                   = Column(Enum(MilestoneStatus), default=MilestoneStatus.pending, index=True)
+    due_date                 = Column(DateTime(timezone=True), nullable=True)
+    created_at               = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    ai_verification_status   = Column(String(20), nullable=True)   # passed | flagged | insufficient_evidence
+    ai_verification_report   = Column(Text, nullable=True)
 
     contract = relationship("Contract", back_populates="milestones")
 
@@ -520,6 +527,25 @@ class Verification(Base):
 
 
 # ─────────────────────────────────────────
+#  TABLE: portfolio_items
+# ─────────────────────────────────────────
+
+class PortfolioItem(Base):
+    __tablename__ = "portfolio_items"
+
+    item_id       = Column(Integer, primary_key=True, index=True)
+    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id"), nullable=False, index=True)
+    type          = Column(Enum(PortfolioItemType), nullable=False)
+    title         = Column(String(255), nullable=False)
+    description   = Column(Text, nullable=True)
+    url           = Column(String(500), nullable=True)    # for links
+    file_path     = Column(String(500), nullable=True)    # for uploaded files
+    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    freelancer = relationship("Freelancer", back_populates="portfolio_items")
+
+
+# ─────────────────────────────────────────
 #  TABLE: wallet_transactions
 # ─────────────────────────────────────────
 
@@ -657,3 +683,28 @@ class Subscription(Base):
 #
 #   subscription = relationship("Subscription", back_populates="user", uselist=False)
 #
+class LaunchpadStatus(str, enum.Enum):
+    reserved  = "reserved"
+    active    = "active"
+    completed = "completed"
+    expired   = "expired"
+
+class LaunchpadReservation(Base):
+    __tablename__ = "launchpad_reservations"
+
+    reservation_id       = Column(Integer, primary_key=True, index=True)
+    freelancer_id        = Column(Integer, ForeignKey("freelancers.freelancer_id", ondelete="CASCADE"), nullable=False, index=True)
+    launchpad_project_id = Column(Integer, nullable=False, index=True)
+    project_title        = Column(String(255), nullable=False)
+    project_description  = Column(String(1000), nullable=True)
+    required_skills      = Column(String(500), nullable=True)
+    difficulty           = Column(String(50), nullable=True)
+    budget_min           = Column(Float, nullable=True)
+    budget_max           = Column(Float, nullable=True)
+    match_score          = Column(Float, nullable=True)
+    status               = Column(Enum(LaunchpadStatus), default=LaunchpadStatus.reserved, nullable=False, index=True)
+    reserved_at          = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    expires_at           = Column(DateTime(timezone=True), nullable=True)
+    completed_at         = Column(DateTime(timezone=True), nullable=True)
+
+    freelancer = relationship("Freelancer", backref="launchpad_reservations")
