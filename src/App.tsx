@@ -24,6 +24,7 @@ import { ContractPage }        from "./pages/ContractPage";
 import { ContractsListPage }   from "./pages/ContractsListPage";
 import { FreelancerProfilePage } from "./pages/FreelancerProfilePage";
 import LaunchpadPage from "./pages/LaunchpadPage";
+import SkillGrowthPage from "./pages/SkillGrowthPage";
 
 const App = () => {
   return (
@@ -168,6 +169,14 @@ const App = () => {
           element={
             <RequireRole role="freelancer">
               <LaunchpadPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/skill-growth"
+          element={
+            <RequireRole role="freelancer">
+              <SkillGrowthPage />
             </RequireRole>
           }
         />
