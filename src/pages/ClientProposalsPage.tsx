@@ -68,6 +68,80 @@ const timeAgo = (iso: string) => {
   return `${Math.floor(h / 24)}d ago`;
 };
 
+// ── Score Tooltip ─────────────────────────────────────────────────────────────
+
+interface ScoreBreakdown { score: number; avg_rating: number; total_reviews: number; jobs_completed: number; }
+
+const ScoreTooltip: React.FC<{ freelancerId: number; rawScore: number }> = ({ freelancerId, rawScore }) => {
+  const [visible, setVisible]     = useState(false);
+  const [data, setData]           = useState<ScoreBreakdown | null>(null);
+  const [fetched, setFetched]     = useState(false);
+
+  const load = async () => {
+    if (fetched) return;
+    setFetched(true);
+    try {
+      const res = await fetch(`${API}/freelancers/${freelancerId}/score-breakdown`, auth());
+      if (res.ok) setData(await res.json());
+    } catch {}
+  };
+
+  const pct = data ? data.score : Math.round(rawScore * 20);
+  const stars = data ? data.avg_rating : rawScore;
+
+  return (
+    <div
+      style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
+      onMouseEnter={() => { setVisible(true); load(); }}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <span style={{ fontSize: 10, color: T.green, cursor: "default", userSelect: "none" }}>
+        {data ? `★ ${stars.toFixed(1)} (${pct}/100)` : "★ Score"}
+      </span>
+
+      {visible && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 8px)", left: 0,
+          background: T.card, border: `1px solid ${T.border}`, borderRadius: 10,
+          padding: "12px 14px", width: 200, zIndex: 200,
+          boxShadow: "0 8px 24px rgba(0,0,0,.5)",
+          pointerEvents: "none",
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Trust Score</div>
+
+          {/* Overall bar */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.sub, marginBottom: 3 }}>
+              <span>Overall</span><span style={{ color: T.green, fontWeight: 700 }}>{pct}/100</span>
+            </div>
+            <div style={{ height: 5, background: T.border, borderRadius: 100 }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: T.green, borderRadius: 100 }} />
+            </div>
+          </div>
+
+          {/* Breakdown rows */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.sub }}>
+              <span>Avg Rating</span>
+              <span style={{ color: T.text }}>{"★".repeat(Math.round(stars))}{"☆".repeat(5 - Math.round(stars))} {stars.toFixed(1)}/5</span>
+            </div>
+            {data && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.sub }}>
+                  <span>Jobs Completed</span><span style={{ color: T.text }}>{data.jobs_completed}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.sub }}>
+                  <span>Reviews</span><span style={{ color: T.text }}>{data.total_reviews}</span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Score Bar ─────────────────────────────────────────────────────────────────
 
 const ScoreBar: React.FC<{ value: number; label: string; color: string }> = ({ value, label, color }) => (
@@ -161,12 +235,9 @@ const ProposalCard: React.FC<{
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Freelancer #{proposal.freelancer_id}</div>
               <div style={{ fontSize: 11, color: T.sub }}>{timeAgo(proposal.created_at)}</div>
-              {proposal._freelancer && (
-                <div style={{ display: "flex", gap: 6, marginTop: 3 }}>
-                  <span style={{ fontSize: 10, color: T.green }}>★ {proposal._freelancer.success_score.toFixed(1)}</span>
-                  {proposal._freelancer.hourly_rate && <span style={{ fontSize: 10, color: T.sub }}>${proposal._freelancer.hourly_rate}/hr</span>}
-                </div>
-              )}
+              <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center" }}>
+                <ScoreTooltip freelancerId={proposal.freelancer_id} rawScore={0} />
+              </div>
             </div>
           </div>
 

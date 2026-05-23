@@ -258,6 +258,96 @@ const Skeleton: React.FC<{ w?: number | string; h?: number; r?: number; style?: 
     }} />
   );
 
+// ─── Score Tooltip ────────────────────────────────────────────────────────────
+
+interface ScoreBreakdown { score: number; avg_rating: number; total_reviews: number; jobs_completed: number; }
+
+const ScoreTooltip: React.FC<{
+  freelancerId: number;
+  rawScore: number;
+  colors: ThemeColors;
+  displayScore: number;
+  label: string;
+  color: string;
+  compact?: boolean;
+}> = ({ freelancerId, rawScore, colors, displayScore, label, color, compact }) => {
+  const [visible, setVisible] = useState(false);
+  const [data, setData]       = useState<ScoreBreakdown | null>(null);
+  const [fetched, setFetched] = useState(false);
+  const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+
+  const load = async () => {
+    if (fetched) return;
+    setFetched(true);
+    try {
+      const res = await fetch(`${API}/freelancers/${freelancerId}/score-breakdown`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      });
+      if (res.ok) setData(await res.json());
+    } catch {}
+  };
+
+  const trustScore = data ? data.score : Math.round(rawScore * 20);
+  const stars      = data ? data.avg_rating : rawScore;
+
+  return (
+    <div
+      style={{ position: "relative", display: "inline-block" }}
+      onMouseEnter={() => { setVisible(true); load(); }}
+      onMouseLeave={() => setVisible(false)}
+    >
+      {compact ? (
+        <span style={{ fontSize: 10, color: "#22c55e", cursor: "default", userSelect: "none" }}>
+          {data ? `★ ${data.avg_rating.toFixed(1)} (${data.score}/100)` : "★ Score"}
+        </span>
+      ) : (
+        <div style={{ textAlign: "center", flexShrink: 0, background: color + "18", border: `1px solid ${color}30`, borderRadius: 12, padding: "8px 14px", cursor: "default" }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color }}>{displayScore}%</div>
+          <div style={{ fontSize: 9, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".08em" }}>{label}</div>
+        </div>
+      )}
+
+      {visible && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 8px)", right: 0,
+          background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 10,
+          padding: "12px 14px", width: 200, zIndex: 500,
+          boxShadow: "0 8px 24px rgba(0,0,0,.5)",
+          pointerEvents: "none",
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Trust Score</div>
+
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: colors.subtext, marginBottom: 3 }}>
+              <span>Overall</span><span style={{ color: "#22c55e", fontWeight: 700 }}>{trustScore}/100</span>
+            </div>
+            <div style={{ height: 5, background: colors.border, borderRadius: 100 }}>
+              <div style={{ width: `${trustScore}%`, height: "100%", background: "#22c55e", borderRadius: 100, transition: "width .4s ease" }} />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: colors.subtext }}>
+              <span>Avg Rating</span>
+              <span style={{ color: colors.text }}>{"★".repeat(Math.round(stars))}{"☆".repeat(5 - Math.round(stars))} {stars.toFixed(1)}/5</span>
+            </div>
+            {data && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: colors.subtext }}>
+                  <span>Jobs Completed</span><span style={{ color: colors.text }}>{data.jobs_completed}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: colors.subtext }}>
+                  <span>Reviews</span><span style={{ color: colors.text }}>{data.total_reviews}</span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const NavItem: React.FC<{
   label: string; active?: boolean; badge?: number | string;
   icon: React.ReactNode; colors: ThemeColors; onClick?: () => void;
@@ -687,7 +777,22 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState("");
   const [latency, setLatency]       = useState(0);
-  const [viewProfile, setViewProfile] = useState<MatchedFreelancer | null>(null);
+  const [viewProfile, setViewProfile]   = useState<MatchedFreelancer | null>(null);
+  const [invitedIds, setInvitedIds]     = useState<Set<number>>(new Set());
+  const [invitingId, setInvitingId]     = useState<number | null>(null);
+
+  const inviteFreelancer = async (freelancerId: number) => {
+    if (!selectedId || invitingId !== null) return;
+    setInvitingId(freelancerId);
+    try {
+      const res = await fetch(`${API_BASE}/proposals/invite`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: selectedId, freelancer_id: freelancerId }),
+      });
+      if (res.ok || res.status === 409) setInvitedIds((prev: Set<number>) => new Set(prev).add(freelancerId));
+    } catch {} finally { setInvitingId(null); }
+  };
 
   useEffect(() => {
     if (projects.length > 0 && !selectedId) setSelectedId(projects[0].project_id);
@@ -791,7 +896,7 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
             const initials = getInitials(displayName);
             const scoreDisplay = m.ai_match_score != null
               ? Math.round(m.ai_match_score)
-              : Math.round(m.success_score * 10);
+              : Math.round(m.success_score * 20);
             return (
               <div key={m.freelancer_id} style={{ background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 12, padding: 16 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -802,10 +907,14 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
                         <div style={{ fontSize: 13, fontWeight: 600, color: colors.text }}>{displayName}</div>
                         {m.bio && <div style={{ fontSize: 11, color: colors.subtext, marginTop: 2 }}>{m.bio}</div>}
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 600, color: pal.color }}>{scoreDisplay}%</div>
-                        <div style={{ fontSize: 10, color: colors.subtext }}>{m.ai_match_score != null ? "AI match" : "score"}</div>
-                      </div>
+                      <ScoreTooltip
+                        freelancerId={m.freelancer_id}
+                        rawScore={m.success_score}
+                        colors={colors}
+                        displayScore={scoreDisplay}
+                        label={m.ai_match_score != null ? "AI match" : "score"}
+                        color={pal.color}
+                      />
                     </div>
                     {m.skills?.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
@@ -818,12 +927,25 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
                       <div style={{ fontSize: 11, color: colors.subtext }}>
                         {m.hourly_rate != null && m.hourly_rate > 0 && <span>${m.hourly_rate}/hr</span>}
                       </div>
-                      <button
-                        onClick={() => setViewProfile(m)}
-                        style={{ fontSize: 11, fontWeight: 500, padding: "5px 14px", borderRadius: 8, background: colors.primary, color: "#fff", border: "none", cursor: "pointer" }}
-                      >
-                        View Profile
-                      </button>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        {invitedIds.has(m.freelancer_id) ? (
+                          <span style={{ fontSize: 11, color: "#22c55e", padding: "5px 8px" }}>✓ Invited</span>
+                        ) : (
+                          <button
+                            onClick={() => inviteFreelancer(m.freelancer_id)}
+                            disabled={invitingId === m.freelancer_id || !selectedId}
+                            style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, background: "transparent", border: `0.5px solid ${colors.border}`, color: colors.subtext, cursor: "pointer", opacity: invitingId === m.freelancer_id ? 0.6 : 1 }}
+                          >
+                            {invitingId === m.freelancer_id ? "…" : "+ Invite"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setViewProfile(m)}
+                          style={{ fontSize: 11, fontWeight: 500, padding: "5px 14px", borderRadius: 8, background: colors.primary, color: "#fff", border: "none", cursor: "pointer" }}
+                        >
+                          View Profile
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -838,7 +960,7 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
         const pal = MATCH_PALETTE[matches.indexOf(m) % MATCH_PALETTE.length] ?? MATCH_PALETTE[0];
         const displayName = m.email ? m.email.split("@")[0] : `Freelancer #${m.freelancer_id}`;
         const initials = getInitials(displayName);
-        const scoreDisplay = m.ai_match_score != null ? Math.round(m.ai_match_score) : Math.round(m.success_score * 10);
+        const scoreDisplay = m.ai_match_score != null ? Math.round(m.ai_match_score) : Math.round(m.success_score * 20);
         return (
           <div
             onClick={() => setViewProfile(null)}
@@ -856,10 +978,14 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
                     <div style={{ fontSize: 16, fontWeight: 600, color: colors.text }}>{displayName}</div>
                     <div style={{ fontSize: 11, color: colors.subtext, marginTop: 2 }}>{m.email}</div>
                   </div>
-                  <div style={{ textAlign: "center", flexShrink: 0, background: pal.color + "18", border: `1px solid ${pal.color}30`, borderRadius: 12, padding: "8px 14px" }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: pal.color }}>{scoreDisplay}%</div>
-                    <div style={{ fontSize: 9, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".08em" }}>{m.ai_match_score != null ? "AI Match" : "Score"}</div>
-                  </div>
+                  <ScoreTooltip
+                    freelancerId={m.freelancer_id}
+                    rawScore={m.success_score}
+                    colors={colors}
+                    displayScore={scoreDisplay}
+                    label={m.ai_match_score != null ? "AI Match" : "Score"}
+                    color={pal.color}
+                  />
                 </div>
               </div>
 
@@ -891,8 +1017,8 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
                     </div>
                   )}
                   <div style={{ flex: 1, background: colors.bg, borderRadius: 10, padding: "10px 14px", border: `0.5px solid ${colors.border}` }}>
-                    <div style={{ fontSize: 10, color: colors.subtext, marginBottom: 3 }}>Success Score</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{m.success_score.toFixed(1)}<span style={{ fontSize: 11, fontWeight: 400 }}>/5</span></div>
+                    <div style={{ fontSize: 10, color: colors.subtext, marginBottom: 3 }}>Trust Score</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{Math.round(m.success_score * 20)}<span style={{ fontSize: 11, fontWeight: 400 }}>/100</span></div>
                   </div>
                 </div>
 
@@ -1100,7 +1226,10 @@ const ProposalsView: React.FC<{ colors: ThemeColors; projects: Project[]; propos
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{proj?.title ?? `Project #${pr.project_id}`}</div>
-                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Freelancer #{pr.freelancer_id} · {new Date(pr.created_at).toLocaleDateString()}</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 2, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span>Freelancer #{pr.freelancer_id} · {new Date(pr.created_at).toLocaleDateString()}</span>
+                      <ScoreTooltip freelancerId={pr.freelancer_id} rawScore={0} colors={c} displayScore={0} label="Score" color="#22c55e" compact={true} />
+                    </div>
                     </div>
                     <Badge bg={sc.bg} color={sc.color} border={sc.border} style={{ margin: 0, flexShrink: 0 }}>{pr.status}</Badge>
                   </div>
@@ -1140,6 +1269,103 @@ const StubView: React.FC<{ colors: ThemeColors; title: string }> = ({ colors, ti
     </div>
   </div>
 );
+
+// ─── Sent Invitations View ────────────────────────────────────────────────────
+
+interface SentInvitation {
+  invitation_id:    number;
+  project_id:       number;
+  project_title:    string;
+  freelancer_id:    number;
+  freelancer_email: string;
+  message:          string | null;
+  status:           string;
+  created_at:       string;
+}
+
+const SentInvitationsView: React.FC<{ colors: ThemeColors }> = ({ colors: c }) => {
+  const [invites, setInvites] = useState<SentInvitation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter]   = useState<"all" | "pending" | "accepted" | "declined">("all");
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_CLIENT}/proposals/invitations/sent`, authHdr());
+        if (res.ok) setInvites(await res.json());
+      } catch {} finally { setLoading(false); }
+    })();
+  }, []);
+
+  const statusColor = (s: string) =>
+    s === "accepted" ? "#22c55e" : s === "declined" ? "#ef4444" : c.primary;
+  const statusLabel = (s: string) =>
+    s === "accepted" ? "Accepted" : s === "declined" ? "Declined" : "Pending";
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString();
+
+  const filtered = filter === "all" ? invites : invites.filter((i: SentInvitation) => i.status === filter);
+  const counts = {
+    all:      invites.length,
+    pending:  invites.filter((i: SentInvitation) => i.status === "pending").length,
+    accepted: invites.filter((i: SentInvitation) => i.status === "accepted").length,
+    declined: invites.filter((i: SentInvitation) => i.status === "declined").length,
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Sent Invitations</div>
+        <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Track freelancers you've invited to your projects</div>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {(["all", "pending", "accepted", "declined"] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            style={{ fontSize: 11, padding: "5px 12px", borderRadius: 100, border: `0.5px solid ${filter === f ? c.primary : c.border}`, background: filter === f ? c.primary + "18" : "transparent", color: filter === f ? c.primary : c.subtext, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            {f.charAt(0).toUpperCase() + f.slice(1)} {counts[f] > 0 && `(${counts[f]})`}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: c.subtext, padding: 24, textAlign: "center" }}>Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: "32px 16px", textAlign: "center" }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: c.subtext, marginBottom: 4 }}>No invitations yet</div>
+          <div style={{ fontSize: 12, color: c.subtext, opacity: .6 }}>Go to Find Talent and click "+ Invite" on a freelancer.</div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filtered.map((inv: SentInvitation) => (
+            <div key={inv.invitation_id} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{inv.freelancer_email}</span>
+                  <span style={{ fontSize: 10, color: c.subtext }}>→</span>
+                  <span style={{ fontSize: 12, color: c.subtext, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>{inv.project_title}</span>
+                </div>
+                <div style={{ fontSize: 11, color: c.subtext }}>Sent {fmtDate(inv.created_at)}</div>
+                {inv.message && (
+                  <div style={{ fontSize: 11, color: c.subtext, background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 6, padding: "6px 10px", marginTop: 6, fontStyle: "italic" }}>
+                    "{inv.message}"
+                  </div>
+                )}
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 600, color: statusColor(inv.status), background: statusColor(inv.status) + "18", border: `0.5px solid ${statusColor(inv.status)}30`, borderRadius: 100, padding: "3px 10px", flexShrink: 0, whiteSpace: "nowrap" }}>
+                {statusLabel(inv.status)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ─── Main Dashboard Component ─────────────────────────────────────────────────
 
@@ -1270,7 +1496,6 @@ const ClientDashboard: React.FC = () => {
   const spendEntries = Object.entries(categorySpend).sort((a, b) => b[1] - a[1]).slice(0, 4);
 
   // ── Recent projects for dashboard ──
-  const recentProjects = [...projects].sort((a, b) => b.project_id - a.project_id).slice(0, 4);
 
   const toggleTheme = () => {
     setDarkMode(d => {
@@ -1292,8 +1517,6 @@ const ClientDashboard: React.FC = () => {
     </div>
   );
 
-  const thBorder: React.CSSProperties = { fontSize: 10, color: c.subtext, textAlign: "left", padding: "0 8px 8px", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 500, borderBottom: `0.5px solid ${c.border}` };
-  const tdBorder: React.CSSProperties = { padding: "9px 8px", fontSize: 12, color: c.text, borderBottom: `0.5px solid ${c.border}` };
 
   const isLoading = loadingProjects || loadingContracts;
 
@@ -1362,6 +1585,7 @@ const ClientDashboard: React.FC = () => {
           <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Hiring</div>
           <NavItem label="Find Talent"    badge="New" active={activeView === "Find Talent"}    onClick={() => setActiveView("Find Talent")}    icon={<IconSearch />} colors={c} />
           <NavItem label="Proposals"  badge={proposals.filter(p => p.status === "pending").length || undefined} active={activeView === "Proposals"} onClick={() => setActiveView("Proposals")} icon={<IconProp />} colors={c} />
+          <NavItem label="Invitations"                active={activeView === "Invitations"}     onClick={() => setActiveView("Invitations")}     icon={<IconMsg />}    colors={c} />
           <NavItem label="Active Projects"            active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />}   colors={c} />
           <NavItem label="Invoices"                   active={activeView === "Invoices"}        onClick={() => setActiveView("Invoices")}        icon={<IconInv />}    colors={c} />
 
@@ -1394,189 +1618,163 @@ const ClientDashboard: React.FC = () => {
           {activeView === "Dashboard" && (
             <div style={{ animation: "fadeIn 0.5s ease" }}>
 
-              {/* Page header */}
-              <div style={{ marginBottom: 18 }}>
-                <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Dashboard</div>
-                <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>
-                  {loadingProfile
-                    ? <Skeleton w={180} h={12} />
-                    : `${companyName} · AI-assisted hiring overview`}
+              {/* ── Welcome banner with inline stats ── */}
+              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 22px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 13, background: "rgba(127,119,221,.15)", color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, flexShrink: 0, border: `0.5px solid ${c.primary}30` }}>
+                    {loadingProfile ? "…" : initials}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: c.text, letterSpacing: "-0.3px" }}>
+                      {loadingProfile ? <Skeleton w={160} h={16} /> : `Welcome back, ${companyName}`}
+                    </div>
+                    <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Client · AI-assisted hiring dashboard</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+                  {([
+                    { label: "Projects", val: String(stats.totalProjects), color: c.text },
+                    { label: "Active",   val: String(activeContracts),     color: "#22c55e" },
+                    { label: "Hired",    val: String(stats.totalHired),    color: c.primary },
+                    { label: "Spent",    val: fmt(stats.totalSpent),       color: "#f59e0b" },
+                  ] as const).map(s => (
+                    <div key={s.label} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: isLoading ? c.subtext : s.color, lineHeight: 1 }}>{isLoading ? "…" : s.val}</div>
+                      <div style={{ fontSize: 10, color: c.subtext, letterSpacing: ".05em", textTransform: "uppercase", marginTop: 4 }}>{s.label}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               {/* Profile incomplete nudge */}
               {!loadingProfile && (!profile?.company_name || profile.company_name === "Your Company") && (
-                <div style={{ marginBottom: 14, padding: "12px 16px", borderRadius: 12, background: "linear-gradient(135deg,rgba(59,130,246,.12),rgba(59,130,246,.04))", border: "0.5px solid rgba(59,130,246,.3)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ fontSize: 22 }}>🏢</span>
+                <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 12, background: "rgba(59,130,246,.08)", border: "0.5px solid rgba(59,130,246,.25)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 18 }}>🏢</span>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>Complete your company profile</div>
-                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Add your company name, industry and size to attract better freelancers.</div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Complete your company profile</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 1 }}>Add your company name and industry to attract top freelancers.</div>
                     </div>
                   </div>
                   <button onClick={() => setActiveView("Company Profile")} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 500, flexShrink: 0 }}>Complete Profile →</button>
                 </div>
               )}
 
-              {/* ── Quick Actions ── */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 12 }}>
-                {[
-                  { icon: "📋", label: "Post Project",  action: () => navigate("/post-project"),    color: c.primary },
-                  { icon: "🔍", label: "Find Talent",   action: () => setActiveView("Find Talent"), color: "#22c55e" },
-                  { icon: "📨", label: "Proposals",     action: () => setActiveView("Proposals"),   color: "#f59e0b" },
-                  { icon: "🧾", label: "Invoices",      action: () => setActiveView("Invoices"),    color: "#3b82f6" },
-                ].map(({ icon, label, action, color }) => (
-                  <div key={label} onClick={action}
-                    style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "14px 12px", cursor: "pointer", textAlign: "center", transition: "border-color .15s" }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = color)}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = c.border)}
-                  >
-                    <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
-                    <div style={{ fontSize: 12, fontWeight: 500, color }}>{label}</div>
+              {/* ── My Projects — horizontal scroll ── */}
+              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 20px", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>My Projects</div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span onClick={() => setActiveView("Active Projects")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>View all →</span>
+                    <button onClick={() => navigate("/post-project")} style={{ fontSize: 11, fontWeight: 500, padding: "5px 12px", borderRadius: 8, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit" }}>+ Post New</button>
                   </div>
-                ))}
-              </div>
-
-              {/* ── Hiring pipeline funnel ── */}
-              {!isLoading && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8, marginBottom: 12 }}>
-                  {[
-                    { icon: "📋", label: "Open Projects",     val: projects.filter(p => p.status === "open").length,       color: "#f59e0b", bg: "rgba(245,158,11,.08)",  border: "rgba(245,158,11,.2)" },
-                    { icon: "⚡", label: "Active Contracts",  val: activeContracts,                                         color: "#22c55e", bg: "rgba(34,197,94,.08)",   border: "rgba(34,197,94,.2)" },
-                    { icon: "✅", label: "Completed",          val: stats.completedProjects,                                 color: "#7F77DD", bg: "rgba(127,119,221,.1)",  border: "rgba(127,119,221,.25)" },
-                  ].map(({ icon, label, val, color, bg, border }) => (
-                    <div key={label} style={{ background: c.surface, border: `0.5px solid ${border}`, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ width: 38, height: 38, borderRadius: 10, background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, flexShrink: 0 }}>{icon}</div>
-                      <div>
-                        <div style={{ fontSize: 22, fontWeight: 700, color, lineHeight: 1 }}>{val}</div>
-                        <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>{label}</div>
-                      </div>
-                    </div>
-                  ))}
                 </div>
-              )}
-
-              {/* ── Metric cards ── */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
                 {isLoading ? (
-                  [1,2,3,4].map(i => (
-                    <div key={i} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
-                      <Skeleton w="50%" h={10} style={{ marginBottom: 10 }} />
-                      <Skeleton w="60%" h={24} style={{ marginBottom: 8 }} />
-                      <Skeleton w="70%" h={10} style={{ marginBottom: 8 }} />
-                      <Skeleton w="40%" h={18} r={100} />
-                    </div>
-                  ))
-                ) : [
-                  {
-                    label: "Total Projects",
-                    val: String(stats.totalProjects),
-                    sub: `${stats.inProgressProjects} in progress`,
-                    badge: <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">{stats.completedProjects} completed</Badge>,
-                  },
-                  {
-                    label: "Talent Hired",
-                    val: String(stats.totalHired),
-                    sub: `${activeContracts} active contract${activeContracts !== 1 ? "s" : ""}`,
-                    badge: <Badge bg="#2a2640" color="#7F77DD" border="rgba(127,119,221,.2)">AI-matched</Badge>,
-                  },
-                  {
-                    label: "Open Projects",
-                    val: String(projects.filter(p => p.status === "open").length),
-                    sub: "accepting proposals",
-                    badge: <Badge bg="rgba(245,158,11,.1)" color="#f59e0b" border="rgba(245,158,11,.2)">awaiting bids</Badge>,
-                  },
-                  {
-                    label: "Total Budget",
-                    val: fmt(stats.totalSpent),
-                    sub: "across hired projects",
-                    badge: <Badge bg="rgba(127,119,221,.12)" color="#7F77DD" border="rgba(127,119,221,.2)">{contracts.length} contract{contracts.length !== 1 ? "s" : ""}</Badge>,
-                  },
-                ].map(m => (
-                  <div key={m.label} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
-                    <div style={{ fontSize: 10, color: c.subtext, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>{m.label}</div>
-                    <div style={{ fontSize: 24, fontWeight: 500, color: c.text, lineHeight: 1 }}>{m.val}</div>
-                    <div style={{ fontSize: 11, color: c.subtext, margin: "5px 0 8px" }}>{m.sub}</div>
-                    {m.badge}
+                  <div style={{ display: "flex", gap: 12 }}>{[1,2,3].map(i => <Skeleton key={i} w={200} h={110} />)}</div>
+                ) : projects.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "28px 0" }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 4 }}>No projects yet</div>
+                    <div style={{ fontSize: 12, color: c.subtext, marginBottom: 14 }}>Post your first project and let AI find the best talent.</div>
+                    <button onClick={() => navigate("/post-project")} style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>+ Post First Project</button>
                   </div>
-                ))}
+                ) : (
+                  <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 4 }}>
+                    {projects.map(p => {
+                      const s = projectStatusColor(p.status);
+                      const hasContract = contractedProjectIds.has(p.project_id);
+                      const proposalCount = proposals.filter(pr => pr.project_id === p.project_id).length;
+                      return (
+                        <div key={p.project_id}
+                          onClick={() => setActiveView("Active Projects")}
+                          style={{ flexShrink: 0, width: 210, background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 14, cursor: "pointer", transition: "border-color .15s" }}
+                          onMouseEnter={e => (e.currentTarget.style.borderColor = c.primary + "70")}
+                          onMouseLeave={e => (e.currentTarget.style.borderColor = c.border)}
+                        >
+                          <div style={{ fontSize: 12, fontWeight: 600, color: c.text, lineHeight: 1.4, marginBottom: 8, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{p.title}</div>
+                          <Badge bg={s.bg} color={s.color} border={s.border} style={{ margin: "0 0 10px" }}>{s.label}</Badge>
+                          <div style={{ fontSize: 11, color: c.subtext, marginBottom: 3 }}>{fmt(p.budget)} · {p.category || "General"}</div>
+                          <div style={{ fontSize: 11, color: c.subtext }}>{proposalCount} proposal{proposalCount !== 1 ? "s" : ""} · {hasContract ? "✓ Hired" : "No hire"}</div>
+                        </div>
+                      );
+                    })}
+                    <div
+                      onClick={() => navigate("/post-project")}
+                      style={{ flexShrink: 0, width: 150, background: c.bg, border: `1px dashed ${c.border}`, borderRadius: 12, padding: 14, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, transition: "border-color .15s" }}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = c.primary)}
+                      onMouseLeave={e => (e.currentTarget.style.borderColor = c.border)}
+                    >
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>+</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: c.primary, textAlign: "center" }}>Post a Project</div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* ── Middle row ── */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
-
-                {/* Recent Projects */}
-                {card(
-                  <>
-                    {sectionHeader("Recent Projects",
-                      <button onClick={() => navigate("/post-project")} style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-                        + Post Project
-                      </button>
-                    )}
-                    {isLoading ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {[1,2,3].map(i => <Skeleton key={i} h={40} />)}
-                      </div>
-                    ) : recentProjects.length === 0 ? (
-                      <div style={{ textAlign: "center", padding: "28px 16px" }}>
-                        <div style={{ width: 56, height: 56, borderRadius: 16, background: c.primarySoft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 12px" }}>📋</div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 6 }}>No projects yet</div>
-                        <div style={{ fontSize: 12, color: c.subtext, marginBottom: 14, lineHeight: 1.6 }}>Post your first project and let AI find the best freelancers for you.</div>
-                        <button onClick={() => navigate("/post-project")} style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>+ Post First Project</button>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        {recentProjects.map(p => {
-                          const s = projectStatusColor(p.status);
-                          const hasContract = contractedProjectIds.has(p.project_id);
-                          const pct = p.status === "completed" ? 100 : p.status === "in_progress" ? 60 : 10;
-                          return (
-                            <div key={p.project_id}>
-                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                                <span style={{ fontSize: 12, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160 }}>{p.title}</span>
-                                <Badge bg={s.bg} color={s.color} border={s.border} style={{ margin: 0 }}>{s.label}</Badge>
-                              </div>
-                              <div style={{ height: 4, background: c.bg, borderRadius: 20, overflow: "hidden", margin: "5px 0" }}>
-                                <div style={{ height: "100%", width: `${pct}%`, background: s.color, borderRadius: 20 }} />
-                              </div>
-                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: c.subtext, marginTop: 2 }}>
-                                <span>{p.category || p.sub_category || "Uncategorized"} · {fmt(p.budget)}</span>
-                                <span>{hasContract ? "✓ Hired" : "No hire"}</span>
+              {/* ── Active Contracts + AI Match ── */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>Active Contracts</div>
+                    <span onClick={() => setActiveView("Active Projects")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>View all →</span>
+                  </div>
+                  {isLoading ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{[1,2].map(i => <Skeleton key={i} h={52} />)}</div>
+                  ) : recentContracts.filter(ct => ct.status === "active").length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "22px 0" }}>
+                      <div style={{ fontSize: 24, marginBottom: 8 }}>📝</div>
+                      <div style={{ fontSize: 12, color: c.subtext }}>No active contracts.</div>
+                      <div style={{ fontSize: 11, color: c.subtext, marginTop: 4, opacity: .7 }}>Accept a proposal to start working with a freelancer.</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {recentContracts.filter(ct => ct.status === "active").map(ct => {
+                        const proj = projects.find(p => p.project_id === ct.project_id);
+                        const cs = STATUS_COLORS[ct.status];
+                        return (
+                          <div key={ct.contract_id} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj?.title ?? `Project #${ct.project_id}`}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                                <Badge bg={cs.bg} color={cs.color} border={cs.border} style={{ margin: 0 }}>{ct.status}</Badge>
+                                <span style={{ fontSize: 10, color: c.subtext }}>{proj ? fmt(proj.budget) : "—"}</span>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* AI Recommended Talent — quick launch */}
-                {card(
-                  <>
-                    {sectionHeader("AI Match — Quick Launch",
-                      <span onClick={() => setActiveView("Find Talent")} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>Full view →</span>
-                    )}
-                    {isLoading ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{[1,2,3].map(i => <Skeleton key={i} h={44} />)}</div>
-                    ) : projects.filter(p => p.status === "open").length === 0 ? (
-                      <div style={{ textAlign: "center", padding: "28px 16px" }}>
-                        <div style={{ fontSize: 28, marginBottom: 10 }}>🤖</div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 6 }}>No open projects</div>
-                        <div style={{ fontSize: 11, color: c.subtext, marginBottom: 14 }}>Post a project to run AI talent matching.</div>
-                        <button onClick={() => navigate("/post-project")} style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>+ Post Project</button>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ fontSize: 11, color: c.subtext, marginBottom: 4 }}>Click a project to find matched freelancers instantly</div>
-                        {projects.filter(p => p.status === "open").slice(0, 4).map(p => (
+                            <span onClick={() => navigate(`/contract/${ct.contract_id}`)} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500, flexShrink: 0 }}>Workroom →</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>AI Talent Match</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, background: `${c.primary}18`, color: c.primary, border: `0.5px solid ${c.primary}30`, borderRadius: 100, padding: "2px 7px" }}>AI</span>
+                    </div>
+                    <span onClick={() => setActiveView("Find Talent")} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>Find Talent →</span>
+                  </div>
+                  {isLoading ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{[1,2,3].map(i => <Skeleton key={i} h={44} />)}</div>
+                  ) : projects.filter(p => p.status === "open").length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "22px 0" }}>
+                      <div style={{ fontSize: 24, marginBottom: 8 }}>🤖</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 4 }}>No open projects</div>
+                      <div style={{ fontSize: 11, color: c.subtext }}>Post a project to start AI matching.</div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11, color: c.subtext, marginBottom: 10 }}>Select a project to match top freelancers</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {projects.filter(p => p.status === "open").slice(0, 3).map(p => (
                           <div key={p.project_id}
                             onClick={() => setActiveView("Find Talent")}
                             style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: c.bg, border: `0.5px solid ${c.border}`, cursor: "pointer", transition: "border-color .15s" }}
                             onMouseEnter={e => (e.currentTarget.style.borderColor = c.primary + "60")}
                             onMouseLeave={e => (e.currentTarget.style.borderColor = c.border)}
                           >
-                            <div style={{ width: 32, height: 32, borderRadius: 8, background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🔍</div>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🔍</div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 12, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
                               <div style={{ fontSize: 10, color: c.subtext, marginTop: 2 }}>{fmt(p.budget)} · {p.category || "Uncategorized"}</div>
@@ -1585,54 +1783,38 @@ const ClientDashboard: React.FC = () => {
                           </div>
                         ))}
                       </div>
-                    )}
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
 
-              {/* ── Recent Contracts table ── */}
-              {card(
-                <>
-                  {sectionHeader("Recent Contracts",
-                    <span onClick={() => setActiveView("Active Projects")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>View all →</span>
-                  )}
-                  {isLoading ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {[1,2,3].map(i => <Skeleton key={i} h={36} />)}
+              {/* ── Pending Proposals ── */}
+              {!loadingProposals && proposals.filter(p => p.status === "pending").length > 0 && (
+                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 20px", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>Pending Proposals</div>
+                      <span style={{ background: "#f59e0b18", color: "#f59e0b", border: "0.5px solid #f59e0b30", borderRadius: 100, fontSize: 10, fontWeight: 700, padding: "2px 8px" }}>{proposals.filter(p => p.status === "pending").length}</span>
                     </div>
-                  ) : recentContracts.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "24px 0", color: c.subtext, fontSize: 12 }}>
-                      No contracts yet. Accept a proposal to create one.
-                    </div>
-                  ) : (
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <thead>
-                        <tr>
-                          {["Contract ID", "Project", "Budget", "Status", "Created", ""].map(h =>
-                            <th key={h} style={thBorder}>{h}</th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {recentContracts.map(ct => {
-                          const proj = projects.find(p => p.project_id === ct.project_id);
-                          const cs = STATUS_COLORS[ct.status];
-                          return (
-                            <tr key={ct.contract_id}>
-                              <td style={{ ...tdBorder, color: c.subtext }}>#{ct.contract_id}</td>
-                              <td style={{ ...tdBorder, fontWeight: 500 }}>{proj?.title ?? `Project #${ct.project_id}`}</td>
-                              <td style={{ ...tdBorder }}>{proj ? fmt(proj.budget) : "—"}</td>
-                              <td style={tdBorder}><Badge bg={cs.bg} color={cs.color} border={cs.border} style={{ margin: 0 }}>{ct.status}</Badge></td>
-                              <td style={{ ...tdBorder, color: c.subtext }}>{new Date(ct.created_at).toLocaleDateString()}</td>
-                              <td style={tdBorder}><span onClick={() => navigate(`/contract/${ct.contract_id}`)} style={{ fontSize: 11, color: c.primary, cursor: "pointer", fontWeight: 500 }}>Workroom →</span></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </>
+                    <span onClick={() => setActiveView("Proposals")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>Review all →</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {proposals.filter(p => p.status === "pending").slice(0, 3).map(pr => {
+                      const proj = projects.find(p => p.project_id === pr.project_id);
+                      return (
+                        <div key={pr.proposal_id} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj?.title ?? `Project #${pr.project_id}`}</div>
+                            <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Freelancer #{pr.freelancer_id} · {fmt(pr.bid_amount)} · {new Date(pr.created_at).toLocaleDateString()}</div>
+                          </div>
+                          <span onClick={() => setActiveView("Proposals")} style={{ fontSize: 11, color: "#f59e0b", cursor: "pointer", fontWeight: 500, flexShrink: 0 }}>Review →</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
+
 
               {/* ── Spend + Activity row ── */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
@@ -1666,7 +1848,7 @@ const ClientDashboard: React.FC = () => {
                       <div key={n.notification_id} style={{ display: "flex", gap: 8, padding: "8px 0", borderBottom: `0.5px solid ${c.border}` }}>
                         <div style={{ width: 6, height: 6, borderRadius: "50%", background: n.is_read ? c.border : c.primary, flexShrink: 0, marginTop: 5 }} />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4 }}>{n.message}</div>
+                          <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4 }}>{n.title}{n.body ? ` — ${n.body}` : ""}</div>
                           <div style={{ fontSize: 10, color: c.subtext, marginTop: 2 }}>{_timeAgo(n.created_at)}</div>
                         </div>
                       </div>
@@ -1693,96 +1875,15 @@ const ClientDashboard: React.FC = () => {
             <InvoicesView colors={c} />
           )}
 
+          {activeView === "Invitations" && (
+            <SentInvitationsView colors={c} />
+          )}
+
           {activeView === "Proposals" && (
             <ProposalsView colors={c} projects={projects} proposals={proposals} loading={loadingProposals} onRefresh={() => { fetchProposals(); fetchProjects(); fetchContracts(); }} />
           )}
         </main>
 
-        {/* ── Right Panel ── */}
-        <aside style={{ width: 220, borderLeft: `0.5px solid ${c.border}`, background: c.surface, padding: 16, overflowY: "auto", flexShrink: 0 }}>
-          {/* Company card */}
-          <div style={{ textAlign: "center", paddingBottom: 12, borderBottom: `0.5px solid ${c.border}`, marginBottom: 16 }}>
-            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(127,119,221,.2)", color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, margin: "0 auto 8px" }}>
-              {loadingProfile ? "…" : initials}
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>
-              {loadingProfile ? <Skeleton w={100} h={14} style={{ margin: "0 auto" }} /> : companyName}
-            </div>
-            <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Client</div>
-            <Badge bg="rgba(127,119,221,.1)" color={c.primary} border={`${c.primary}30`} style={{ marginTop: 8 }}>✓ Active Account</Badge>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6, marginTop: 12 }}>
-              {[
-                { val: isLoading ? "…" : String(stats.totalProjects),   label: "PROJECTS",  color: c.text },
-                { val: isLoading ? "…" : String(stats.totalHired),      label: "HIRED",     color: "#22c55e" },
-                { val: isLoading ? "…" : String(activeContracts),       label: "ACTIVE",    color: c.primary },
-                { val: isLoading ? "…" : fmt(stats.totalSpent),         label: "SPENT",     color: "#f59e0b" },
-              ].map(s => (
-                <div key={s.label} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 4px", textAlign: "center" }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: s.color }}>{s.val}</div>
-                  <div style={{ fontSize: 9, color: c.subtext }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick actions */}
-          <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 8 }}>Quick Actions</div>
-          {[
-            { label: "Post New Project", action: () => navigate("/post-project"), color: c.primary },
-            { label: "Find Talent", action: () => setActiveView("Find Talent"), color: "#22c55e" },
-            { label: "View Contracts", action: () => setActiveView("Active Projects"), color: "#3b82f6" },
-          ].map(a => (
-            <div
-              key={a.label}
-              onClick={a.action}
-              style={{ padding: "8px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, fontSize: 12, color: a.color, cursor: "pointer", marginBottom: 6, background: c.bg }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = a.color)}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = c.border)}
-            >
-              {a.label}
-            </div>
-          ))}
-
-          {/* Spend breakdown with visual bars */}
-          <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginTop: 16, marginBottom: 8 }}>Spend by Category</div>
-          {isLoading ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {[1,2,3].map(i => <Skeleton key={i} h={36} />)}
-            </div>
-          ) : spendEntries.length === 0 ? (
-            <div style={{ fontSize: 11, color: c.subtext }}>No spend data yet</div>
-          ) : (() => {
-            const maxSpend = Math.max(...spendEntries.map(([,v]) => v));
-            return spendEntries.map(([label, amount]) => (
-              <div key={label} style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
-                  <span style={{ color: c.subtext, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 110 }}>{label}</span>
-                  <span style={{ fontWeight: 600, color: c.text, flexShrink: 0 }}>{fmt(amount)}</span>
-                </div>
-                <div style={{ height: 4, background: c.bg, borderRadius: 20, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${Math.round((amount / maxSpend) * 100)}%`, background: `linear-gradient(90deg,${c.primary},${c.primary}99)`, borderRadius: 20, transition: "width .5s" }} />
-                </div>
-              </div>
-            ));
-          })()}
-
-          {/* Project status summary */}
-          {!isLoading && projects.length > 0 && (
-            <>
-              <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginTop: 16, marginBottom: 8 }}>Project Status</div>
-              {([
-                ["Open", projects.filter(p => p.status === "open").length, "#f59e0b"],
-                ["In Progress", projects.filter(p => p.status === "in_progress").length, "#22c55e"],
-                ["Completed", projects.filter(p => p.status === "completed").length, c.primary],
-              ] as [string, number, string][]).map(([label, count, color]) => (
-                <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `0.5px solid ${c.border}`, fontSize: 12 }}>
-                  <span style={{ color: c.subtext }}>{label}</span>
-                  <span style={{ fontWeight: 600, color }}>{count}</span>
-                </div>
-              ))}
-            </>
-          )}
-        </aside>
       </div>
     </div>
   );

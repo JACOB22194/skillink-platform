@@ -9,7 +9,7 @@ const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("
 const role = () => localStorage.getItem("role") || "freelancer";
 
 interface Contract { contract_id: number; project_id: number; freelancer_id: number; status: "active"|"completed"|"disputed"; created_at: string; }
-interface Milestone { milestone_id: number; contract_id: number; title: string|null; description: string|null; amount: number; status: "pending"|"approved"|"paid"; due_date: string|null; created_at: string; ai_verification_status: "passed"|"flagged"|"insufficient_evidence"|null; ai_verification_report: string|null; }
+interface Milestone { milestone_id: number; contract_id: number; title: string|null; description: string|null; amount: number; status: "pending"|"revision_requested"|"approved"|"paid"; due_date: string|null; created_at: string; ai_verification_status: "passed"|"flagged"|"insufficient_evidence"|null; ai_verification_report: string|null; revision_feedback: string|null; }
 interface Escrow { escrow_id: number; contract_id: number; amount: number; released_amount: number; status: "held"|"released"; }
 interface Project { project_id: number; title: string; description: string|null; budget: number; status: string; }
 
@@ -22,9 +22,10 @@ const T = {
 };
 
 const msColors = {
-  pending:  { c: T.amber, bg: T.amberSoft, label: "Pending" },
-  approved: { c: T.blue,  bg: T.blueSoft,  label: "Approved" },
-  paid:     { c: T.green, bg: T.greenSoft, label: "Paid ✓" },
+  pending:             { c: T.amber,  bg: T.amberSoft,  label: "Pending" },
+  revision_requested:  { c: T.orange, bg: T.orangeSoft, label: "Revision Requested" },
+  approved:            { c: T.blue,   bg: T.blueSoft,   label: "Approved" },
+  paid:                { c: T.green,  bg: T.greenSoft,  label: "Paid ✓" },
 };
 const contractColors = {
   active:    { c: T.green, bg: T.greenSoft, label: "Active" },
@@ -258,9 +259,51 @@ const aiVerdict = {
   insufficient_evidence:{ c: T.amber,  bg: T.amberSoft,  label: "AI: Needs more files" },
 };
 
+// ── Revision Modal ────────────────────────────────────────────────────────────
+const RevisionModal: React.FC<{ milestoneId: number; milestoneTitle: string|null; onClose: () => void; onDone: () => void }> = ({ milestoneId, milestoneTitle, onClose, onDone }) => {
+  const [feedback, setFeedback] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const submit = async () => {
+    if (!feedback.trim()) { setErr("Please describe what needs to be revised."); return; }
+    setLoading(true); setErr("");
+    try {
+      const r = await fetch(`${API}/milestones/${milestoneId}/request-revision`, {
+        method: "POST",
+        headers: { ...auth().headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: feedback.trim() }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "Request failed"); }
+      onDone();
+    } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
+  };
+
+  return (
+    <Modal accentColor={T.orange}>
+      <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <div style={{ fontSize: 36, marginBottom: 8 }}>🔄</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 6 }}>Request Revision</div>
+        <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.7 }}>
+          Tell the freelancer what needs to be changed on <strong style={{ color: T.text }}>{milestoneTitle || `Milestone #${milestoneId}`}</strong>.
+        </div>
+      </div>
+      <textarea
+        value={feedback}
+        onChange={e => setFeedback(e.target.value)}
+        rows={5}
+        placeholder="e.g. The login screen design doesn't match the mockup. Please update the colour scheme and fix the button alignment…"
+        style={inp({ resize: "vertical" } as any)}
+      />
+      {err && <Err msg={err} />}
+      <BtnRow onCancel={onClose} onConfirm={submit} loading={loading} confirmLabel="Send Revision Request" confirmColor={T.orange} />
+    </Modal>
+  );
+};
+
 // ── Milestone Row ─────────────────────────────────────────────────────────────
-const MilestoneRow: React.FC<{ ms: Milestone; isClient: boolean; projectId: number; onApprove: (id: number) => void; onMarkPaid: (id: number) => void; actionLoading: number|null; onToast: (msg: string, ok: boolean) => void; onRefresh: () => void }> = ({ ms, isClient, projectId, onApprove, onMarkPaid, actionLoading, onToast, onRefresh }) => {
-  const cfg = msColors[ms.status]; const loading = actionLoading === ms.milestone_id;
+const MilestoneRow: React.FC<{ ms: Milestone; isClient: boolean; projectId: number; onApprove: (id: number) => void; onMarkPaid: (id: number) => void; actionLoading: number|null; onToast: (msg: string, ok: boolean) => void; onRefresh: () => void; onRequestRevision: (ms: Milestone) => void }> = ({ ms, isClient, projectId, onApprove, onMarkPaid, actionLoading, onToast, onRefresh, onRequestRevision }) => {
+  const cfg = msColors[ms.status as keyof typeof msColors] ?? msColors.pending; const loading = actionLoading === ms.milestone_id;
   const [uploading, setUploading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -327,11 +370,24 @@ const MilestoneRow: React.FC<{ ms: Milestone; isClient: boolean; projectId: numb
             </div>
           )}
 
-          {/* Client actions */}
+          {/* Revision feedback banner (visible to both parties) */}
+          {ms.status === "revision_requested" && ms.revision_feedback && (
+            <div style={{ marginTop: 10, padding: "10px 14px", background: T.orangeSoft, border: `1px solid ${T.orange}33`, borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: T.orange, fontWeight: 600, marginBottom: 4 }}>🔄 Revision Requested</div>
+              <div style={{ fontSize: 12, color: T.text, lineHeight: 1.6 }}>{ms.revision_feedback}</div>
+            </div>
+          )}
+
+          {/* Actions */}
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             {isClient && ms.status === "pending" && (
               <button onClick={runAIVerify} disabled={verifying} style={{ padding: "7px 14px", background: T.accentSoft, border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontWeight: 600, cursor: verifying ? "not-allowed" : "pointer", fontSize: 12, opacity: verifying ? 0.6 : 1 }}>
                 {verifying ? "Verifying…" : "🤖 AI Verify Deliverable"}
+              </button>
+            )}
+            {isClient && ms.status === "pending" && (
+              <button onClick={() => onRequestRevision(ms)} style={{ padding: "7px 14px", background: T.orangeSoft, border: `1px solid ${T.orange}44`, borderRadius: 8, color: T.orange, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>
+                🔄 Request Revision
               </button>
             )}
             {isClient && ms.status === "pending" && (
@@ -344,11 +400,25 @@ const MilestoneRow: React.FC<{ ms: Milestone; isClient: boolean; projectId: numb
                 {loading ? "…" : "Mark as Paid"}
               </button>
             )}
-            {!isClient && ms.status === "pending" && (
+            {!isClient && (ms.status === "pending" || ms.status === "revision_requested") && (
               <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", background: T.accentSoft, border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontSize: 12, fontWeight: 600, cursor: uploading ? "not-allowed" : "pointer", opacity: uploading ? 0.6 : 1 }}>
                 {uploading ? "Uploading…" : "📎 Upload Deliverable"}
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.zip,.doc,.docx,.txt" style={{ display: "none" }} onChange={handleUpload} disabled={uploading} />
               </label>
+            )}
+            {!isClient && ms.status === "revision_requested" && (
+              <button
+                onClick={async () => {
+                  try {
+                    const r = await fetch(`${API}/milestones/${ms.milestone_id}/status`, { method: "PUT", headers: { ...auth().headers, "Content-Type": "application/json" }, body: JSON.stringify({ status: "pending" }) });
+                    if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+                    onToast("Milestone resubmitted for review ✓", true); onRefresh();
+                  } catch (e: any) { onToast(e.message, false); }
+                }}
+                style={{ padding: "7px 14px", background: T.accentSoft, border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontWeight: 600, cursor: "pointer", fontSize: 12 }}
+              >
+                ✅ Mark as Resubmitted
+              </button>
             )}
           </div>
         </div>
@@ -386,6 +456,7 @@ export const ContractPage: React.FC = () => {
   const [showDispute,     setShowDispute]     = useState(false);
   const [showCancel,      setShowCancel]      = useState(false);
   const [showEditProject, setShowEditProject] = useState(false);
+  const [revisionTarget,  setRevisionTarget]  = useState<Milestone | null>(null);
 
   const showToast = (msg: string, ok: boolean) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500); };
 
@@ -514,7 +585,8 @@ export const ContractPage: React.FC = () => {
             ) : milestones.map(ms => (
               <MilestoneRow key={ms.milestone_id} ms={ms} isClient={isClient} projectId={contract.project_id}
                 onApprove={id => updateMilestone(id, "approved")} onMarkPaid={id => updateMilestone(id, "paid")}
-                actionLoading={actionLoading} onToast={showToast} onRefresh={fetchAll} />
+                actionLoading={actionLoading} onToast={showToast} onRefresh={fetchAll}
+                onRequestRevision={setRevisionTarget} />
             ))}
           </div>
 
@@ -638,6 +710,7 @@ export const ContractPage: React.FC = () => {
 
       {/* Modals */}
       {showAddMs && <AddMilestoneModal contractId={contract.contract_id} escrowRemaining={escrowRemaining} onClose={() => setShowAddMs(false)} onDone={() => { setShowAddMs(false); fetchAll(); showToast("Milestone added!", true); }} />}
+      {revisionTarget && <RevisionModal milestoneId={revisionTarget.milestone_id} milestoneTitle={revisionTarget.title} onClose={() => setRevisionTarget(null)} onDone={() => { setRevisionTarget(null); fetchAll(); showToast("Revision request sent to freelancer.", true); }} />}
       {showReview && <ReviewModal contractId={contract.contract_id} endpoint="review" title="Rate the Freelancer" placeholder="Share your experience…" onClose={() => setShowReview(false)} onDone={() => { setShowReview(false); showToast("Review submitted! Thank you.", true); }} />}
       {showClientReview && <ReviewModal contractId={contract.contract_id} endpoint="client-review" title="Rate the Client" placeholder="Share your experience…" onClose={() => setShowClientReview(false)} onDone={() => { setShowClientReview(false); showToast("Review submitted! Thank you.", true); }} />}
       {showDispute && <DisputeModal contractId={contract.contract_id} onClose={() => setShowDispute(false)} onDone={() => { setShowDispute(false); showToast("Dispute opened. Admin will review.", true); fetchAll(); }} />}

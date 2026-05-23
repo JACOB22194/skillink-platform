@@ -114,6 +114,9 @@ const PostProjectPage: React.FC = () => {
   const [matchError, setMatchError] = useState("");
   const [matchLatency, setMatchLatency] = useState(0);
 
+  // Invite state: Set of freelancer_ids the client has clicked "Invite" on
+  const [invitedIds, setInvitedIds] = useState<Set<number>>(new Set());
+
   useEffect(() => {
     localStorage.setItem("skilllink-darkMode", JSON.stringify(darkMode));
   }, [darkMode]);
@@ -258,7 +261,24 @@ const PostProjectPage: React.FC = () => {
         }
         throw new Error(msg);
       }
-      
+
+      const project = await res.json();
+      const projectId: number = project.project_id;
+
+      // Send queued invitations (best-effort, non-blocking)
+      if (invitedIds.size > 0) {
+        const token = localStorage.getItem("access_token");
+        await Promise.allSettled(
+          Array.from(invitedIds).map((freelancerId) =>
+            fetch(`${API_BASE_URL}/proposals/invite`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ project_id: projectId, freelancer_id: freelancerId }),
+            })
+          )
+        );
+      }
+
       navigate("/dashboard/client");
     } catch (err: any) {
       setErrorMsg(err.message || "Network Error");
@@ -626,19 +646,41 @@ const PostProjectPage: React.FC = () => {
                           )}
                         </div>
 
-                        {/* Score */}
-                        <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 16 }}>
-                          <div style={{ fontSize: 24, fontWeight: 600, color: scorePct >= 50 ? colors.primary : colors.subtext, lineHeight: 1 }}>
-                            {scorePct}%
+                        {/* Score + Invite */}
+                        <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 24, fontWeight: 600, color: scorePct >= 50 ? colors.primary : colors.subtext, lineHeight: 1 }}>
+                              {scorePct}%
+                            </div>
+                            <div style={{ fontSize: 10, color: colors.subtext, marginTop: 4 }}>match</div>
                           </div>
-                          <div style={{ fontSize: 10, color: colors.subtext, marginTop: 4 }}>match</div>
 
                           {/* Score breakdown */}
-                          <div style={{ marginTop: 8, fontSize: 10, color: colors.subtext, textAlign: "right", lineHeight: 1.8 }}>
+                          <div style={{ fontSize: 10, color: colors.subtext, textAlign: "right", lineHeight: 1.8 }}>
                             <div>Text {Math.round(f.text_score * 100)}%</div>
                             <div>Skill {Math.round(f.skill_score * 100)}%</div>
                             <div>Quality {Math.round(f.quality_score * 100)}%</div>
                           </div>
+
+                          {/* Invite button */}
+                          {invitedIds.has(f.freelancer_id) ? (
+                            <div style={{ fontSize: 11, color: "#22c55e", fontWeight: 500, padding: "5px 10px", borderRadius: 6, background: "rgba(34,197,94,.1)", border: "1px solid rgba(34,197,94,.25)" }}>
+                              ✓ Invited
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setInvitedIds(prev => new Set(prev).add(f.freelancer_id))}
+                              style={{
+                                fontSize: 11, fontWeight: 500, padding: "5px 12px", borderRadius: 6,
+                                border: `1px solid ${colors.primary}`, background: "transparent",
+                                color: colors.primary, cursor: "pointer", transition: "all 0.15s",
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = colors.primarySoft; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                            >
+                              + Invite
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -657,7 +699,11 @@ const PostProjectPage: React.FC = () => {
                   disabled={isSaving}
                   style={{ background: isSaving ? colors.border : colors.primary, color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.7 : 1 }}
                 >
-                  {isSaving ? "Saving to Database..." : "Save & Post to Marketplace"}
+                  {isSaving
+                    ? "Saving..."
+                    : invitedIds.size > 0
+                      ? `Save & Send ${invitedIds.size} Invite${invitedIds.size > 1 ? "s" : ""}`
+                      : "Save & Post to Marketplace"}
                 </button>
               </div>
             </div>

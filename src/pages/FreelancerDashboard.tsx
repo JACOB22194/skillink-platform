@@ -41,12 +41,6 @@ const MetricCard: React.FC<{ label: string; value: React.ReactNode; sub: string;
     </div>
   );
 
-const Badge: React.FC<{ children: React.ReactNode; bg: string; color: string; border: string }> =
-  ({ children, bg, color, border }) => (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, padding: "3px 8px", borderRadius: 100, marginTop: 6, background: bg, color, border: `0.5px solid ${border}` }}>
-      {children}
-    </span>
-  );
 
 const EmptyState: React.FC<{ label: string; hint: string; c: ThemeColors }> = ({ label, hint, c }) => (
   <div style={{ padding: "28px 16px", textAlign: "center" }}>
@@ -462,105 +456,6 @@ const MetricSkeletons: React.FC<{ dark: boolean }> = ({ dark }) => (
   </>
 );
 
-// ─── Profile Panel ────────────────────────────────────────────────────────────
-
-const AvatarCircle: React.FC<{ src: string; initials: string; size: number; primary: string; surface: string }> = ({ src, initials, size, primary, surface }) => {
-  const [err, setErr] = React.useState(false);
-  if (src && !err) {
-    return <img src={src} alt="avatar" onError={() => setErr(true)} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: `2px solid ${surface}`, display: "block", margin: "0 auto 8px" }} />;
-  }
-  return <div style={{ width: size, height: size, borderRadius: "50%", background: primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.36, fontWeight: 600, margin: "0 auto 8px" }}>{initials}</div>;
-};
-
-const ProfilePanel: React.FC<{
-  profile: FreelancerProfile | null; ghProfile: any; loading: boolean; ghLoading: boolean;
-  initials: string; displayName: string; c: ThemeColors; dark: boolean;
-}> = ({ profile, ghProfile, loading, ghLoading, initials, displayName, c, dark }) => (
-  <div style={{ textAlign: "center", paddingBottom: 12, borderBottom: `0.5px solid ${c.border}`, marginBottom: 16 }}>
-    <AvatarCircle
-      src={ghProfile?.avatar_url ?? ghProfile?.github_stats?.avatar_url ?? ""}
-      initials={initials}
-      size={44}
-      primary={c.primary}
-      surface={c.surface}
-    />
-    <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{ghProfile?.name || displayName}</div>
-    {(loading || ghLoading)
-      ? <Skeleton width={100} height={11} dark={dark} style={{ margin: "6px auto 8px" }} />
-      : <div style={{ fontSize: 11, color: c.subtext, marginTop: 2, marginBottom: 6 }}>{ghProfile?.professional_title || (profile?.bio ? profile.bio.slice(0, 36) + (profile.bio.length > 36 ? "…" : "") : "Freelancer")}</div>
-    }
-    <Badge bg={c.primarySoft} color={c.primary} border="rgba(127,119,221,.2)">✓ AI Gate Verified</Badge>
-
-    {/* Stats */}
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6, marginTop: 12 }}>
-      {loading || ghLoading
-        ? [0, 1, 2].map((i) => (
-            <div key={i} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 4px" }}>
-              <Skeleton width={36} height={16} dark={dark} style={{ margin: "0 auto 4px" }} />
-              <Skeleton width={28} height={9} dark={dark} style={{ margin: "0 auto" }} />
-            </div>
-          ))
-        : [
-            { val: ghProfile?.github_score ? `${ghProfile.github_score}` : profile?.success_score?.toFixed(0) ?? "—", label: "GH SCORE", color: c.primary },
-            { val: profile?.hourly_rate ? `$${profile.hourly_rate}` : "—", label: "RATE",   color: "#22c55e" },
-            { val: profile?.wallet_balance != null ? `$${profile.wallet_balance.toFixed(0)}` : "—", label: "WALLET", color: c.text },
-          ].map((s) => (
-            <div key={s.label} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 4px", textAlign: "center" }}>
-              <div style={{ fontSize: 16, fontWeight: 500, color: s.color }}>{s.val}</div>
-              <div style={{ fontSize: 9, color: c.subtext }}>{s.label}</div>
-            </div>
-          ))
-      }
-    </div>
-
-    {/* GitHub mini stats */}
-    {ghProfile?.github_stats && (
-      <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, textAlign: "left" }}>
-        {[
-          { label: "⭐ Stars",   val: ghProfile.github_stats.total_stars ?? 0 },
-          { label: "📦 Repos",  val: ghProfile.github_stats.public_repos ?? 0 },
-          { label: "👥 Followers", val: ghProfile.github_stats.followers ?? 0 },
-          { label: "🔧 Skills", val: profile?.skills?.length ?? 0 },
-        ].map(({ label, val }) => (
-          <div key={label} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 7, padding: "6px 8px" }}>
-            <div style={{ fontSize: 11, color: c.subtext }}>{label}</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{val}</div>
-          </div>
-        ))}
-      </div>
-    )}
-
-    {/* Profile completion bar */}
-    {!loading && !ghLoading && (() => {
-      const items = [!!profile?.bio, (profile?.skills?.length ?? 0) > 0, !!ghProfile?.github_score, !!profile?.hourly_rate];
-      const done = items.filter(Boolean).length;
-      const pct  = Math.round((done / items.length) * 100);
-      return (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: c.subtext, marginBottom: 5 }}>
-            <span>Profile complete</span>
-            <span style={{ color: pct === 100 ? "#22c55e" : c.primary, fontWeight: 600 }}>{pct}%</span>
-          </div>
-          <div style={{ height: 4, background: c.border, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ width: `${pct}%`, height: "100%", background: pct === 100 ? "#22c55e" : c.primary, borderRadius: 4, transition: "width .5s ease" }} />
-          </div>
-          {pct < 100 && (
-            <div style={{ fontSize: 10, color: c.subtext, marginTop: 5, opacity: .8 }}>
-              {[!profile?.bio && "Add bio", !(profile?.skills?.length) && "Add skills", !ghProfile?.github_score && "Connect GitHub", !profile?.hourly_rate && "Set rate"].filter(Boolean).join(" · ")}
-            </div>
-          )}
-        </div>
-      );
-    })()}
-
-    {/* Update GitHub shortcut */}
-    <a href="/github/review"
-      style={{ display: "block", marginTop: 12, textAlign: "center", fontSize: 11, padding: "7px 0", borderRadius: 8, border: `0.5px solid ${c.border}`, color: c.subtext, textDecoration: "none", transition: "all .2s" }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = c.primary; (e.currentTarget as HTMLElement).style.borderColor = c.primary; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = c.subtext; (e.currentTarget as HTMLElement).style.borderColor = c.border; }}
-    >🐙 Update GitHub</a>
-  </div>
-);
 
 // ─── Skills Section ───────────────────────────────────────────────────────────
 
@@ -1083,13 +978,126 @@ const EarningsChart: React.FC<{ c: ThemeColors }> = ({ c }) => {
   );
 };
 
+// ─── Invitations View ─────────────────────────────────────────────────────────
+
+interface Invitation {
+  invitation_id: number;
+  project_id:    number;
+  project_title: string;
+  client_email:  string;
+  message:       string | null;
+  status:        string;
+  created_at:    string;
+}
+
+const InvitationsView: React.FC<{ c: ThemeColors; onCountChange?: (n: number) => void }> = ({ c, onCountChange }) => {
+  const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+  const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
+
+  const [invites, setInvites] = useState<Invitation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing]   = useState<number | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/proposals/invitations/my`, auth());
+      if (res.ok) {
+        const data: Invitation[] = await res.json();
+        setInvites(data);
+        onCountChange?.(data.filter((i: Invitation) => i.status === "pending").length);
+      }
+    } catch {} finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const respond = async (id: number, action: "accept" | "decline") => {
+    setActing(id);
+    try {
+      const res = await fetch(`${API}/proposals/invitations/${id}/respond`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        setInvites((prev: Invitation[]) => prev.map((i: Invitation) => i.invitation_id === id ? { ...i, status: action === "accept" ? "accepted" : "declined" } : i));
+        onCountChange?.(invites.filter((i: Invitation) => i.invitation_id !== id && i.status === "pending").length);
+      }
+    } catch {} finally { setActing(null); }
+  };
+
+  const statusColor = (s: string) => s === "accepted" ? "#22c55e" : s === "declined" ? "#ef4444" : c.primary;
+  const statusLabel = (s: string) => s === "accepted" ? "Accepted" : s === "declined" ? "Declined" : "Pending";
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Invitations</div>
+        <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Clients who invited you to submit a proposal</div>
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: c.subtext, padding: 24, textAlign: "center" }}>Loading…</div>
+      ) : invites.length === 0 ? (
+        <EmptyState label="No invitations yet" hint="When a client invites you to a project, it will appear here." c={c} />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {invites.map((inv: Invitation) => (
+            <div key={inv.invitation_id} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "16px 18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {inv.project_title}
+                  </div>
+                  <div style={{ fontSize: 11, color: c.subtext, marginBottom: inv.message ? 8 : 0 }}>
+                    From {inv.client_email} · {timeAgo(inv.created_at)}
+                  </div>
+                  {inv.message && (
+                    <div style={{ fontSize: 12, color: c.text, background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 12px", marginTop: 6, lineHeight: 1.5 }}>
+                      "{inv.message}"
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: statusColor(inv.status), background: statusColor(inv.status) + "18", border: `0.5px solid ${statusColor(inv.status)}30`, borderRadius: 100, padding: "3px 10px" }}>
+                    {statusLabel(inv.status)}
+                  </span>
+                  {inv.status === "pending" && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        onClick={() => respond(inv.invitation_id, "decline")}
+                        disabled={acting === inv.invitation_id}
+                        style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, cursor: "pointer", opacity: acting === inv.invitation_id ? 0.5 : 1 }}
+                      >
+                        Decline
+                      </button>
+                      <button
+                        onClick={() => respond(inv.invitation_id, "accept")}
+                        disabled={acting === inv.invitation_id}
+                        style={{ fontSize: 11, padding: "5px 14px", borderRadius: 8, background: c.primary, border: "none", color: "#fff", cursor: "pointer", fontWeight: 500, opacity: acting === inv.invitation_id ? 0.5 : 1 }}
+                      >
+                        {acting === inv.invitation_id ? "…" : "Accept"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const FreelancerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth<FreelancerProfile>();
   const { data: profile, isLoading: profileLoading, isError: profileError } = useProfile();
-  const { data: ghProfile, isLoading: ghLoading } = useGitHubProfile();
+  const { data: ghProfile } = useGitHubProfile();
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
@@ -1104,6 +1112,7 @@ const FreelancerDashboard: React.FC = () => {
   const [walletMsg, setWalletMsg] = useState("");
   const [walletTx, setWalletTx] = useState<any[]>([]);
   const [walletLoading, setWalletLoading] = useState(false);
+  const [inviteCount, setInviteCount] = useState(0);
   const c = getColors(darkMode);
 
   const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
@@ -1233,7 +1242,8 @@ const FreelancerDashboard: React.FC = () => {
             <NavItem label="Profile"   icon={<IconUser />} colors={c} onClick={() => navigate("/settings")} />
             <NavItem label="Messages"  badge={unreadCount} icon={<IconMsg />} colors={c} onClick={() => navigate("/messages")} />
             <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Skillink</div>
-            <NavItem label="Proposals" icon={<IconDoc />} colors={c} onClick={() => navigate("/proposals")} />
+            <NavItem label="Proposals"   icon={<IconDoc />}    colors={c} onClick={() => navigate("/proposals")} />
+            <NavItem label="Invitations" active={activeView === "Invitations"} badge={inviteCount > 0 ? inviteCount : undefined} icon={<IconTeam />} colors={c} onClick={() => setActiveView("Invitations")} />
             <NavItem label="AI Matches"   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
             <NavItem label="Launchpad"    badge="🚀" icon={<IconRocket />} colors={c} onClick={() => navigate("/launchpad")} />
             <NavItem label="Skill Growth" badge="📈" icon={<IconChart />}  colors={c} onClick={() => navigate("/skill-growth")} />
@@ -1272,6 +1282,8 @@ const FreelancerDashboard: React.FC = () => {
 
             {activeView === "AI Matches" && <ProjectMatchView c={c} />}
 
+            {activeView === "Invitations" && <InvitationsView c={c} onCountChange={setInviteCount} />}
+
             {activeView === "Verification" && <VerificationView c={c} />}
 
             {activeView === "Workrooms" && <WorkroomsView c={c} />}
@@ -1279,216 +1291,171 @@ const FreelancerDashboard: React.FC = () => {
             {activeView === "Upgrade" && <UpgradeNowSection roleType="freelancer" colors={c} />}
 
             {activeView === "Dashboard" && <>
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Dashboard</div>
-              <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Welcome back, {firstName} — your AI match engine is active</div>
-            </div>
 
-            {/* Metric cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
+            {/* ── Profile hero banner ── */}
+            <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "20px 24px", marginBottom: 16, animation: "fadeIn .5s ease" }}>
               {profileLoading ? (
-                <MetricSkeletons dark={darkMode} />
+                <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                  <MetricSkeletons dark={darkMode} />
+                </div>
               ) : profileError ? (
-                <div style={{ gridColumn: "1/-1", fontSize: 13, color: "#ef4444", padding: 16 }}>Failed to load profile data. <button onClick={() => window.location.reload()} style={{ color: c.primary, background: "none", border: "none", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}>Retry</button></div>
+                <div style={{ fontSize: 13, color: "#ef4444" }}>Failed to load profile. <button onClick={() => window.location.reload()} style={{ color: c.primary, background: "none", border: "none", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}>Retry</button></div>
               ) : (
                 <>
-                  <MetricCard
-                    label="GitHub Score"
-                    value={
-                      ghLoading
-                        ? <span style={{ color: c.subtext }}>…</span>
-                        : ghProfile?.github_score
-                          ? <span style={{ color: c.primary }}>{ghProfile.github_score}<span style={{ fontSize: 14, fontWeight: 400 }}>/100</span></span>
-                          : <span style={{ color: c.subtext }}>—</span>
-                    }
-                    sub={ghProfile?.professional_title ?? "Connect GitHub to score"}
-                    badge={
-                      ghProfile?.github_score
-                        ? ghProfile.github_score >= 70
-                          ? <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">✓ Strong profile</Badge>
-                          : <Badge bg="rgba(245,158,11,.1)" color="#f59e0b" border="rgba(245,158,11,.2)">Needs work</Badge>
-                        : <Badge bg={c.primarySoft} color={c.primary} border="rgba(127,119,221,.2)">→ Connect GitHub</Badge>
-                    }
-                    colors={c}
-                  />
-                  <MetricCard
-                    label="Hourly Rate"
-                    value={profile?.hourly_rate ? <span style={{ color: "#22c55e" }}>${profile.hourly_rate}</span> : "—"}
-                    sub="Per hour · USD"
-                    colors={c}
-                  />
-                  <MetricCard
-                    label="Wallet Balance"
-                    value={`$${profile?.wallet_balance?.toFixed(2) ?? "0.00"}`}
-                    sub="Available balance"
-                    badge={
-                      <button onClick={openWallet} style={{ marginTop: 4, padding: "4px 10px", borderRadius: 6, border: "none", background: c.primarySoft, color: c.primary, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                        Withdraw →
-                      </button>
-                    }
-                    colors={c}
-                  />
-                  <MetricCard
-                    label="Skills Listed"
-                    value={profile?.skills?.length ?? 0}
-                    sub={profile?.skills?.length ? "Active skills on profile" : "Add skills in Settings"}
-                    badge={!profile?.skills?.length ? <Badge bg="rgba(245,158,11,.1)" color="#f59e0b" border="rgba(245,158,11,.2)">Add skills →</Badge> : undefined}
-                    colors={c}
-                  />
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+                    {/* Avatar */}
+                    <div style={{ width: 54, height: 54, borderRadius: 15, background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, flexShrink: 0, border: `0.5px solid ${c.primary}25` }}>
+                      {initials}
+                    </div>
+                    {/* Name + title + stats */}
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: c.text, letterSpacing: "-0.3px" }}>{firstName}</div>
+                        {ghProfile?.github_score && (
+                          <span style={{ fontSize: 10, fontWeight: 700, background: "rgba(34,197,94,.12)", color: "#22c55e", border: "0.5px solid rgba(34,197,94,.2)", borderRadius: 100, padding: "2px 8px" }}>✓ AI Gate Verified</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: c.subtext, marginBottom: 16 }}>
+                        {ghProfile?.professional_title || profile?.bio?.split(".")[0] || "Freelancer on SkillLink"}
+                      </div>
+                      {/* Inline stats row */}
+                      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+                        {([
+                          { label: "GitHub Score", val: ghProfile?.github_score ? `${ghProfile.github_score}/100` : "—", color: c.primary },
+                          { label: "Hourly Rate",  val: profile?.hourly_rate ? `$${profile.hourly_rate}/hr` : "—",       color: "#22c55e" },
+                          { label: "Wallet",       val: `$${profile?.wallet_balance?.toFixed(2) ?? "0.00"}`,              color: "#f59e0b" },
+                          { label: "Skills",       val: String(profile?.skills?.length ?? 0),                             color: c.text },
+                          ...(proposalStats ? [
+                            { label: "Sent",       val: String(proposalStats.sent),                  color: c.text },
+                            { label: "Accepted",   val: String(proposalStats.accepted),              color: "#22c55e" },
+                            { label: "Response",   val: `${proposalStats.response_rate}%`,           color: "#f59e0b" },
+                          ] : []),
+                        ] as { label: string; val: string; color: string }[]).map(s => (
+                          <div key={s.label}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                            <div style={{ fontSize: 10, color: c.subtext, textTransform: "uppercase", letterSpacing: ".05em", marginTop: 3 }}>{s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Action buttons */}
+                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      <button onClick={openWallet} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, cursor: "pointer", fontFamily: "inherit" }}>Wallet →</button>
+                      <button onClick={() => navigate("/settings")} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, background: c.primary, border: "none", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>Edit Profile</button>
+                    </div>
+                  </div>
+                  {/* Skills strip */}
+                  {profile?.skills && profile.skills.length > 0 && (
+                    <div style={{ marginTop: 16, paddingTop: 14, borderTop: `0.5px solid ${c.border}`, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(profile.skills as string[]).slice(0, 14).map((s: string) => (
+                        <span key={s} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: c.primarySoft, color: c.primary, border: `0.5px solid ${c.primary}20` }}>{s}</span>
+                      ))}
+                      {profile.skills.length > 14 && (
+                        <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: c.bg, color: c.subtext, border: `0.5px solid ${c.border}` }}>+{profile.skills.length - 14} more</span>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>
 
-            {/* Proposals / Activity Stats row */}
-            {!profileLoading && !profileError && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
-                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(127,119,221,.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📨</div>
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 600, color: c.primary, lineHeight: 1 }}>{proposalStats ? proposalStats.sent : "—"}</div>
-                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Proposals Sent</div>
-                  </div>
-                </div>
-                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(34,197,94,.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>✅</div>
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 600, color: "#22c55e", lineHeight: 1 }}>{proposalStats ? proposalStats.accepted : "—"}</div>
-                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Accepted</div>
-                  </div>
-                </div>
-                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(239,68,68,.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>❌</div>
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 600, color: "#ef4444", lineHeight: 1 }}>{proposalStats ? proposalStats.rejected : "—"}</div>
-                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Rejected</div>
-                  </div>
-                </div>
-                <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(245,158,11,.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📊</div>
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 600, color: "#f59e0b", lineHeight: 1 }}>{proposalStats ? `${proposalStats.response_rate}%` : "—"}</div>
-                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>Response Rate</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Middle row */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 12, marginBottom: 12 }}>
-
-              {/* Bio / Profile card */}
-              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Your Profile</span>
-                  <a href="/settings" style={{ fontSize: 11, color: c.subtext, cursor: "pointer", textDecoration: "none" }}>Edit →</a>
-                </div>
-                {profileLoading ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <Skeleton width="100%" height={12} dark={darkMode} />
-                    <Skeleton width="90%" height={12} dark={darkMode} />
-                    <Skeleton width="75%" height={12} dark={darkMode} />
-                  </div>
-                ) : (
-                  <>
-                    <p style={{ fontSize: 13, color: c.subtext, lineHeight: 1.6, margin: "0 0 12px" }}>
-                      {profile?.bio ?? <span style={{ opacity: .5 }}>No bio yet. <a href="/settings" style={{ color: c.primary, textDecoration: "none" }}>Add one →</a></span>}
-                    </p>
-                    {profile?.skills && <SkillsSection skills={profile.skills} c={c} />}
-                  </>
-                )}
-              </div>
-
-              {/* AI Matches preview card */}
-              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Top AI Matches</span>
-                  <span onClick={() => setActiveView("AI Matches")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>View all →</span>
-                </div>
-                <EmptyState label="Click 'AI Matches' in the sidebar" hint="The engine surfaces best-fit projects once clients run matching for their jobs." c={c} />
-              </div>
-            </div>
-
-            {/* Bottom row — Projects + Reviews */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 12 }}>
-              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Projects in Progress</span>
+            {/* ── Active Contracts ── */}
+            <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 20px", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>Active Contracts</div>
                   {activeContracts.length > 0 && (
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: "rgba(34,197,94,.1)", color: "#22c55e" }}>{activeContracts.length} active</span>
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: "rgba(34,197,94,.1)", color: "#22c55e", border: "0.5px solid rgba(34,197,94,.2)" }}>{activeContracts.length} active</span>
                   )}
                 </div>
-                {activeContracts.length === 0 ? (
-                  <EmptyState label="No active projects yet" hint="You'll see your active contracts here once a client accepts your proposal." c={c} />
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {activeContracts.map((ct: WorkContract) => {
-                      const msList = ct.milestones ?? [];
-                      const paid = msList.filter((m: { status: string }) => m.status === "paid").length;
-                      const total = msList.length;
-                      return (
-                        <div key={ct.contract_id} onClick={() => navigate(`/contract/${ct.contract_id}`)}
-                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: c.bg, border: `0.5px solid ${c.border}`, cursor: "pointer" }}
-                          onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = c.primary + "66"}
-                          onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = c.border}
-                        >
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ct.project?.title ?? `Contract #${ct.contract_id}`}</div>
-                            <div style={{ fontSize: 11, color: c.subtext, marginTop: 1 }}>{total > 0 ? `${paid}/${total} milestones paid` : "No milestones yet"}</div>
-                          </div>
-                          <span style={{ fontSize: 11, color: c.primary }}>→</span>
+                <span onClick={() => setActiveView("Workrooms")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>All workrooms →</span>
+              </div>
+              {activeContracts.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "22px 0" }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>📝</div>
+                  <div style={{ fontSize: 12, color: c.subtext }}>No active contracts yet.</div>
+                  <div style={{ fontSize: 11, color: c.subtext, marginTop: 4, opacity: .7 }}>Submit proposals to open projects to start working.</div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {activeContracts.map((ct: WorkContract) => {
+                    const msList = ct.milestones ?? [];
+                    const paid  = msList.filter((m: { status: string }) => m.status === "paid").length;
+                    const total = msList.length;
+                    const pct   = total > 0 ? Math.round((paid / total) * 100) : 0;
+                    return (
+                      <div key={ct.contract_id}
+                        onClick={() => navigate(`/contract/${ct.contract_id}`)}
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, background: c.bg, border: `0.5px solid ${c.border}`, cursor: "pointer", transition: "border-color .15s" }}
+                        onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = c.primary + "66"}
+                        onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = c.border}
+                      >
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ct.project?.title ?? `Contract #${ct.contract_id}`}</div>
+                          <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>{total > 0 ? `${paid}/${total} milestones · ${pct}% complete` : "No milestones yet"}</div>
+                          {total > 0 && (
+                            <div style={{ height: 3, background: c.border, borderRadius: 20, overflow: "hidden", marginTop: 5 }}>
+                              <div style={{ height: "100%", width: `${pct}%`, background: "#22c55e", borderRadius: 20, transition: "width .4s" }} />
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
+                        <span style={{ fontSize: 11, color: c.primary, fontWeight: 500 }}>Open →</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── Bio + AI Matches (2-col) ── */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 20px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>About Me</div>
+                  <a href="/settings" style={{ fontSize: 11, color: c.subtext, textDecoration: "none" }}>Edit →</a>
+                </div>
+                {profileLoading ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <Skeleton width="100%" height={12} dark={darkMode} />
+                    <Skeleton width="88%" height={12} dark={darkMode} />
+                    <Skeleton width="72%" height={12} dark={darkMode} />
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 13, color: c.subtext, lineHeight: 1.6, margin: "0 0 14px" }}>
+                    {profile?.bio ?? <span style={{ opacity: .5 }}>No bio yet. <a href="/settings" style={{ color: c.primary, textDecoration: "none" }}>Add one →</a></span>}
+                  </p>
+                )}
+                {ghProfile && (
+                  <div style={{ display: "flex", gap: 20, paddingTop: 12, borderTop: `0.5px solid ${c.border}` }}>
+                    {([
+                      { label: "Stars",     val: ghProfile.stars_count ?? 0 },
+                      { label: "Repos",     val: ghProfile.public_repos ?? 0 },
+                      { label: "Followers", val: ghProfile.followers ?? 0 },
+                    ] as { label: string; val: number }[]).map(s => (
+                      <div key={s.label} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{s.val}</div>
+                        <div style={{ fontSize: 10, color: c.subtext }}>{s.label}</div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-
-              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16 }}>
+              <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 20px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Recent Reviews</span>
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: c.primarySoft, color: c.primary }}>Coming soon</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>AI Job Matches</div>
+                    <span style={{ fontSize: 9, fontWeight: 700, background: `${c.primary}18`, color: c.primary, border: `0.5px solid ${c.primary}30`, borderRadius: 100, padding: "2px 7px" }}>AI</span>
+                  </div>
+                  <span onClick={() => setActiveView("AI Matches")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>View all →</span>
                 </div>
-                <EmptyState label="No reviews yet" hint="Client reviews will appear here after you complete your first project." c={c} />
+                <EmptyState label="Click 'AI Matches' in the sidebar" hint="The engine surfaces best-fit projects once clients run AI matching for their jobs." c={c} />
               </div>
             </div>
+
             </>}
           </main>
 
-          {/* ── Right Panel ── */}
-          <aside style={{ width: 220, borderLeft: `0.5px solid ${c.border}`, background: c.surface, padding: 16, overflowY: "auto", flexShrink: 0 }}>
-            <ProfilePanel
-              profile={profile}
-              ghProfile={ghProfile}
-              loading={profileLoading}
-              ghLoading={ghLoading}
-              initials={initials}
-              displayName={displayName}
-              c={c}
-              dark={darkMode}
-            />
-
-            {/* Upcoming */}
-            <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 8 }}>Upcoming</div>
-            <EmptyState label="No upcoming events" hint="Scheduled calls and deadlines will appear here." c={c} />
-
-            {/* Quick actions */}
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 8 }}>Quick Links</div>
-              {[
-                { label: "Update GitHub",   href: "/github/review" },
-                { label: "Settings",        href: "/settings" },
-                { label: "Setup MFA",       href: "/settings/mfa" },
-              ].map(({ label, href }) => (
-                <a key={href} href={href} style={{ display: "block", fontSize: 12, color: c.subtext, padding: "6px 0", borderBottom: `0.5px solid ${c.border}`, textDecoration: "none" }}
-                  onMouseEnter={e => (e.currentTarget.style.color = c.primary)}
-                  onMouseLeave={e => (e.currentTarget.style.color = c.subtext)}
-                >
-                  {label} →
-                </a>
-              ))}
-            </div>
-          </aside>
         </div>
       </div>
 
