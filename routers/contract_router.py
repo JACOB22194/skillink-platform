@@ -300,11 +300,95 @@ def update_milestone_status(
             entity_id = contract.contract_id,
         )
 
+    elif body.status == models.MilestoneStatus.pending:
+        # Freelancer resubmits after revision was requested
+        if current != models.MilestoneStatus.revision_requested:
+            raise HTTPException(
+                400,
+                f"Can only resubmit a milestone that is in 'revision_requested' status."
+            )
+        # Only the freelancer on this contract can resubmit
+        freelancer = db.query(models.Freelancer).filter(
+            models.Freelancer.user_id == me.id
+        ).first()
+        if not freelancer or freelancer.freelancer_id != contract.freelancer_id:
+            raise HTTPException(403, "Only the freelancer can resubmit a milestone.")
+
+        milestone.status           = models.MilestoneStatus.pending
+        milestone.revision_feedback = None   # clear feedback on resubmit
+        db.commit()
+
+        # Notify client that work was resubmitted
+        notify(
+            db        = db,
+            user_id   = contract.project.client.user_id,
+            type      = models.NotificationType.milestone,
+            title     = f"Milestone resubmitted for review",
+            body      = f"'{milestone.title or f'Milestone #{milestone_id}'}' has been resubmitted.",
+            entity_id = contract.contract_id,
+        )
+
     else:
         raise HTTPException(
             400,
-            f"Invalid status transition. Allowed: pending→approved or approved→paid."
+            f"Invalid status transition. Allowed: pending→approved, approved→paid, revision_requested→pending."
         )
+
+    db.refresh(milestone)
+    return milestone
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /milestones/{milestone_id}/request-revision  (EMP-07)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/milestones/{milestone_id}/request-revision",
+    response_model=schema.MilestoneResponse,
+    summary="Request revision on a pending milestone",
+    description="""
+**Client only.** Sends the milestone back to the freelancer with written feedback.
+- Milestone must be `pending`
+- Status changes to `revision_requested`
+- Freelancer is notified with the feedback text
+- Freelancer can resubmit by calling PUT /milestones/{id}/status with status=`pending`
+""",
+)
+def request_revision(
+    milestone_id: int,
+    body:         schema.RevisionRequestCreate,
+    me:           models.User = Depends(require_client),
+    db:           Session     = Depends(get_db),
+):
+    milestone = db.query(models.Milestone).filter(
+        models.Milestone.milestone_id == milestone_id
+    ).first()
+    if not milestone:
+        raise HTTPException(404, "Milestone not found.")
+
+    contract = milestone.contract
+    client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+    if not client or contract.project.client_id != client.client_id:
+        raise HTTPException(403, "You do not own this contract.")
+
+    if milestone.status != models.MilestoneStatus.pending:
+        raise HTTPException(
+            400,
+            f"Can only request revision on a 'pending' milestone (current: '{milestone.status.value}')."
+        )
+
+    milestone.status            = models.MilestoneStatus.revision_requested
+    milestone.revision_feedback = body.feedback
+    db.commit()
+
+    notify(
+        db        = db,
+        user_id   = contract.freelancer.user_id,
+        type      = models.NotificationType.milestone,
+        title     = f"Revision requested on milestone '{milestone.title or f'#{milestone_id}'}'",
+        body      = body.feedback,
+        entity_id = contract.contract_id,
+    )
 
     db.refresh(milestone)
     return milestone

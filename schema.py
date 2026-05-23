@@ -59,9 +59,10 @@ class ContractStatus(str, Enum):
     disputed  = "disputed"
 
 class MilestoneStatus(str, Enum):
-    pending  = "pending"
-    approved = "approved"
-    paid     = "paid"
+    pending             = "pending"
+    revision_requested  = "revision_requested"
+    approved            = "approved"
+    paid                = "paid"
 
 class EscrowStatus(str, Enum):
     held     = "held"
@@ -221,6 +222,12 @@ class FreelancerSearchResult(BaseModel):
     success_score:  float
     skills:         List[str] = []
     ai_match_score: Optional[float] = None
+
+class ScoreBreakdownResponse(BaseModel):
+    score:          int    # 0–100 (success_score × 20)
+    avg_rating:     float  # raw 0–5
+    total_reviews:  int
+    jobs_completed: int
 
 
 # ═══════════════════════════════════════════════════
@@ -415,7 +422,18 @@ class MilestoneResponse(BaseModel):
     created_at:             datetime
     ai_verification_status: Optional[str] = None
     ai_verification_report: Optional[str] = None
+    revision_feedback:      Optional[str] = None
     model_config = {"from_attributes": True}
+
+class RevisionRequestCreate(BaseModel):
+    feedback: str
+
+    @field_validator("feedback")
+    @classmethod
+    def feedback_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Feedback cannot be empty.")
+        return v.strip()
 
 class MilestoneStatusUpdate(BaseModel):
     status: MilestoneStatus
@@ -730,6 +748,48 @@ class WSOutgoingMessage(BaseModel):
 class MessageResponse(BaseModel):
     message: str
 
+
+# ═══════════════════════════════════════════════════
+#  INVITATIONS (EMP-05)
+# ═══════════════════════════════════════════════════
+
+class InviteFreelancerRequest(BaseModel):
+    project_id:    int
+    freelancer_id: int
+    message:       Optional[str] = None
+
+class InvitationResponse(BaseModel):
+    invitation_id: int
+    project_id:    int
+    freelancer_id: int
+    client_id:     int
+    message:       Optional[str]
+    status:        str
+    created_at:    datetime
+    model_config = {"from_attributes": True}
+
+
+class InvitationDetailResponse(BaseModel):
+    invitation_id: int
+    project_id:    int
+    project_title: str
+    client_email:  str
+    message:       Optional[str]
+    status:        str
+    created_at:    datetime
+    model_config = {"from_attributes": False}
+
+
+class InvitationSentResponse(BaseModel):
+    invitation_id:    int
+    project_id:       int
+    project_title:    str
+    freelancer_id:    int
+    freelancer_email: str
+    message:          Optional[str]
+    status:           str
+    created_at:       datetime
+    model_config = {"from_attributes": False}
 
 
 # ─────────────────────────────────────────────────────────────

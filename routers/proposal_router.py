@@ -15,6 +15,7 @@ PHASE 5:
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -415,6 +416,78 @@ def withdraw_proposal(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /proposals/invite  — Client invites a freelancer (EMP-05)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/invite",
+    response_model=schema.InvitationResponse,
+    status_code=201,
+    summary="Invite a freelancer to submit a proposal",
+    description="""
+**Clients only.**
+Send a direct invitation to a specific freelancer for one of your open projects.
+- Project must be `open`
+- Cannot send duplicate invitations to the same freelancer for the same project
+- Sends an in-app notification to the freelancer
+""",
+)
+def invite_freelancer(
+    body: schema.InviteFreelancerRequest,
+    me:   models.User = Depends(require_client),
+    db:   Session     = Depends(get_db),
+):
+    client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+    if not client:
+        raise HTTPException(404, "Client profile not found.")
+
+    project = db.query(models.Project).filter(
+        models.Project.project_id == body.project_id,
+        models.Project.client_id  == client.client_id,
+    ).first()
+    if not project:
+        raise HTTPException(404, "Project not found or does not belong to you.")
+    if project.status != models.ProjectStatus.open:
+        raise HTTPException(400, f"Project is '{project.status.value}', not open for invitations.")
+
+    freelancer = db.query(models.Freelancer).filter(
+        models.Freelancer.freelancer_id == body.freelancer_id
+    ).first()
+    if not freelancer:
+        raise HTTPException(404, "Freelancer not found.")
+
+    duplicate = db.query(models.Invitation).filter(
+        models.Invitation.project_id    == body.project_id,
+        models.Invitation.freelancer_id == body.freelancer_id,
+    ).first()
+    if duplicate:
+        raise HTTPException(409, "You have already invited this freelancer to this project.")
+
+    invitation = models.Invitation(
+        project_id    = body.project_id,
+        freelancer_id = body.freelancer_id,
+        client_id     = client.client_id,
+        message       = body.message,
+        status        = models.InvitationStatus.pending,
+    )
+    db.add(invitation)
+    db.flush()
+
+    notify(
+        db        = db,
+        user_id   = freelancer.user_id,
+        type      = models.NotificationType.proposal,
+        title     = f"You've been invited to '{project.title}'",
+        body      = body.message or f"{me.email} has invited you to submit a proposal.",
+        entity_id = body.project_id,
+    )
+
+    db.commit()
+    db.refresh(invitation)
+    return invitation
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  PATCH /proposals/{proposal_id}  — Edit
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -445,3 +518,120 @@ def edit_proposal(
     db.commit()
     db.refresh(proposal)
     return proposal
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /proposals/invitations/sent  — Client sees invites they sent
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/invitations/sent",
+    response_model=list[schema.InvitationSentResponse],
+    summary="List all invitations sent by the current client",
+)
+def sent_invitations(
+    me: models.User = Depends(require_client),
+    db: Session     = Depends(get_db),
+):
+    client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+    if not client:
+        raise HTTPException(404, "Client profile not found.")
+    rows = (
+        db.query(models.Invitation, models.Project, models.User)
+        .join(models.Project,    models.Invitation.project_id    == models.Project.project_id)
+        .join(models.Freelancer, models.Invitation.freelancer_id == models.Freelancer.freelancer_id)
+        .join(models.User,       models.Freelancer.user_id       == models.User.id)
+        .filter(models.Invitation.client_id == client.client_id)
+        .order_by(models.Invitation.created_at.desc())
+        .all()
+    )
+    return [
+        schema.InvitationSentResponse(
+            invitation_id    = inv.invitation_id,
+            project_id       = inv.project_id,
+            project_title    = proj.title,
+            freelancer_id    = inv.freelancer_id,
+            freelancer_email = usr.email,
+            message          = inv.message,
+            status           = inv.status.value,
+            created_at       = inv.created_at,
+        )
+        for inv, proj, usr in rows
+    ]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /proposals/invitations/my  — Freelancer sees their invites
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/invitations/my",
+    response_model=list[schema.InvitationDetailResponse],
+    summary="List all invitations received by the current freelancer",
+)
+def my_invitations(
+    me: models.User  = Depends(require_freelancer),
+    db: Session      = Depends(get_db),
+):
+    freelancer = db.query(models.Freelancer).filter(models.Freelancer.user_id == me.id).first()
+    if not freelancer:
+        raise HTTPException(404, "Freelancer profile not found.")
+    rows = (
+        db.query(models.Invitation, models.Project, models.User)
+        .join(models.Project, models.Invitation.project_id == models.Project.project_id)
+        .join(models.Client,  models.Invitation.client_id  == models.Client.client_id)
+        .join(models.User,    models.Client.user_id        == models.User.id)
+        .filter(models.Invitation.freelancer_id == freelancer.freelancer_id)
+        .order_by(models.Invitation.created_at.desc())
+        .all()
+    )
+    return [
+        schema.InvitationDetailResponse(
+            invitation_id = inv.invitation_id,
+            project_id    = inv.project_id,
+            project_title = proj.title,
+            client_email  = usr.email,
+            message       = inv.message,
+            status        = inv.status.value,
+            created_at    = inv.created_at,
+        )
+        for inv, proj, usr in rows
+    ]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  PATCH /proposals/invitations/{id}/respond  — Accept / decline
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class _RespondBody(BaseModel):
+    action: str  # "accept" | "decline"
+
+@router.patch(
+    "/invitations/{invitation_id}/respond",
+    response_model=schema.InvitationResponse,
+    summary="Accept or decline an invitation (freelancer only)",
+)
+def respond_invitation(
+    invitation_id: int,
+    body: _RespondBody,
+    me:   models.User = Depends(require_freelancer),
+    db:   Session     = Depends(get_db),
+):
+    freelancer = db.query(models.Freelancer).filter(models.Freelancer.user_id == me.id).first()
+    inv = db.query(models.Invitation).filter(
+        models.Invitation.invitation_id  == invitation_id,
+        models.Invitation.freelancer_id  == freelancer.freelancer_id,
+    ).first()
+    if not inv:
+        raise HTTPException(404, "Invitation not found.")
+    if inv.status != models.InvitationStatus.pending:
+        raise HTTPException(400, f"Invitation already {inv.status.value}.")
+    if body.action == "accept":
+        inv.status = models.InvitationStatus.accepted
+    elif body.action == "decline":
+        inv.status = models.InvitationStatus.declined
+    else:
+        raise HTTPException(422, "action must be 'accept' or 'decline'.")
+    db.commit()
+    db.refresh(inv)
+    return inv

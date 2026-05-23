@@ -520,6 +520,44 @@ def get_freelancer_by_user(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /freelancers/{freelancer_id}/score-breakdown
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@freelancer_router.get(
+    "/{freelancer_id}/score-breakdown",
+    response_model=schema.ScoreBreakdownResponse,
+    summary="Get a freelancer's trust score breakdown",
+    description="Returns overall score (0–100), average star rating, jobs completed, and review count.",
+)
+def get_score_breakdown(
+    freelancer_id: int,
+    me:            models.User = Depends(get_current_user),
+    db:            Session     = Depends(get_db),
+):
+    freelancer = db.query(models.Freelancer).filter(
+        models.Freelancer.freelancer_id == freelancer_id
+    ).first()
+    if not freelancer:
+        raise HTTPException(404, "Freelancer not found.")
+
+    total_reviews = db.query(models.Review).filter(
+        models.Review.freelancer_id == freelancer_id
+    ).count()
+
+    jobs_completed = db.query(models.Contract).filter(
+        models.Contract.freelancer_id == freelancer_id,
+        models.Contract.status == models.ContractStatus.completed,
+    ).count()
+
+    return schema.ScoreBreakdownResponse(
+        score          = round((freelancer.success_score or 0.0) * 20),
+        avg_rating     = round(freelancer.success_score or 0.0, 1),
+        total_reviews  = total_reviews,
+        jobs_completed = jobs_completed,
+    )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  GET /users/companies/search?q=   ✅ NEW
 #  Public endpoint — no auth needed (used on register page)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

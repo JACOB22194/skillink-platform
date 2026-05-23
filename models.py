@@ -66,9 +66,10 @@ class ContractType(str, enum.Enum):
     hourly = "hourly"
 
 class MilestoneStatus(str, enum.Enum):
-    pending  = "pending"
-    approved = "approved"
-    paid     = "paid"
+    pending             = "pending"
+    revision_requested  = "revision_requested"
+    approved            = "approved"
+    paid                = "paid"
 
 class EscrowStatus(str, enum.Enum):
     held     = "held"
@@ -325,6 +326,7 @@ class Milestone(Base):
     created_at               = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     ai_verification_status   = Column(String(20), nullable=True)   # passed | flagged | insufficient_evidence
     ai_verification_report   = Column(Text, nullable=True)
+    revision_feedback        = Column(Text, nullable=True)          # set when client requests revision
 
     contract = relationship("Contract", back_populates="milestones")
 
@@ -708,3 +710,28 @@ class LaunchpadReservation(Base):
     completed_at         = Column(DateTime(timezone=True), nullable=True)
 
     freelancer = relationship("Freelancer", backref="launchpad_reservations")
+
+
+# ─────────────────────────────────────────
+#  TABLE: invitations  (client → freelancer)
+# ─────────────────────────────────────────
+
+class InvitationStatus(str, enum.Enum):
+    pending  = "pending"
+    accepted = "accepted"
+    declined = "declined"
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+
+    invitation_id = Column(Integer, primary_key=True, index=True)
+    project_id    = Column(Integer, ForeignKey("projects.project_id",    ondelete="CASCADE"), nullable=False, index=True)
+    freelancer_id = Column(Integer, ForeignKey("freelancers.freelancer_id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id     = Column(Integer, ForeignKey("clients.client_id",      ondelete="CASCADE"), nullable=False, index=True)
+    message       = Column(Text, nullable=True)
+    status        = Column(Enum(InvitationStatus), default=InvitationStatus.pending, index=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    project    = relationship("Project")
+    freelancer = relationship("Freelancer")
+    client     = relationship("Client")
