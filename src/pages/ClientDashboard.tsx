@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../api/client";
+import { logout } from "../shared/api";
 import UpgradeNowSection from "../components/UpgradeNowSection";
 
 // ─── API Types (matching backend schema exactly) ──────────────────────────────
@@ -113,6 +114,7 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
     if (!localStorage.getItem("access_token")) return;
     try {
       const res = await fetch(`${API_BASE_CLIENT}/notifications/unread-count`, authHdr());
+      if (res.status === 401) { logout(); return; }
       if (res.ok) { const d = await res.json(); setUnread(d.count ?? 0); }
     } catch {}
   };

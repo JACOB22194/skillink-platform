@@ -5,7 +5,7 @@ import { useProfile, useGitHubProfile } from "../api/hooks";
 import type { FreelancerProfile } from "../api/types";
 import { Skeleton, SkeletonCard, SkeletonMetric } from "../components/ui/Skeleton";
 import { ErrorBoundary } from "../components/ui/ErrorBoundary";
-import { API_BASE_URL, getAuthHeaders } from "../shared/api";
+import { API_BASE_URL, getAuthHeaders, logout } from "../shared/api";
 import UpgradeNowSection from "../components/UpgradeNowSection";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -65,6 +65,7 @@ const IconShield = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="n
 const IconTeam = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>;
 const IconSettings = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
 const IconDoc = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+const IconRocket = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>;
 
 // ─── Notification Bell ────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
     if (!localStorage.getItem("access_token")) return;
     try {
       const res = await fetch(`${API_BASE_URL}/notifications/unread-count`, getAuthHeaders());
+      if (res.status === 401) { logout(); return; }
       if (res.ok) { const d = await res.json(); setUnread(d.count ?? 0); }
     } catch {}
   };
@@ -1232,6 +1234,7 @@ const FreelancerDashboard: React.FC = () => {
             <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Skillink</div>
             <NavItem label="Proposals" icon={<IconDoc />} colors={c} onClick={() => navigate("/proposals")} />
             <NavItem label="AI Matches"   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
+            <NavItem label="Launchpad"    badge="🚀" icon={<IconRocket />} colors={c} onClick={() => navigate("/launchpad")} />
             <NavItem label="Verification" active={activeView === "Verification"} icon={<IconShield />} colors={c} onClick={() => setActiveView("Verification")} />
             <NavItem label="Workrooms" active={activeView === "Workrooms"} icon={<IconTeam />} colors={c} onClick={() => setActiveView("Workrooms")} />
             {/* ── Upgrade Banner ── */}

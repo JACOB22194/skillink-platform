@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { LanguageProvider } from './shared/LanguageContext';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -22,9 +23,11 @@ import { ClientProposalsPage } from "./pages/ClientProposalsPage";
 import { ContractPage }        from "./pages/ContractPage";
 import { ContractsListPage }   from "./pages/ContractsListPage";
 import { FreelancerProfilePage } from "./pages/FreelancerProfilePage";
+import LaunchpadPage from "./pages/LaunchpadPage";
 
 const App = () => {
   return (
+    <LanguageProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -160,8 +163,17 @@ const App = () => {
             </RequireRole>
           }
         />
+        <Route
+          path="/launchpad"
+          element={
+            <RequireRole role="freelancer">
+              <LaunchpadPage />
+            </RequireRole>
+          }
+        />
       </Routes>
     </BrowserRouter>
+    </LanguageProvider>
   );
 };
 

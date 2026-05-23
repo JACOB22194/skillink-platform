@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useRef } from "react";
+import { useLanguage, LangToggle } from "../shared/LanguageContext";
 import axios, { AxiosError } from "axios";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -164,6 +165,7 @@ const MFACodeInput: React.FC<{
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const LoginPage: React.FC = () => {
+  const { t, isRTL } = useLanguage();
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
@@ -196,7 +198,7 @@ const LoginPage: React.FC = () => {
   const handleLogin = async (e: React.MouseEvent | React.FormEvent) => {
     e.preventDefault();
     if (!form.email || !form.password) {
-      setError("Please enter your email and password.");
+      setError(t("login.err.empty"));
       return;
     }
     setLoading(true);
@@ -234,7 +236,7 @@ const LoginPage: React.FC = () => {
       window.location.href = REDIRECT_MAP[token.role];
     } catch (err) {
       const e = err as AxiosError<ApiError>;
-      setError(e.response?.data?.detail ?? "Login failed. Please try again.");
+      setError(e.response?.data?.detail ?? t("login.err.failed"));
     } finally {
       setLoading(false);
     }
@@ -244,7 +246,7 @@ const LoginPage: React.FC = () => {
   const handleMFA = async (e: React.MouseEvent | React.FormEvent) => {
     e.preventDefault();
     if (mfaCode.replace(/\D/g, "").length < 6) {
-      setError("Please enter all 6 digits of your authenticator code.");
+      setError(t("login.mfa.err.digits"));
       return;
     }
     setLoading(true);
@@ -270,7 +272,7 @@ const LoginPage: React.FC = () => {
       window.location.href = REDIRECT_MAP[data.role];
     } catch (err) {
       const e = err as AxiosError<ApiError>;
-      setError(e.response?.data?.detail ?? "Invalid MFA code. Please try again.");
+      setError(e.response?.data?.detail ?? t("login.mfa.err.invalid"));
       setMfaCode("");
     } finally {
       setLoading(false);
@@ -293,12 +295,15 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, fontFamily: "sans-serif", padding: "2rem", position: "relative" }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, fontFamily: isRTL ? "'Cairo', sans-serif" : "sans-serif", padding: "2rem", position: "relative" }}>
 
-      {/* Theme toggle */}
-      <button onClick={toggleTheme} style={{ position: "absolute", top: "2rem", right: "2rem", padding: "8px 12px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.surface, color: c.text, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }}>
-        {darkMode ? "☀️" : "🌙"}
-      </button>
+      {/* Theme + language toggles */}
+      <div style={{ position: "absolute", top: "2rem", right: "2rem", display: "flex", gap: 8 }}>
+        <LangToggle style={{ border: `0.5px solid ${c.border}`, background: c.surface, color: c.text }} />
+        <button onClick={toggleTheme} style={{ padding: "8px 12px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.surface, color: c.text, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }}>
+          {darkMode ? "☀️" : "🌙"}
+        </button>
+      </div>
 
       <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 16, padding: "2.5rem 2rem", width: "100%", maxWidth: 420 }}>
 
@@ -314,9 +319,9 @@ const LoginPage: React.FC = () => {
               <div style={{ width: 48, height: 48, borderRadius: "50%", background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: 22 }}>
                 🔐
               </div>
-              <h1 style={{ fontSize: 20, fontWeight: 500, color: c.text, margin: "0 0 6px" }}>Two-factor authentication</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 500, color: c.text, margin: "0 0 6px" }}>{t("login.mfa.title")}</h1>
               <p style={{ fontSize: 13, color: c.subtext, margin: 0 }}>
-                Enter the 6-digit code from your authenticator app for<br />
+                {t("login.mfa.instruction")}<br />
                 <strong style={{ color: c.text }}>{mfaEmail}</strong>
               </p>
             </div>
@@ -332,25 +337,25 @@ const LoginPage: React.FC = () => {
             </div>
 
             <button onClick={handleMFA} disabled={loading} style={btnPrimary}>
-              {loading ? "Verifying..." : "Verify code"}
+              {loading ? t("login.mfa.verifying") : t("login.mfa.verify")}
             </button>
 
             <button
               onClick={() => { setMfaMode(false); setMfaCode(""); setError(null); }}
               style={{ width: "100%", padding: 10, background: "transparent", border: `0.5px solid ${c.border}`, borderRadius: 8, fontSize: 13, color: c.subtext, cursor: "pointer", fontFamily: "inherit", marginTop: 10 }}
             >
-              ← Back to login
+              {t("login.mfa.back")}
             </button>
 
             <p style={{ textAlign: "center", fontSize: 12, color: c.subtext, marginTop: "1.25rem" }}>
-              Code refreshes every 30 seconds. Use Google Authenticator or Authy.
+              {t("login.mfa.hint")}
             </p>
           </>
         ) : (
           /* ── Login Step ── */
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 500, color: c.text, textAlign: "center", margin: "0 0 6px" }}>Welcome back</h1>
-            <p style={{ fontSize: 14, color: c.subtext, textAlign: "center", marginBottom: "2rem" }}>Log in to your SkillLink account</p>
+            <h1 style={{ fontSize: 22, fontWeight: 500, color: c.text, textAlign: "center", margin: "0 0 6px" }}>{t("login.title")}</h1>
+            <p style={{ fontSize: 14, color: c.subtext, textAlign: "center", marginBottom: "2rem" }}>{t("login.subtitle")}</p>
 
             {error && (
               <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.25rem" }}>
@@ -359,7 +364,7 @@ const LoginPage: React.FC = () => {
             )}
 
             <div style={{ marginBottom: "1.25rem" }}>
-              <label style={labelStyle}>Email</label>
+              <label style={labelStyle}>{t("common.email")}</label>
               <input
                 style={inputStyle} type="email" name="email"
                 placeholder="you@example.com" value={form.email}
@@ -368,7 +373,7 @@ const LoginPage: React.FC = () => {
             </div>
 
             <div style={{ marginBottom: "1.5rem" }}>
-              <label style={labelStyle}>Password</label>
+              <label style={labelStyle}>{t("common.password")}</label>
               <div style={{ position: "relative" }}>
                 <input
                   style={{ ...inputStyle, paddingRight: 44 }} type={showPassword ? "text" : "password"}
@@ -383,17 +388,17 @@ const LoginPage: React.FC = () => {
                 </button>
               </div>
               <div style={{ textAlign: "right", marginTop: 6 }}>
-                <a href="/forgot-password" style={{ fontSize: 12, color: c.primary, textDecoration: "none" }}>Forgot password?</a>
+                <a href="/forgot-password" style={{ fontSize: 12, color: c.primary, textDecoration: "none" }}>{t("login.forgotPassword")}</a>
               </div>
             </div>
 
             <button onClick={handleLogin} disabled={loading} style={btnPrimary}>
-              {loading ? "Logging in..." : "Log in"}
+              {loading ? t("login.submitting") : t("login.submit")}
             </button>
 
             <p style={{ textAlign: "center", fontSize: 13, color: c.subtext, marginTop: "1.5rem" }}>
-              Don't have an account?{" "}
-              <a href="/register" style={{ color: c.primary, textDecoration: "none", fontWeight: 500 }}>Sign up</a>
+              {t("login.noAccount")}{" "}
+              <a href="/register" style={{ color: c.primary, textDecoration: "none", fontWeight: 500 }}>{t("common.signUp")}</a>
             </p>
           </>
         )}

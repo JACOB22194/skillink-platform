@@ -17,6 +17,7 @@
  */
 
 import React, { useState, useEffect, useRef } from "react";
+import { useLanguage, LangToggle } from "../shared/LanguageContext";
 import axios, { AxiosError } from "axios";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -102,12 +103,13 @@ function validateEmail(email: string): string | null {
 // ─── Password Strength Indicator ─────────────────────────────────────────────
 
 const PasswordStrength: React.FC<{ password: string; colors: ThemeColors }> = ({ password, colors }) => {
+  const { t } = useLanguage();
   if (!password) return null;
 
   const checks = [
-    { label: "8+ characters",   pass: password.length >= 8 },
-    { label: "Uppercase letter", pass: /[A-Z]/.test(password) },
-    { label: "Number",           pass: /[0-9]/.test(password) },
+    { label: t("reg.pw.chars"),  pass: password.length >= 8 },
+    { label: t("reg.pw.upper"), pass: /[A-Z]/.test(password) },
+    { label: t("reg.pw.num"),   pass: /[0-9]/.test(password) },
   ];
   const score = checks.filter((c) => c.pass).length;
   const barColor = score === 1 ? "#ef4444" : score === 2 ? "#f59e0b" : "#22c55e";

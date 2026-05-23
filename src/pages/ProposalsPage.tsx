@@ -85,19 +85,50 @@ const StatusBadge: React.FC<{ s: Proposal["status"] }> = ({ s }) => {
 
 // ── Submit Proposal Modal ─────────────────────────────────────────────────────
 
+const SCORE_THRESHOLD = 0.40;
+
+interface ScoreResult { score: number; reasoning: string; passes: boolean; }
+
 const SubmitModal: React.FC<{
   project: Project;
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ project, onClose, onSuccess }) => {
-  const [bid, setBid]     = useState(String(Math.round(project.budget * 0.9)));
-  const [letter, setLetter] = useState("");
+  const [bid, setBid]         = useState(String(Math.round(project.budget * 0.9)));
+  const [letter, setLetter]   = useState("");
   const [loading, setLoading] = useState(false);
-  const [err, setErr]     = useState("");
+  const [err, setErr]         = useState("");
 
-  const submit = async () => {
+  const [scoreResult, setScoreResult]   = useState<ScoreResult | null>(null);
+  const [checking, setChecking]         = useState(false);
+  const [scoreErr, setScoreErr]         = useState("");
+  const [scoredLetter, setScoredLetter] = useState("");
+  const [scoredBid, setScoredBid]       = useState("");
+
+  const scoreStale = scoreResult !== null && (letter !== scoredLetter || bid !== scoredBid);
+
+  const checkScore = async () => {
     const amount = parseFloat(bid);
     if (!amount || amount < 1) { setErr("Bid must be at least $1"); return; }
+    setChecking(true); setScoreErr("");
+    try {
+      const r = await fetch(`${API}/proposals/score-draft`, {
+        method: "POST",
+        headers: { ...auth().headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: project.project_id, cover_letter: letter, bid_amount: amount }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "Score check failed"); }
+      const data: ScoreResult = await r.json();
+      setScoreResult(data);
+      setScoredLetter(letter);
+      setScoredBid(bid);
+    } catch (e: any) { setScoreErr(e.message); }
+    finally { setChecking(false); }
+  };
+
+  const submit = async () => {
+    if (!scoreResult?.passes || scoreStale) return;
+    const amount = parseFloat(bid);
     setLoading(true); setErr("");
     try {
       const r = await fetch(`${API}/proposals`, {
@@ -111,14 +142,26 @@ const SubmitModal: React.FC<{
     finally { setLoading(false); }
   };
 
+  const pct = scoreResult ? Math.round(scoreResult.score * 100) : 0;
+  const scoreColor = scoreResult
+    ? scoreResult.passes ? T.green : pct >= 25 ? T.amber : T.red
+    : T.sub;
+  const canSubmit = !!scoreResult?.passes && !scoreStale;
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000000cc", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 32, width: "100%", maxWidth: 520, position: "relative" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000000cc", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20, overflowY: "auto" }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 32, width: "100%", maxWidth: 540, position: "relative", margin: "auto" }}>
+
         {/* Header */}
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>Submit Proposal</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>{project.title}</div>
           <div style={{ fontSize: 12, color: T.sub, marginTop: 4 }}>Budget: ${project.budget.toLocaleString()}</div>
+        </div>
+
+        {/* AI Gate explanation */}
+        <div style={{ background: T.accentSoft, border: `1px solid ${T.accent}33`, borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: T.accent, lineHeight: 1.5 }}>
+          AI Comprehension Gate — Your proposal must score ≥ 40% relevance before it can be submitted. Write a specific cover letter explaining your approach to this project.
         </div>
 
         {/* Bid */}
@@ -127,27 +170,104 @@ const SubmitModal: React.FC<{
           <div style={{ position: "relative" }}>
             <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: T.sub, fontSize: 14 }}>$</span>
             <input
-              type="number" value={bid} onChange={e => setBid(e.target.value)} min={1}
+              type="number" value={bid}
+              onChange={e => setBid(e.target.value)}
+              min={1}
               style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px 12px 28px", color: T.text, fontSize: 16, fontWeight: 600, outline: "none", boxSizing: "border-box" }}
             />
           </div>
         </label>
 
         {/* Cover Letter */}
-        <label style={{ display: "block", marginBottom: 20 }}>
-          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Cover Letter <span style={{ color: T.border }}>(optional)</span></div>
+        <label style={{ display: "block", marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>
+            Cover Letter
+            <span style={{ color: T.accent, marginLeft: 6, fontSize: 10, textTransform: "none" }}>* required for AI gate</span>
+          </div>
           <textarea
-            value={letter} onChange={e => setLetter(e.target.value)} rows={5}
-            placeholder="Introduce yourself, explain your approach, and why you're the best fit..."
-            style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box" }}
+            value={letter}
+            onChange={e => setLetter(e.target.value)}
+            rows={5}
+            placeholder="Explain your approach, relevant experience, and why you're the best fit for this specific project…"
+            style={{ width: "100%", background: T.surface, border: `1px solid ${scoreStale ? T.amber : T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box", transition: "border-color .2s" }}
           />
         </label>
 
-        {err && <div style={{ background: T.redSoft, border: `1px solid ${T.red}33`, borderRadius: 8, padding: "10px 14px", color: T.red, fontSize: 13, marginBottom: 16 }}>{err}</div>}
+        {/* Check Score Button */}
+        <button
+          onClick={checkScore}
+          disabled={checking}
+          style={{ width: "100%", padding: "11px", marginBottom: 14, background: T.accentSoft, border: `1px solid ${T.accent}55`, borderRadius: 10, color: T.accent, fontWeight: 600, cursor: checking ? "not-allowed" : "pointer", fontSize: 13, opacity: checking ? 0.7 : 1 }}
+        >
+          {checking ? "Analyzing proposal…" : (scoreResult && !scoreStale) ? "Re-check AI Score →" : "Check AI Relevance Score →"}
+        </button>
+
+        {/* Score Error */}
+        {scoreErr && (
+          <div style={{ background: T.redSoft, border: `1px solid ${T.red}33`, borderRadius: 8, padding: "10px 14px", color: T.red, fontSize: 13, marginBottom: 14 }}>{scoreErr}</div>
+        )}
+
+        {/* Stale warning */}
+        {scoreStale && (
+          <div style={{ fontSize: 12, color: T.amber, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+            ⚠ You've edited your proposal — re-check your AI score before submitting.
+          </div>
+        )}
+
+        {/* Score Result Panel */}
+        {scoreResult && !scoreStale && (
+          <div style={{ background: T.surface, border: `1px solid ${scoreColor}55`, borderRadius: 12, padding: "16px 18px", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>AI Relevance Score</span>
+              <span style={{ fontSize: 24, fontWeight: 700, color: scoreColor }}>{pct}%</span>
+            </div>
+
+            {/* Score bar */}
+            <div style={{ position: "relative", height: 8, background: T.border, borderRadius: 100, marginBottom: 6, overflow: "visible" }}>
+              <div style={{ height: "100%", width: `${pct}%`, background: scoreColor, borderRadius: 100, transition: "width .5s" }} />
+              {/* Threshold marker at 40% */}
+              <div style={{ position: "absolute", left: "40%", top: -4, height: 16, width: 2, background: T.amber, borderRadius: 1 }} />
+            </div>
+            <div style={{ fontSize: 10, color: T.sub, marginBottom: 10 }}>
+              Minimum threshold: <span style={{ color: T.amber }}>40%</span>
+            </div>
+
+            {scoreResult.passes ? (
+              <div style={{ fontSize: 12, color: T.green, fontWeight: 600 }}>
+                ✓ Proposal meets the relevance threshold — you may submit.
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: T.red }}>
+                ✗ Score is below 40%. Improve your cover letter by explaining how your skills address the specific project requirements, then re-check.
+              </div>
+            )}
+
+            {scoreResult.reasoning && (
+              <div style={{ fontSize: 11, color: T.sub, marginTop: 10, lineHeight: 1.5, borderTop: `1px solid ${T.border}`, paddingTop: 10 }}>
+                {scoreResult.reasoning}
+              </div>
+            )}
+          </div>
+        )}
+
+        {err && <div style={{ background: T.redSoft, border: `1px solid ${T.red}33`, borderRadius: 8, padding: "10px 14px", color: T.red, fontSize: 13, marginBottom: 14 }}>{err}</div>}
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 13 }}>Cancel</button>
-          <button onClick={submit} disabled={loading} style={{ flex: 2, padding: "12px", background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, opacity: loading ? 0.7 : 1 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 13 }}>
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={!canSubmit || loading}
+            title={!scoreResult ? "Check AI score first" : !scoreResult.passes ? "Improve your proposal to meet the 40% threshold" : scoreStale ? "Re-check AI score after editing" : ""}
+            style={{
+              flex: 2, padding: "12px",
+              background: canSubmit ? T.accent : T.border,
+              border: "none", borderRadius: 10, color: "#fff", fontWeight: 700,
+              cursor: (!canSubmit || loading) ? "not-allowed" : "pointer",
+              fontSize: 14, opacity: loading ? 0.7 : 1, transition: "background .3s",
+            }}
+          >
             {loading ? "Submitting…" : "Submit Proposal →"}
           </button>
         </div>

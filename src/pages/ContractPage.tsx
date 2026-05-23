@@ -9,7 +9,7 @@ const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("
 const role = () => localStorage.getItem("role") || "freelancer";
 
 interface Contract { contract_id: number; project_id: number; freelancer_id: number; status: "active"|"completed"|"disputed"; created_at: string; }
-interface Milestone { milestone_id: number; contract_id: number; title: string|null; description: string|null; amount: number; status: "pending"|"approved"|"paid"; due_date: string|null; created_at: string; }
+interface Milestone { milestone_id: number; contract_id: number; title: string|null; description: string|null; amount: number; status: "pending"|"approved"|"paid"; due_date: string|null; created_at: string; ai_verification_status: "passed"|"flagged"|"insufficient_evidence"|null; ai_verification_report: string|null; }
 interface Escrow { escrow_id: number; contract_id: number; amount: number; released_amount: number; status: "held"|"released"; }
 interface Project { project_id: number; title: string; description: string|null; budget: number; status: string; }
 
@@ -252,9 +252,19 @@ const ReviewModal: React.FC<{ contractId: number; endpoint: string; title: strin
   );
 };
 
+const aiVerdict = {
+  passed:               { c: T.green,  bg: T.greenSoft,  label: "AI: Passed ✓" },
+  flagged:              { c: T.red,    bg: T.redSoft,    label: "AI: Flagged ⚠" },
+  insufficient_evidence:{ c: T.amber,  bg: T.amberSoft,  label: "AI: Needs more files" },
+};
+
 // ── Milestone Row ─────────────────────────────────────────────────────────────
-const MilestoneRow: React.FC<{ ms: Milestone; isClient: boolean; projectId: number; onApprove: (id: number) => void; onMarkPaid: (id: number) => void; actionLoading: number|null; onToast: (msg: string, ok: boolean) => void }> = ({ ms, isClient, projectId, onApprove, onMarkPaid, actionLoading, onToast }) => {
-  const cfg = msColors[ms.status]; const loading = actionLoading === ms.milestone_id; const [uploading, setUploading] = useState(false);
+const MilestoneRow: React.FC<{ ms: Milestone; isClient: boolean; projectId: number; onApprove: (id: number) => void; onMarkPaid: (id: number) => void; actionLoading: number|null; onToast: (msg: string, ok: boolean) => void; onRefresh: () => void }> = ({ ms, isClient, projectId, onApprove, onMarkPaid, actionLoading, onToast, onRefresh }) => {
+  const cfg = msColors[ms.status]; const loading = actionLoading === ms.milestone_id;
+  const [uploading, setUploading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return; setUploading(true);
     try {
@@ -264,40 +274,84 @@ const MilestoneRow: React.FC<{ ms: Milestone; isClient: boolean; projectId: numb
       onToast(`"${file.name}" uploaded!`, true);
     } catch (err: any) { onToast(err.message, false); } finally { setUploading(false); e.target.value = ""; }
   };
+
+  const runAIVerify = async () => {
+    setVerifying(true);
+    try {
+      const r = await fetch(`${API}/milestones/${ms.milestone_id}/verify-deliverable`, { method: "POST", ...auth() });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "Verification failed"); }
+      const data = await r.json();
+      onToast(`AI verdict: ${data.ai_verification_status}`, data.ai_verification_status === "passed");
+      onRefresh();
+    } catch (err: any) { onToast(err.message, false); } finally { setVerifying(false); }
+  };
+
+  const verdict = ms.ai_verification_status ? aiVerdict[ms.ai_verification_status] : null;
+
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 16, padding: "16px 20px", borderBottom: `1px solid ${T.border}` }}>
-      <div style={{ width: 10, height: 10, borderRadius: "50%", background: cfg.c, marginTop: 5, flexShrink: 0, boxShadow: `0 0 8px ${cfg.c}66` }} />
-      <div style={{ flex: 1 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{ms.title || `Milestone #${ms.milestone_id}`}</div>
-            {ms.description && <div style={{ fontSize: 12, color: T.sub, marginTop: 3, lineHeight: 1.5 }}>{ms.description}</div>}
-            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-              <span style={{ fontSize: 11, color: T.sub }}>Created {timeAgo(ms.created_at)}</span>
-              {ms.due_date && <span style={{ fontSize: 11, color: T.amber }}>Due {new Date(ms.due_date).toLocaleDateString()}</span>}
+    <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}` }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+        <div style={{ width: 10, height: 10, borderRadius: "50%", background: cfg.c, marginTop: 5, flexShrink: 0, boxShadow: `0 0 8px ${cfg.c}66` }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{ms.title || `Milestone #${ms.milestone_id}`}</div>
+              {ms.description && <div style={{ fontSize: 12, color: T.sub, marginTop: 3, lineHeight: 1.5 }}>{ms.description}</div>}
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: T.sub }}>Created {timeAgo(ms.created_at)}</span>
+                {ms.due_date && <span style={{ fontSize: 11, color: T.amber }}>Due {new Date(ms.due_date).toLocaleDateString()}</span>}
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>{fmt(ms.amount)}</div>
+              <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 100, background: cfg.bg, color: cfg.c }}>{cfg.label}</span>
             </div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>{fmt(ms.amount)}</div>
-            <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 100, background: cfg.bg, color: cfg.c }}>{cfg.label}</span>
+
+          {/* AI Verification badge + report toggle */}
+          {verdict && (
+            <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: verdict.bg, color: verdict.c, fontWeight: 600 }}>
+                {verdict.label}
+              </span>
+              {ms.ai_verification_report && (
+                <button onClick={() => setShowReport(v => !v)} style={{ fontSize: 11, background: "none", border: "none", color: T.sub, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                  {showReport ? "hide report" : "view report"}
+                </button>
+              )}
+            </div>
+          )}
+          {showReport && ms.ai_verification_report && (
+            <div style={{ marginTop: 8, padding: "10px 14px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, fontSize: 12, color: T.sub, lineHeight: 1.7 }}>
+              {ms.ai_verification_report}
+            </div>
+          )}
+
+          {/* Client actions */}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            {isClient && ms.status === "pending" && (
+              <button onClick={runAIVerify} disabled={verifying} style={{ padding: "7px 14px", background: T.accentSoft, border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontWeight: 600, cursor: verifying ? "not-allowed" : "pointer", fontSize: 12, opacity: verifying ? 0.6 : 1 }}>
+                {verifying ? "Verifying…" : "🤖 AI Verify Deliverable"}
+              </button>
+            )}
+            {isClient && ms.status === "pending" && (
+              <button onClick={() => onApprove(ms.milestone_id)} disabled={loading} style={{ padding: "7px 16px", background: T.green, border: "none", borderRadius: 8, color: "#1a1a1a", fontWeight: 700, cursor: "pointer", fontSize: 12, opacity: loading ? 0.6 : 1 }}>
+                {loading ? "…" : "Approve & Release Payment"}
+              </button>
+            )}
+            {isClient && ms.status === "approved" && (
+              <button onClick={() => onMarkPaid(ms.milestone_id)} disabled={loading} style={{ padding: "7px 16px", background: T.blueSoft, border: `1px solid ${T.blue}44`, borderRadius: 8, color: T.blue, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>
+                {loading ? "…" : "Mark as Paid"}
+              </button>
+            )}
+            {!isClient && ms.status === "pending" && (
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", background: T.accentSoft, border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontSize: 12, fontWeight: 600, cursor: uploading ? "not-allowed" : "pointer", opacity: uploading ? 0.6 : 1 }}>
+                {uploading ? "Uploading…" : "📎 Upload Deliverable"}
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.zip,.doc,.docx,.txt" style={{ display: "none" }} onChange={handleUpload} disabled={uploading} />
+              </label>
+            )}
           </div>
         </div>
-        {isClient && ms.status === "pending" && (
-          <button onClick={() => onApprove(ms.milestone_id)} disabled={loading} style={{ marginTop: 10, padding: "7px 16px", background: T.green, border: "none", borderRadius: 8, color: "#1a1a1a", fontWeight: 700, cursor: "pointer", fontSize: 12, opacity: loading ? 0.6 : 1 }}>
-            {loading ? "…" : "Approve & Release Payment"}
-          </button>
-        )}
-        {isClient && ms.status === "approved" && (
-          <button onClick={() => onMarkPaid(ms.milestone_id)} disabled={loading} style={{ marginTop: 10, padding: "7px 16px", background: T.blueSoft, border: `1px solid ${T.blue}44`, borderRadius: 8, color: T.blue, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>
-            {loading ? "…" : "Mark as Paid"}
-          </button>
-        )}
-        {!isClient && ms.status === "pending" && (
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "7px 14px", background: T.accentSoft, border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontSize: 12, fontWeight: 600, cursor: uploading ? "not-allowed" : "pointer", opacity: uploading ? 0.6 : 1 }}>
-            {uploading ? "Uploading…" : "📎 Upload Deliverable"}
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.zip,.doc,.docx,.txt" style={{ display: "none" }} onChange={handleUpload} disabled={uploading} />
-          </label>
-        )}
       </div>
     </div>
   );
@@ -460,7 +514,7 @@ export const ContractPage: React.FC = () => {
             ) : milestones.map(ms => (
               <MilestoneRow key={ms.milestone_id} ms={ms} isClient={isClient} projectId={contract.project_id}
                 onApprove={id => updateMilestone(id, "approved")} onMarkPaid={id => updateMilestone(id, "paid")}
-                actionLoading={actionLoading} onToast={showToast} />
+                actionLoading={actionLoading} onToast={showToast} onRefresh={fetchAll} />
             ))}
           </div>
 
