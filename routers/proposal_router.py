@@ -14,6 +14,10 @@ PHASE 5:
   - notify() called when a new proposal lands on client's project
 """
 
+import os
+import httpx
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -23,6 +27,12 @@ import models
 import schema
 from auth import get_current_user, require_freelancer, require_client
 from services.notification_service import notify
+
+logger = logging.getLogger(__name__)
+
+AI_SERVICE_URL          = os.getenv("AI_SERVICE_URL", "http://ai:8001")
+AI_TIMEOUT              = 10.0
+PROPOSAL_SCORE_THRESHOLD = 0.40   # must match ai_router.py
 
 router = APIRouter(prefix="/proposals", tags=["Proposals"])
 
@@ -85,6 +95,52 @@ def submit_proposal(
         ai_relevance_score = None,
         status             = models.ProposalStatus.pending,
     )
+
+    # ── DEV-05 server-side Comprehension Gate ────────────────────────────────
+    # Re-score the cover letter server-side so the gate cannot be bypassed
+    # by calling POST /proposals directly (e.g. curl / API client).
+    skill_names     = [fs.skill.name for fs in freelancer.skills if fs.skill]
+    required_skills = [ps.skill.name for ps in project.skills if ps.skill]
+    score: float    = 0.0
+
+    try:
+        ai_resp = httpx.post(
+            f"{AI_SERVICE_URL}/score",
+            json={
+                "project_title":       project.title,
+                "project_description": project.description or "",
+                "required_skills":     required_skills,
+                "budget":              project.budget,
+                "bid_amount":          body.bid_amount,
+                "cover_letter":        body.cover_letter or "",
+                "freelancer_skills":   skill_names,
+                "freelancer_bio":      freelancer.bio or "",
+                "success_score":       freelancer.success_score or 0,
+            },
+            timeout=AI_TIMEOUT,
+        )
+        ai_resp.raise_for_status()
+        raw = float(ai_resp.json().get("score", 0))
+        score = raw / 100 if raw > 1.0 else raw
+    except Exception as exc:
+        logger.warning("AI gate fallback on submit: %s", exc)
+        required = {s.lower() for s in required_skills}
+        has      = {s.lower() for s in skill_names}
+        overlap  = len(required & has)
+        score    = round((overlap / max(len(required), 1)) * 0.80 + 0.10, 4)
+
+    if score < PROPOSAL_SCORE_THRESHOLD:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"AI Comprehension Gate: proposal relevance score {round(score * 100)}% "
+                f"is below the required {round(PROPOSAL_SCORE_THRESHOLD * 100)}% threshold. "
+                "Improve your cover letter and re-check before submitting."
+            ),
+        )
+
+    proposal.ai_relevance_score = score
+    # ── end gate ─────────────────────────────────────────────────────────────
     db.add(proposal)
     db.commit()
     db.refresh(proposal)

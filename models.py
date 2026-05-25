@@ -598,6 +598,21 @@ class SystemLog(Base):
 
 
 # ─────────────────────────────────────────
+#  TABLE: archived_logs  (ADM-07 cold storage)
+# ─────────────────────────────────────────
+
+class ArchivedLog(Base):
+    __tablename__ = "archived_logs"
+
+    archive_id   = Column(Integer, primary_key=True, index=True)
+    log_id       = Column(Integer, index=True)
+    action       = Column(String(255))
+    performed_by = Column(Integer, index=True)
+    timestamp    = Column(DateTime(timezone=True), index=True)
+    archived_at  = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+# ─────────────────────────────────────────
 #  TABLE: recommendations  (AI match cache)
 # ─────────────────────────────────────────
 
@@ -715,6 +730,21 @@ class LaunchpadReservation(Base):
 # ─────────────────────────────────────────
 #  TABLE: invitations  (client → freelancer)
 # ─────────────────────────────────────────
+
+# ─────────────────────────────────────────
+#  TABLE: role_configs  (ADM-01: Configure Permissions)
+# ─────────────────────────────────────────
+
+class RoleConfig(Base):
+    __tablename__ = "role_configs"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    role_name    = Column(String(50), unique=True, nullable=False, index=True)  # admin | freelancer | client
+    display_name = Column(String(100), nullable=False)
+    description  = Column(Text, nullable=True)
+    permissions  = Column(Text, nullable=True)   # JSON array of permission strings
+    updated_at   = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
 
 class InvitationStatus(str, enum.Enum):
     pending  = "pending"

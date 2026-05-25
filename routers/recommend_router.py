@@ -32,6 +32,21 @@ router = APIRouter(prefix="/recommend", tags=["Recommendations"])
 
 AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "http://ai:8000")
 
+_AI_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "ai_config.json")
+
+
+def _get_matching_weights() -> dict:
+    try:
+        with open(_AI_CONFIG_PATH) as _f:
+            cfg = json.load(_f)
+        m = cfg.get("matching", {})
+        return {
+            "skill_weight":  float(m.get("skill_weight",  0.30)),
+            "rating_weight": float(m.get("rating_weight", 0.15)),
+        }
+    except Exception:
+        return {"skill_weight": 0.30, "rating_weight": 0.15}
+
 
 # ── Request / Response models ─────────────────────────────────────────────────
 
@@ -172,6 +187,7 @@ def _call_recommender(
     top3_predictions: list[list] = None,   # [[sub_cat, prob], ...]
 ) -> list[dict]:
     """Call the AI service recommender endpoint."""
+    weights = _get_matching_weights()
     try:
         with httpx.Client(timeout=30) as client:
             r = client.post(
@@ -186,6 +202,7 @@ def _call_recommender(
                     "candidates":        candidates,
                     "top_k":             top_k,
                     "top3_predictions":  top3_predictions,
+                    "weights":           weights,
                 },
                 timeout=30,
             )

@@ -15,6 +15,7 @@ ARCHITECTURE SUMMARY:
 WebSocket endpoint: WS /ws/chat?token=<access_token>
 """
 
+import json
 import logging
 import os
 import time
@@ -65,6 +66,39 @@ async def lifespan(app: FastAPI):
             time.sleep(1)
     else:
         raise RuntimeError("❌ Could not connect to the database after 30 retries.")
+
+    # ── Seed default role configs (ADM-01) ────────────────────────────────
+    _db = SessionLocal()
+    try:
+        _default_roles = [
+            {
+                "role_name":    "freelancer",
+                "display_name": "Freelancer",
+                "description":  "Independent contractors who bid on projects and deliver work.",
+                "permissions":  json.dumps(["submit_proposals", "view_projects", "manage_milestones", "withdraw_wallet", "view_ai_matches"]),
+            },
+            {
+                "role_name":    "client",
+                "display_name": "Client",
+                "description":  "Businesses and individuals who post projects and hire talent.",
+                "permissions":  json.dumps(["post_projects", "accept_proposals", "fund_escrow", "open_disputes", "review_freelancers"]),
+            },
+            {
+                "role_name":    "admin",
+                "display_name": "Administrator",
+                "description":  "Platform administrators with full access to all management functions.",
+                "permissions":  json.dumps(["manage_users", "manage_roles", "resolve_disputes", "view_analytics", "configure_ai", "manage_verifications"]),
+            },
+        ]
+        for _rd in _default_roles:
+            if not _db.query(models.RoleConfig).filter(models.RoleConfig.role_name == _rd["role_name"]).first():
+                _db.add(models.RoleConfig(**_rd))
+        _db.commit()
+        logging.info("✅ Role configs seeded.")
+    except Exception as _e:
+        logging.warning("⚠️  Could not seed role configs: %s", _e)
+    finally:
+        _db.close()
 
     yield
     logging.info("SkillLink API shutting down.")
@@ -244,7 +278,11 @@ def health():
 @app.get("/health/detailed", tags=["Health"])
 def health_detailed():
     """Checks DB connection and reports online WebSocket users."""
-    from notification_service import ws_manager
+    try:
+        from notification_service import ws_manager
+        ws_online = len(ws_manager.online_user_ids)
+    except Exception:
+        ws_online = 0
     try:
         db            = SessionLocal()
         user_count    = db.query(models.User).count()
@@ -256,7 +294,7 @@ def health_detailed():
             "total_users":         user_count,
             "total_projects":      project_count,
             "total_notifications": notif_count,
-            "ws_online_users":     len(ws_manager.online_user_ids),
+            "ws_online_users":     ws_online,
         }
     except Exception as e:
         return {"status": "❌ Database connection failed", "error": str(e)}

@@ -249,6 +249,39 @@ class AdjustTrustScoreRequest(BaseModel):
     user_id: int
     score:   float
 
+class AssignRoleRequest(BaseModel):
+    role: UserRole
+
+class RoleConfigResponse(BaseModel):
+    id:           int
+    role_name:    str
+    display_name: str
+    description:  Optional[str]
+    permissions:  Optional[str]   # JSON string
+    updated_at:   datetime
+    model_config = {"from_attributes": True}
+
+class RoleConfigUpdate(BaseModel):
+    display_name: Optional[str]       = None
+    description:  Optional[str]       = None
+    permissions:  Optional[List[str]] = None
+
+class AdminCreateUserRequest(BaseModel):
+    email:        EmailStr
+    password:     str
+    role:         UserRole
+    company_name: Optional[str] = None
+
+class AdminUpdateUserProfileRequest(BaseModel):
+    email:  Optional[EmailStr]   = None
+    status: Optional[UserStatus] = None
+
+class CreateRoleRequest(BaseModel):
+    role_name:    str
+    display_name: str
+    description:  Optional[str]       = None
+    permissions:  Optional[List[str]] = None
+
 class AdminStatsResponse(BaseModel):
     total_users:       int
     total_freelancers: int
