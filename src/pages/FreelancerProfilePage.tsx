@@ -34,6 +34,32 @@ interface FreelancerProfile {
   skills: string[];
 }
 
+interface GitHubProject {
+  title: string;
+  company: string;
+  duration: string;
+  description: string;
+  tech_stack: string[];
+  github_url: string;
+}
+
+interface GitHubProfileData {
+  github_score: number;
+  github_url: string;
+  top_languages: string[];
+  username: string;
+  name: string;
+  avatar_url: string;
+  public_repos: number;
+  followers: number;
+  total_stars: number;
+  account_created: string;
+  location: string;
+  website: string;
+  experience: GitHubProject[];
+  suggestions: string[];
+}
+
 interface ScoreBreakdown {
   score: number;
   avg_rating: number;
@@ -57,10 +83,14 @@ export const FreelancerProfilePage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate   = useNavigate();
 
-  const [profile,   setProfile]   = useState<FreelancerProfile | null>(null);
-  const [breakdown, setBreakdown] = useState<ScoreBreakdown | null>(null);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState("");
+  const [profile,       setProfile]       = useState<FreelancerProfile | null>(null);
+  const [breakdown,     setBreakdown]     = useState<ScoreBreakdown | null>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState("");
+  const [ghData,        setGhData]        = useState<GitHubProfileData | null>(null);
+  const [ghModalOpen,   setGhModalOpen]   = useState(false);
+  const [ghLoading,     setGhLoading]     = useState(false);
+  const [ghError,       setGhError]       = useState("");
 
   useEffect(() => {
     if (!userId) return;
@@ -80,6 +110,23 @@ export const FreelancerProfilePage: React.FC = () => {
       finally { setLoading(false); }
     })();
   }, [userId]);
+
+  const openGitHub = async () => {
+    if (!profile) return;
+    setGhModalOpen(true);
+    if (ghData) return;
+    setGhLoading(true);
+    setGhError("");
+    try {
+      const r = await fetch(`${API}/freelancers/${profile.freelancer_id}/github-profile`, auth());
+      if (!r.ok) throw new Error("Failed to load GitHub profile");
+      setGhData(await r.json());
+    } catch (e: any) {
+      setGhError((e as Error).message);
+    } finally {
+      setGhLoading(false);
+    }
+  };
 
   const initials = profile?.email
     ? profile.email.split("@")[0].slice(0, 2).toUpperCase()
@@ -120,13 +167,22 @@ export const FreelancerProfilePage: React.FC = () => {
           <button onClick={() => navigate(-1)} style={{ background: "none", border: `1px solid ${T.border}`, color: T.sub, cursor: "pointer", fontSize: 12, borderRadius: 8, padding: "6px 12px" }}>← Back</button>
           <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Skill<span style={{ color: T.accent }}>Link</span></div>
         </div>
-        <button
-          onClick={() => navigate(`/messages?user=${profile.user_id}&email=${encodeURIComponent(profile.email)}`)}
-          style={{ background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 13, padding: "9px 22px", display: "flex", alignItems: "center", gap: 7 }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-          Message
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={openGitHub}
+            style={{ background: "#24292e", border: "1px solid #444", borderRadius: 10, color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 13, padding: "9px 18px", display: "flex", alignItems: "center", gap: 7 }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            Review GitHub
+          </button>
+          <button
+            onClick={() => navigate(`/messages?user=${profile.user_id}&email=${encodeURIComponent(profile.email)}`)}
+            style={{ background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 13, padding: "9px 22px", display: "flex", alignItems: "center", gap: 7 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            Message
+          </button>
+        </div>
       </div>
 
       <div style={{ maxWidth: 780, margin: "0 auto", padding: "36px 24px", animation: "fadeIn 0.4s ease" }}>
@@ -246,6 +302,141 @@ export const FreelancerProfilePage: React.FC = () => {
         </div>
 
       </div>
+
+      {/* ── GitHub Review Modal ── */}
+      {ghModalOpen && (
+      <div
+        onClick={() => setGhModalOpen(false)}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.65)", zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, width: "100%", maxWidth: 640, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 80px rgba(0,0,0,.5)", fontFamily: "'DM Sans', sans-serif" }}
+        >
+          {/* Modal header */}
+          <div style={{ padding: "22px 28px 18px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill={T.text}><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+              <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>GitHub Profile Review</span>
+            </div>
+            <button onClick={() => setGhModalOpen(false)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 20, lineHeight: 1 }}>×</button>
+          </div>
+
+          <div style={{ padding: "22px 28px 28px" }}>
+            {ghLoading && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "40px 0", color: T.sub }}>
+                <div style={{ width: 20, height: 20, border: `3px solid ${T.border}`, borderTopColor: T.accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                Loading GitHub data…
+              </div>
+            )}
+
+            {ghError && (
+              <div style={{ textAlign: "center", padding: "40px 0", color: T.sub }}>
+                <div style={{ fontSize: 32, marginBottom: 10 }}>⚠️</div>
+                <div style={{ fontSize: 13 }}>{ghError}</div>
+              </div>
+            )}
+
+            {ghData && !ghLoading && (
+              <>
+                {/* Score + link row */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    {ghData.avatar_url && (
+                      <img src={ghData.avatar_url} alt="avatar" style={{ width: 52, height: 52, borderRadius: "50%", border: `2px solid ${T.border}` }} />
+                    )}
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{ghData.name || ghData.username || "—"}</div>
+                      {ghData.location && <div style={{ fontSize: 12, color: T.sub, marginTop: 2 }}>📍 {ghData.location}</div>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {/* Score badge */}
+                    {ghData.github_score > 0 && (() => {
+                      const sc = ghData.github_score;
+                      const col = sc >= 70 ? T.green : sc >= 40 ? T.amber : T.sub;
+                      return (
+                        <div style={{ background: `${col}18`, border: `1px solid ${col}40`, borderRadius: 10, padding: "8px 16px", textAlign: "center" }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: col }}>{sc}<span style={{ fontSize: 10, fontWeight: 400 }}>/100</span></div>
+                          <div style={{ fontSize: 9, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em" }}>GitHub Score</div>
+                        </div>
+                      );
+                    })()}
+                    {ghData.github_url && (
+                      <a href={ghData.github_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: T.accent, textDecoration: "none", border: `1px solid ${T.accent}40`, borderRadius: 8, padding: "7px 14px", display: "flex", alignItems: "center", gap: 6 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        Open on GitHub
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stats row */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
+                  {[
+                    { label: "Public Repos", value: ghData.public_repos },
+                    { label: "Total Stars",  value: ghData.total_stars  },
+                    { label: "Followers",    value: ghData.followers    },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: T.text }}>{s.value}</div>
+                      <div style={{ fontSize: 10, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginTop: 3 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Top languages */}
+                {ghData.top_languages.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", fontWeight: 600, marginBottom: 10 }}>Top Languages</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                      {ghData.top_languages.map(lang => (
+                        <span key={lang} style={{ fontSize: 12, padding: "5px 12px", borderRadius: 100, background: T.accentSoft, color: T.accent, border: `1px solid ${T.accent}33` }}>{lang}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Projects / experience */}
+                {ghData.experience.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", fontWeight: 600, marginBottom: 12 }}>Projects ({ghData.experience.length})</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {ghData.experience.map((proj, i) => (
+                        <div key={i} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 18px" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{proj.title}</div>
+                            {proj.github_url && (
+                              <a href={proj.github_url} target="_blank" rel="noreferrer" style={{ color: T.accent, fontSize: 11, textDecoration: "none", flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                View Repo
+                              </a>
+                            )}
+                          </div>
+                          {proj.duration && <div style={{ fontSize: 11, color: T.sub, marginBottom: 6 }}>{proj.duration}</div>}
+                          {proj.description && <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.6, marginBottom: 8 }}>{proj.description}</div>}
+                          {proj.tech_stack?.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                              {proj.tech_stack.map(t => (
+                                <span key={t} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 100, background: `${T.green}15`, color: T.green, border: `1px solid ${T.green}30` }}>{t}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {ghData.experience.length === 0 && ghData.github_score === 0 && (
+                  <div style={{ textAlign: "center", padding: "24px 0", color: T.sub, fontSize: 13 }}>No GitHub data imported yet.</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 };

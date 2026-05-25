@@ -9,6 +9,8 @@ import { useAuth } from "../shared/useAuth";
 interface ConversationSummary {
   other_user_id: number;
   other_user_email: string;
+  display_name: string;
+  avatar_url: string | null;
   last_message: string;
   last_message_at: string;
   unread_count: number;
@@ -108,7 +110,8 @@ const MessagingPage: React.FC = () => {
     if (isNaN(id)) return;
     setConversations(prev => {
       if (prev.some(c => c.other_user_id === id)) return prev;
-      return [{ other_user_id: id, other_user_email: email ?? `user #${id}`, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 }, ...prev];
+      const label = email ?? `user #${id}`;
+      return [{ other_user_id: id, other_user_email: label, display_name: label, avatar_url: null, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 }, ...prev];
     });
     setActiveUserId(id);
   }, [searchParams]);
@@ -188,11 +191,15 @@ const MessagingPage: React.FC = () => {
     setSearchQuery("");
     setSearchResults([]);
 
-    // Add to inbox list if not already there
+    const r = result as any;
+    const displayName = (r.first_name || r.last_name)
+      ? `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim()
+      : result.email;
+
     setConversations((prev) => {
       if (prev.some((c) => c.other_user_id === result.user_id)) return prev;
       return [
-        { other_user_id: result.user_id, other_user_email: result.email, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 },
+        { other_user_id: result.user_id, other_user_email: result.email, display_name: displayName, avatar_url: r.avatar_url ?? null, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 },
         ...prev,
       ];
     });
@@ -356,7 +363,7 @@ const MessagingPage: React.FC = () => {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {result.email}
+                      {(result as any).first_name ? `${(result as any).first_name} ${(result as any).last_name ?? ""}`.trim() : result.email}
                     </div>
                     <div style={{ fontSize: 10, color: c.subtext, textTransform: "capitalize" }}>{result.role}</div>
                   </div>
@@ -376,7 +383,9 @@ const MessagingPage: React.FC = () => {
             )}
             {conversations.map((convo) => {
               const active = convo.other_user_id === activeUserId;
-              const initials = convo.other_user_email.slice(0, 2).toUpperCase();
+              const name = convo.display_name || convo.other_user_email;
+              const initials = name.slice(0, 2).toUpperCase();
+              const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
               return (
                 <div
                   key={convo.other_user_id}
@@ -389,13 +398,19 @@ const MessagingPage: React.FC = () => {
                     cursor: "pointer",
                   }}
                 >
-                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: active ? c.primary : c.bg, color: active ? "#fff" : c.subtext, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0, border: `0.5px solid ${c.border}` }}>
-                    {initials}
+                  <div style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0, border: `0.5px solid ${c.border}`, overflow: "hidden" }}>
+                    {convo.avatar_url ? (
+                      <img src={`${API_BASE}${convo.avatar_url}`} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ width: "100%", height: "100%", background: active ? c.primary : c.bg, color: active ? "#fff" : c.subtext, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600 }}>
+                        {initials}
+                      </div>
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
                       <span style={{ fontSize: 12, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
-                        {convo.other_user_email}
+                        {name}
                       </span>
                       {convo.unread_count > 0 && (
                         <span style={{ background: c.primary, color: "#fff", fontSize: 9, padding: "1px 6px", borderRadius: 20, flexShrink: 0 }}>
@@ -429,9 +444,12 @@ const MessagingPage: React.FC = () => {
           ) : (
             <>
               {/* Header */}
-              <div style={{ padding: "13px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface, flexShrink: 0 }}>
+              <div style={{ padding: "13px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface, flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
+                {activeConvo?.avatar_url && (
+                  <img src={`${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"}${activeConvo.avatar_url}`} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
+                )}
                 <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>
-                  {activeConvo?.other_user_email ?? `User #${activeUserId}`}
+                  {activeConvo?.display_name || activeConvo?.other_user_email || `User #${activeUserId}`}
                 </div>
               </div>
 

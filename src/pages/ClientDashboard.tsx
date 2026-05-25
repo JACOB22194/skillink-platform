@@ -923,6 +923,9 @@ interface MatchedFreelancer {
   freelancer_id: number;
   user_id: number;
   email: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
   bio: string | null;
   hourly_rate: number | null;
   success_score: number;
@@ -1060,7 +1063,7 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
           </div>
           {matches.map((m, i) => {
             const pal = MATCH_PALETTE[i % MATCH_PALETTE.length];
-            const displayName = m.email ? m.email.split("@")[0] : `Freelancer #${m.freelancer_id}`;
+            const displayName = (m.first_name || m.last_name) ? `${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() : (m.email ? m.email.split("@")[0] : `Freelancer #${m.freelancer_id}`);
             const initials = getInitials(displayName);
             const scoreDisplay = m.ai_match_score != null
               ? Math.round(m.ai_match_score)
@@ -1068,7 +1071,9 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
             return (
               <div key={m.freelancer_id} style={{ background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 12, padding: 16 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: pal.bg, color: pal.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{initials}</div>
+                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: pal.bg, color: pal.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, flexShrink: 0, overflow: "hidden" }}>
+                    {m.avatar_url ? <img src={`http://localhost:8000${m.avatar_url}`} alt={displayName} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                       <div>
@@ -2246,6 +2251,11 @@ const ClientDashboard: React.FC = () => {
                   <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{companyName}</div>
                   <div style={{ fontSize: 11, color: c.subtext }}>Client</div>
                 </div>
+                <a href="/settings/client" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: c.text, textDecoration: "none" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                  ⚙️ Profile & Settings
+                </a>
                 <a href="/settings/mfa" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: c.text, textDecoration: "none" }}
                   onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>

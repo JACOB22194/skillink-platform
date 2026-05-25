@@ -25,6 +25,7 @@ import { ContractsListPage }   from "./pages/ContractsListPage";
 import { FreelancerProfilePage } from "./pages/FreelancerProfilePage";
 import LaunchpadPage from "./pages/LaunchpadPage";
 import SkillGrowthPage from "./pages/SkillGrowthPage";
+import ClientSettingsPage from "./pages/ClientSettingsPage";
 
 const App = () => {
   return (
@@ -145,6 +146,14 @@ const App = () => {
           element={
             <RequireRole role={["freelancer", "client", "admin"]}>
               <MessagingPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/settings/client"
+          element={
+            <RequireRole role="client">
+              <ClientSettingsPage />
             </RequireRole>
           }
         />

@@ -113,6 +113,8 @@ export interface ProfileUpdatePayload {
   bio?: string;
   hourly_rate?: number;
   availability_status?: AvailabilityStatus;
+  first_name?: string;
+  last_name?: string;
 }
 
 export interface SkillsUpdatePayload {

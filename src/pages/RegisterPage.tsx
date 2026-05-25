@@ -28,6 +28,8 @@ interface RegisterRequest {
   email: string;
   password: string;
   role: UserRole;
+  first_name?: string;
+  last_name?: string;
   company_name?: string;
 }
 
@@ -461,7 +463,7 @@ const RegisterPage: React.FC = () => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
   });
-  const [form, setForm] = useState<RegisterRequest>({ email: "", password: "", role: "freelancer", company_name: "" });
+  const [form, setForm] = useState<RegisterRequest>({ email: "", password: "", role: "freelancer", first_name: "", last_name: "", company_name: "" });
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -501,6 +503,11 @@ const RegisterPage: React.FC = () => {
     const emailErr = validateEmail(form.email);
     if (emailErr) errs.email = emailErr;
 
+    if (form.role === "freelancer") {
+      if (!form.first_name?.trim()) errs.first_name = "First name is required.";
+      if (!form.last_name?.trim())  errs.last_name  = "Last name is required.";
+    }
+
     const pwErr = validatePassword(form.password);
     if (pwErr) errs.password = pwErr;
 
@@ -523,6 +530,10 @@ const RegisterPage: React.FC = () => {
       password: form.password,
       role:     form.role,
     };
+    if (form.role === "freelancer") {
+      if (form.first_name?.trim()) payload.first_name = form.first_name.trim();
+      if (form.last_name?.trim())  payload.last_name  = form.last_name.trim();
+    }
     if (form.role === "client" && form.company_name?.trim()) {
       payload.company_name = form.company_name.trim();
     }
@@ -605,6 +616,22 @@ const RegisterPage: React.FC = () => {
             })}
           </div>
         </div>
+
+        {/* First + Last name (freelancers) */}
+        {form.role === "freelancer" && (
+          <div style={{ display: "flex", gap: 10, marginBottom: "1.25rem" }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>First Name</label>
+              <input style={{ ...inputBase, borderColor: fieldErrors.first_name ? c.errorText : c.inputBorder }} type="text" name="first_name" placeholder="John" value={form.first_name || ""} onChange={handleChange} autoComplete="given-name" />
+              {fieldErrors.first_name && <div style={errStyle}>{fieldErrors.first_name}</div>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Last Name</label>
+              <input style={{ ...inputBase, borderColor: fieldErrors.last_name ? c.errorText : c.inputBorder }} type="text" name="last_name" placeholder="Doe" value={form.last_name || ""} onChange={handleChange} autoComplete="family-name" />
+              {fieldErrors.last_name && <div style={errStyle}>{fieldErrors.last_name}</div>}
+            </div>
+          </div>
+        )}
 
         {/* Email */}
         <div style={{ marginBottom: "1.25rem" }}>

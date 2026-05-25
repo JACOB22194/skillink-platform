@@ -61,10 +61,16 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
   const { mutate: uploadFile, isLoading: uploading } = usePortfolioUpload();
   const { mutate: deleteItem } = usePortfolioDelete();
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName]   = useState("");
   const [bio, setBio] = useState("");
   const [rate, setRate] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
   const [availability, setAvailability] = useState<AvailabilityStatus>("available");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarMsg, setAvatarMsg] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [bioOptimizeMsg, setBioOptimizeMsg] = useState<string | null>(null);
 
@@ -76,20 +82,57 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
   const [portfolioMsg, setPortfolioMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
   useEffect(() => {
     if (!profile) return;
+    setFirstName((profile as any).first_name ?? "");
+    setLastName((profile as any).last_name ?? "");
     setBio(profile.bio ?? "");
     setRate(profile.hourly_rate?.toString() ?? "");
     setSkills(profile.skills ?? []);
     setAvailability(profile.availability_status ?? "available");
+    setAvatarUrl((profile as any).avatar_url ?? null);
   }, [profile]);
 
   const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: `0.5px solid ${c.inputBorder}`, borderRadius: 8, background: c.inputBg, color: c.text, fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
   const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 6 };
 
   const handleSave = async () => {
-    await save({ profile: { bio, hourly_rate: parseFloat(rate) || 0, availability_status: availability }, skills });
+    await save({
+      profile: {
+        bio,
+        hourly_rate: parseFloat(rate) || 0,
+        availability_status: availability,
+        first_name: firstName.trim() || undefined,
+        last_name:  lastName.trim()  || undefined,
+      },
+      skills,
+    });
     refetch();
+  };
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) return;
+    setAvatarMsg(null);
+    const fd = new FormData();
+    fd.append("file", avatarFile);
+    try {
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(`${API_BASE}/users/me/avatar`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setAvatarUrl(data.avatar_url);
+      setAvatarFile(null);
+      setAvatarMsg("Profile picture updated!");
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    } catch {
+      setAvatarMsg("Upload failed. Try again.");
+    }
   };
 
   const handleOptimizeBio = async () => {
@@ -162,6 +205,44 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
       <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>Public Profile</h2>
       {isSuccess && <Alert type="success" msg="Profile saved successfully." c={c} />}
       {isError && <Alert type="error" msg={error ?? "Failed to save."} c={c} />}
+
+      {/* ── Avatar ── */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <label style={labelStyle}>Profile Picture</label>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {avatarUrl ? (
+            <img src={`http://localhost:8000${avatarUrl}`} alt="avatar" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: `0.5px solid ${c.border}` }} />
+          ) : (
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 600, border: `0.5px solid ${c.primaryBorder}` }}>
+              {(firstName?.[0] ?? "") + (lastName?.[0] ?? "") || "?"}
+            </div>
+          )}
+          <div style={{ flex: 1 }}>
+            <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: "none" }} onChange={e => setAvatarFile(e.target.files?.[0] ?? null)} />
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={() => avatarInputRef.current?.click()} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: c.inputBg, color: c.text, border: `0.5px solid ${c.inputBorder}`, cursor: "pointer", fontFamily: "inherit" }}>
+                {avatarFile ? avatarFile.name : "Choose Image"}
+              </button>
+              {avatarFile && (
+                <button onClick={handleAvatarUpload} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Upload</button>
+              )}
+            </div>
+            {avatarMsg && <div style={{ fontSize: 12, marginTop: 6, color: avatarMsg.includes("failed") ? "#ef4444" : "#16a34a" }}>{avatarMsg}</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Name ── */}
+      <div style={{ display: "flex", gap: 12, marginBottom: "1.25rem" }}>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>First Name</label>
+          <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John" style={inputStyle} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>Last Name</label>
+          <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Doe" style={inputStyle} />
+        </div>
+      </div>
 
       {/* ── Availability Status ── */}
       <div style={{ marginBottom: "1.5rem" }}>
