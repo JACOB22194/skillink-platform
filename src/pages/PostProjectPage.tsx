@@ -47,6 +47,16 @@ interface RecommendResponse {
   latency_ms: number;
 }
 
+// ── NEW: pricing suggestion returned by the AI service ──────────────────────
+interface PricingSuggestion {
+  min: number;
+  max: number;
+  avg: number;
+  matched_category: string;
+  exact_match: boolean;
+  experience: string;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SPINNER = (
@@ -98,7 +108,7 @@ const PostProjectPage: React.FC = () => {
 
   // Workflow states
   const [step, setStep] = useState<"input" | "matching">("input");
-  
+
   // Data state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -108,13 +118,17 @@ const PostProjectPage: React.FC = () => {
   const [extraLabels, setExtraLabels] = useState<string[]>([]);
   const [removedPrimaryLabel, setRemovedPrimaryLabel] = useState(false);
 
+  // ── NEW: pricing suggestion state ─────────────────────────────────────────
+  const [pricingSuggestion, setPricingSuggestion] = useState<PricingSuggestion | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
+
   // Matching state
   const [matches, setMatches] = useState<MatchedFreelancer[]>([]);
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState("");
   const [matchLatency, setMatchLatency] = useState(0);
 
-  // Invite state: Set of freelancer_ids the client has clicked "Invite" on
+  // Invite state
   const [invitedIds, setInvitedIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -132,10 +146,11 @@ const PostProjectPage: React.FC = () => {
     e.target.style.borderColor = colors.border;
   };
 
-  // Real-time classification
+  // Real-time AI classification
   useEffect(() => {
     if (description.trim().length < 10) {
       setAnalysisResult(null);
+      setPricingSuggestion(null);
       return;
     }
 
@@ -144,20 +159,15 @@ const PostProjectPage: React.FC = () => {
         const res = await fetch("http://localhost:8001/predict", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: title.trim(),
-            description: description.trim(),
-            top_k: 5
-          })
+          body: JSON.stringify({ title: title.trim(), description: description.trim(), top_k: 5 }),
         });
-
         const data = await res.json();
         if (data.sub_category) {
           setAnalysisResult({
             label: data.sub_category,
             score: (data.confidence || 0) / 100,
             category: data.category || "General",
-            alternatives: data.top_alternatives || []
+            alternatives: data.top_alternatives || [],
           });
         }
       } catch (err) {
@@ -167,6 +177,37 @@ const PostProjectPage: React.FC = () => {
 
     return () => clearTimeout(timer);
   }, [title, description]);
+
+  // Fetch pricing suggestion as soon as the description is classified
+  useEffect(() => {
+    if (!analysisResult) {
+      setPricingSuggestion(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setPricingLoading(true);
+      try {
+        const category = analysisResult.category || analysisResult.label || "Web Development";
+
+        const res = await fetch("http://localhost:8001/pricing/recommend", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category, experience: "Intermediate" }),
+        });
+        if (res.ok) {
+          const data: PricingSuggestion = await res.json();
+          setPricingSuggestion(data);
+        }
+      } catch (err) {
+        console.error("Pricing suggestion error:", err);
+      } finally {
+        setPricingLoading(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [analysisResult, contractType]);
 
   // Fetch matches when entering step 2
   const goToMatching = async () => {
@@ -192,23 +233,10 @@ const PostProjectPage: React.FC = () => {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         let msg = "Failed to save project";
-        if (typeof errorData.detail === "string") {
-          msg = errorData.detail;
-        } else if (Array.isArray(errorData.detail)) {
-          msg = errorData.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
-        } else if (errorData.message) {
-          msg = errorData.message;
-        }
+        if (typeof errorData.detail === "string") msg = errorData.detail;
+        else if (Array.isArray(errorData.detail)) msg = errorData.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        else if (errorData.message) msg = errorData.message;
         throw new Error(msg);
-      }
-      if (false) {
-        const err = await res.json().catch(() => ({}));
-        if (res.status === 403) {
-          setMatchError("Session conflict: you appear to be logged in as a freelancer in another tab. Please sign out and log back in as a client.");
-        } else {
-          setMatchError(err.detail || "Failed to get recommendations.");
-        }
-        return;
       }
 
       const data: RecommendResponse = await res.json();
@@ -227,17 +255,14 @@ const PostProjectPage: React.FC = () => {
   const finish = async () => {
     setIsSaving(true);
     setErrorMsg("");
-    
+
     try {
       const token = localStorage.getItem("access_token");
       if (!token) throw new Error("Auth token missing! Please login again.");
-      
+
       const res = await fetch(`${API_BASE_URL}/projects`, {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim(),
@@ -246,28 +271,22 @@ const PostProjectPage: React.FC = () => {
           sub_category: removedPrimaryLabel ? null : (analysisResult?.label || null),
           category: removedPrimaryLabel ? null : (analysisResult?.category || null),
           contract_type: contractType,
-        })
+        }),
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         let msg = "Failed to save project";
-        if (typeof errorData.detail === "string") {
-          msg = errorData.detail;
-        } else if (Array.isArray(errorData.detail)) {
-          msg = errorData.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
-        } else if (errorData.message) {
-          msg = errorData.message;
-        }
+        if (typeof errorData.detail === "string") msg = errorData.detail;
+        else if (Array.isArray(errorData.detail)) msg = errorData.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        else if (errorData.message) msg = errorData.message;
         throw new Error(msg);
       }
 
       const project = await res.json();
       const projectId: number = project.project_id;
 
-      // Send queued invitations (best-effort, non-blocking)
       if (invitedIds.size > 0) {
-        const token = localStorage.getItem("access_token");
         await Promise.allSettled(
           Array.from(invitedIds).map((freelancerId) =>
             fetch(`${API_BASE_URL}/proposals/invite`, {
@@ -357,14 +376,7 @@ const PostProjectPage: React.FC = () => {
                 onChange={(e) => setDescription(e.target.value)}
                 onFocus={handleFocus as any}
                 onBlur={handleBlur as any}
-                style={{
-                  ...inputStyle,
-                  height: 180,
-                  padding: "1.25rem",
-                  resize: "vertical",
-                  lineHeight: 1.6,
-                  marginBottom: "1.5rem",
-                }}
+                style={{ ...inputStyle, height: 180, padding: "1.25rem", resize: "vertical", lineHeight: 1.6, marginBottom: "1.5rem" }}
               />
 
               <div style={{ marginBottom: "1.5rem" }}>
@@ -393,12 +405,7 @@ const PostProjectPage: React.FC = () => {
                     onBlur={handleBlur}
                     min="10"
                     step="0.01"
-                    style={{
-                      ...inputStyle,
-                      marginBottom: 0,
-                      flex: 1,
-                      borderColor: budget && !isBudgetValid ? "#ef4444" : colors.border,
-                    }}
+                    style={{ ...inputStyle, marginBottom: 0, flex: 1, borderColor: budget && !isBudgetValid ? "#ef4444" : colors.border }}
                   />
                 </div>
                 {budget && !isBudgetValid && (
@@ -406,52 +413,100 @@ const PostProjectPage: React.FC = () => {
                 )}
               </div>
 
+              {/* AI Pricing Suggestion Box */}
+              {(pricingLoading || pricingSuggestion) && (() => {
+                const HOURLY_HOURS = 80;
+                const hrMin = pricingSuggestion ? Math.round(pricingSuggestion.min / HOURLY_HOURS) : 0;
+                const hrMax = pricingSuggestion ? Math.round(pricingSuggestion.max / HOURLY_HOURS) : 0;
+                const hrAvg = pricingSuggestion ? Math.round(pricingSuggestion.avg / HOURLY_HOURS) : 0;
+                const isHourly = contractType === "hourly";
+
+                return (
+                  <div style={{
+                    marginBottom: "1.5rem",
+                    padding: "1rem 1.25rem",
+                    borderRadius: 12,
+                    border: `1px solid ${colors.primary}30`,
+                    background: colors.primarySoft,
+                    animation: "fadeIn 0.3s ease",
+                  }}>
+                    {pricingLoading ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.subtext, fontSize: 13 }}>
+                        <span style={{ color: colors.primary }}>{SPINNER}</span>
+                        {isHourly ? "Calculating recommended hourly rate..." : "Calculating recommended budget..."}
+                      </div>
+                    ) : pricingSuggestion && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 12, color: colors.subtext, marginBottom: 4 }}>
+                            💡 {isHourly ? "Recommended Hourly Rate" : "Recommended Budget"}
+                          </div>
+                          <div style={{ fontSize: 22, fontWeight: 600, color: colors.text, letterSpacing: "-0.5px" }}>
+                            {isHourly ? (
+                              <>
+                                ${hrMin.toLocaleString()}<span style={{ fontSize: 14, fontWeight: 400, color: colors.subtext }}>/hr</span>
+                                <span style={{ fontSize: 15, fontWeight: 400, color: colors.subtext, margin: "0 6px" }}>–</span>
+                                ${hrMax.toLocaleString()}<span style={{ fontSize: 14, fontWeight: 400, color: colors.subtext }}>/hr</span>
+                              </>
+                            ) : (
+                              <>
+                                ${pricingSuggestion.min.toLocaleString()}
+                                <span style={{ fontSize: 15, fontWeight: 400, color: colors.subtext, margin: "0 6px" }}>–</span>
+                                ${pricingSuggestion.max.toLocaleString()}
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => setBudget(String(isHourly ? hrAvg : Math.round(pricingSuggestion.avg)))}
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            padding: "8px 16px",
+                            borderRadius: 8,
+                            border: `1.5px solid ${colors.primary}`,
+                            background: "transparent",
+                            color: colors.primary,
+                            cursor: "pointer",
+                            transition: "all 0.15s",
+                            whiteSpace: "nowrap",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = colors.primarySoft; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        >
+                          {isHourly
+                            ? `Use $${hrAvg.toLocaleString()}/hr (avg)`
+                            : `Use $${Math.round(pricingSuggestion.avg).toLocaleString()} (avg)`}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              {/* END pricing suggestion */}
+
               {/* Real-time AI prediction badges + extras */}
               {analysisResult && (
                 <div style={{ animation: "fadeIn 0.3s ease", marginBottom: "1rem" }}>
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-                    {/* Primary predictions */}
                     {!removedPrimaryLabel && (
-                      <div style={{
-                        display: "inline-flex", alignItems: "center", gap: 6,
-                        background: colors.primarySoft, padding: "8px 16px", borderRadius: 100,
-                        border: `1px solid ${colors.primary}30`,
-                      }}>
-                        <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>
-                          {analysisResult.label}
-                        </span>
-                        <span
-                          onClick={() => setRemovedPrimaryLabel(true)}
-                          style={{ fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2 }}
-                        >×</span>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: colors.primarySoft, padding: "8px 16px", borderRadius: 100, border: `1px solid ${colors.primary}30` }}>
+                        <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>{analysisResult.label}</span>
+                        <span onClick={() => setRemovedPrimaryLabel(true)} style={{ fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2 }}>×</span>
                       </div>
                     )}
-                    <div style={{
-                      display: "inline-flex", alignItems: "center",
-                      background: colors.primarySoft, padding: "8px 16px", borderRadius: 100,
-                      border: `1px solid ${colors.primary}30`,
-                    }}>
-                      <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>
-                        {analysisResult.category}
-                      </span>
+                    <div style={{ display: "inline-flex", alignItems: "center", background: colors.primarySoft, padding: "8px 16px", borderRadius: 100, border: `1px solid ${colors.primary}30` }}>
+                      <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>{analysisResult.category}</span>
                     </div>
-                    {/* Extra labels added from alternatives */}
                     {extraLabels.map((lbl, i) => (
-                      <div key={`extra-${i}`} style={{
-                        display: "inline-flex", alignItems: "center", gap: 6,
-                        background: colors.primarySoft, padding: "8px 16px", borderRadius: 100,
-                        border: `1px solid ${colors.primary}30`,
-                      }}>
+                      <div key={`extra-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: colors.primarySoft, padding: "8px 16px", borderRadius: 100, border: `1px solid ${colors.primary}30` }}>
                         <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>{lbl}</span>
-                        <span
-                          onClick={() => setExtraLabels(extraLabels.filter((_, j) => j !== i))}
-                          style={{ fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2 }}
-                        >×</span>
+                        <span onClick={() => setExtraLabels(extraLabels.filter((_, j) => j !== i))} style={{ fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2 }}>×</span>
                       </div>
                     ))}
                   </div>
 
-                  {/* Alternative predictions — clickable to ADD */}
                   {analysisResult.alternatives && analysisResult.alternatives.length > 0 && (
                     <div>
                       <div style={{ fontSize: 12, color: colors.subtext, marginBottom: "0.5rem" }}>Alternatives — click to add</div>
@@ -459,14 +514,7 @@ const PostProjectPage: React.FC = () => {
                         {removedPrimaryLabel && !extraLabels.includes(analysisResult.label) && (
                           <button
                             onClick={() => setExtraLabels([...extraLabels, analysisResult.label])}
-                            style={{
-                              border: `1px solid ${colors.border}`,
-                              display: "inline-flex", alignItems: "center",
-                              padding: "6px 14px", borderRadius: 100, fontSize: 12,
-                              background: colors.bg, color: colors.subtext,
-                              cursor: "pointer", fontWeight: 500,
-                              transition: "all 0.15s ease",
-                            }}
+                            style={{ border: `1px solid ${colors.border}`, display: "inline-flex", alignItems: "center", padding: "6px 14px", borderRadius: 100, fontSize: 12, background: colors.bg, color: colors.subtext, cursor: "pointer", fontWeight: 500, transition: "all 0.15s ease" }}
                             onMouseEnter={(e) => { e.currentTarget.style.borderColor = colors.primary; e.currentTarget.style.color = colors.primary; }}
                             onMouseLeave={(e) => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.subtext; }}
                           >
@@ -476,23 +524,16 @@ const PostProjectPage: React.FC = () => {
                         {analysisResult.alternatives
                           .filter(alt => alt.sub_category !== analysisResult.label && !extraLabels.includes(alt.sub_category))
                           .map((alt, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setExtraLabels([...extraLabels, alt.sub_category])}
-                            style={{
-                              border: `1px solid ${colors.border}`,
-                              display: "inline-flex", alignItems: "center",
-                              padding: "6px 14px", borderRadius: 100, fontSize: 12,
-                              background: colors.bg, color: colors.subtext,
-                              cursor: "pointer", fontWeight: 500,
-                              transition: "all 0.15s ease",
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = colors.primary; e.currentTarget.style.color = colors.primary; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.subtext; }}
-                          >
-                            + {alt.sub_category}
-                          </button>
-                        ))}
+                            <button
+                              key={i}
+                              onClick={() => setExtraLabels([...extraLabels, alt.sub_category])}
+                              style={{ border: `1px solid ${colors.border}`, display: "inline-flex", alignItems: "center", padding: "6px 14px", borderRadius: 100, fontSize: 12, background: colors.bg, color: colors.subtext, cursor: "pointer", fontWeight: 500, transition: "all 0.15s ease" }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = colors.primary; e.currentTarget.style.color = colors.primary; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.subtext; }}
+                            >
+                              + {alt.sub_category}
+                            </button>
+                          ))}
                       </div>
                     </div>
                   )}
@@ -505,14 +546,8 @@ const PostProjectPage: React.FC = () => {
                   disabled={!description.trim() || !title.trim() || !isBudgetValid}
                   style={{
                     background: (description.trim() && title.trim() && isBudgetValid) ? colors.primary : colors.border,
-                    color: "#fff",
-                    border: "none",
-                    padding: "12px 28px",
-                    borderRadius: 8,
-                    fontSize: 15,
-                    fontWeight: 500,
-                    cursor: (description.trim() && title.trim() && isBudgetValid) ? "pointer" : "not-allowed",
-                    transition: "opacity 0.2s",
+                    color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500,
+                    cursor: (description.trim() && title.trim() && isBudgetValid) ? "pointer" : "not-allowed", transition: "opacity 0.2s",
                   }}
                 >
                   Next — Find Matches
@@ -543,11 +578,10 @@ const PostProjectPage: React.FC = () => {
                 {matchLoading
                   ? "Running AI matching engine..."
                   : matches.length > 0
-                    ? <>Found <strong style={{ color: colors.text }}>{matches.length}</strong> matches for "{analysisResult?.label || title}" in <strong style={{ color: colors.primary }}>{matchLatency.toFixed(0)}ms</strong></>
+                    ? <><strong style={{ color: colors.text }}>{matches.length}</strong> matches for "{analysisResult?.label || title}" in <strong style={{ color: colors.primary }}>{matchLatency.toFixed(0)}ms</strong></>
                     : "We ran your project through our matching engine."}
               </p>
 
-              {/* Loading state */}
               {matchLoading && (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "3rem 0", gap: 16 }}>
                   <div style={{ color: colors.primary }}>{SPINNER}</div>
@@ -556,21 +590,18 @@ const PostProjectPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Error state */}
               {matchError && (
                 <div style={{ background: "rgba(239,68,68,.08)", color: "#ef4444", padding: "16px 20px", borderRadius: 12, fontSize: 14, marginBottom: "1.5rem", border: "1px solid rgba(239,68,68,.15)" }}>
                   ⚠ {matchError}
                 </div>
               )}
 
-              {/* Budget error after save */}
               {errorMsg && (
                 <div style={{ background: "rgba(239,68,68,.08)", color: "#ef4444", padding: "16px 20px", borderRadius: 12, fontSize: 14, marginBottom: "1.5rem", border: "1px solid rgba(239,68,68,.15)" }}>
                   ❌ {errorMsg}
                 </div>
               )}
 
-              {/* Empty state */}
               {!matchLoading && !matchError && matches.length === 0 && (
                 <div style={{ textAlign: "center", padding: "3rem 0", color: colors.subtext }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
@@ -581,7 +612,6 @@ const PostProjectPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Match results */}
               {!matchLoading && matches.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: "2.5rem" }}>
                   {matches.map((f, i) => {
@@ -596,16 +626,10 @@ const PostProjectPage: React.FC = () => {
                         borderRadius: 14, background: i === 0 ? colors.primarySoft + "30" : colors.bg,
                         transition: "border-color 0.2s",
                       }}>
-                        {/* Avatar */}
-                        <div style={{
-                          width: 48, height: 48, borderRadius: "50%", background: palette.bg,
-                          color: palette.color, display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 16, fontWeight: 600, flexShrink: 0, marginRight: "1rem",
-                        }}>
+                        <div style={{ width: 48, height: 48, borderRadius: "50%", background: palette.bg, color: palette.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 600, flexShrink: 0, marginRight: "1rem" }}>
                           {initials}
                         </div>
 
-                        {/* Info */}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                             <span style={{ fontSize: 15, fontWeight: 500, color: colors.text }}>{f.name}</span>
@@ -613,7 +637,7 @@ const PostProjectPage: React.FC = () => {
                               <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: colors.primary, color: "#fff", fontWeight: 600 }}>BEST MATCH</span>
                             )}
                             {f.classifier_weight < 0.3 && f.matched_on && (
-                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "rgba(168, 85, 247, 0.1)", color: colors.primary, fontWeight: 500, marginLeft: i === 0 ? 0 : 8 }}>
+                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "rgba(168, 85, 247, 0.1)", color: colors.primary, fontWeight: 500 }}>
                                 via {f.matched_on}
                               </span>
                             )}
@@ -621,24 +645,13 @@ const PostProjectPage: React.FC = () => {
                           <div style={{ fontSize: 12, color: colors.subtext, marginBottom: 6 }}>
                             {f.professional_title || "Freelancer"}
                             {f.hourly_rate > 0 && <> · <span style={{ color: colors.text, fontWeight: 500 }}>${f.hourly_rate}/hr</span></>}
-                            {f.github_url && (
-                              <> · <a href={f.github_url} target="_blank" rel="noreferrer" style={{ color: colors.primary, textDecoration: "none" }}>GitHub ↗</a></>
-                            )}
+                            {f.github_url && <> · <a href={f.github_url} target="_blank" rel="noreferrer" style={{ color: colors.primary, textDecoration: "none" }}>GitHub ↗</a></>}
                           </div>
-
-                          {/* Explanation */}
-                          <div style={{ fontSize: 12, color: colors.subtext, lineHeight: 1.5, marginBottom: 8, opacity: 0.85 }}>
-                            {f.explanation}
-                          </div>
-
-                          {/* Matched skills */}
+                          <div style={{ fontSize: 12, color: colors.subtext, lineHeight: 1.5, marginBottom: 8, opacity: 0.85 }}>{f.explanation}</div>
                           {f.matched_skills.length > 0 && (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                               {f.matched_skills.map(skill => (
-                                <span key={skill} style={{
-                                  fontSize: 10, padding: "2px 9px", borderRadius: 20,
-                                  background: colors.primarySoft, color: colors.primary, fontWeight: 500,
-                                }}>
+                                <span key={skill} style={{ fontSize: 10, padding: "2px 9px", borderRadius: 20, background: colors.primarySoft, color: colors.primary, fontWeight: 500 }}>
                                   {skill}
                                 </span>
                               ))}
@@ -646,23 +659,16 @@ const PostProjectPage: React.FC = () => {
                           )}
                         </div>
 
-                        {/* Score + Invite */}
                         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
                           <div>
-                            <div style={{ fontSize: 24, fontWeight: 600, color: scorePct >= 50 ? colors.primary : colors.subtext, lineHeight: 1 }}>
-                              {scorePct}%
-                            </div>
+                            <div style={{ fontSize: 24, fontWeight: 600, color: scorePct >= 50 ? colors.primary : colors.subtext, lineHeight: 1 }}>{scorePct}%</div>
                             <div style={{ fontSize: 10, color: colors.subtext, marginTop: 4 }}>match</div>
                           </div>
-
-                          {/* Score breakdown */}
                           <div style={{ fontSize: 10, color: colors.subtext, textAlign: "right", lineHeight: 1.8 }}>
                             <div>Text {Math.round(f.text_score * 100)}%</div>
                             <div>Skill {Math.round(f.skill_score * 100)}%</div>
                             <div>Quality {Math.round(f.quality_score * 100)}%</div>
                           </div>
-
-                          {/* Invite button */}
                           {invitedIds.has(f.freelancer_id) ? (
                             <div style={{ fontSize: 11, color: "#22c55e", fontWeight: 500, padding: "5px 10px", borderRadius: 6, background: "rgba(34,197,94,.1)", border: "1px solid rgba(34,197,94,.25)" }}>
                               ✓ Invited
@@ -670,11 +676,7 @@ const PostProjectPage: React.FC = () => {
                           ) : (
                             <button
                               onClick={() => setInvitedIds(prev => new Set(prev).add(f.freelancer_id))}
-                              style={{
-                                fontSize: 11, fontWeight: 500, padding: "5px 12px", borderRadius: 6,
-                                border: `1px solid ${colors.primary}`, background: "transparent",
-                                color: colors.primary, cursor: "pointer", transition: "all 0.15s",
-                              }}
+                              style={{ fontSize: 11, fontWeight: 500, padding: "5px 12px", borderRadius: 6, border: `1px solid ${colors.primary}`, background: "transparent", color: colors.primary, cursor: "pointer", transition: "all 0.15s" }}
                               onMouseEnter={(e) => { e.currentTarget.style.background = colors.primarySoft; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                             >
@@ -693,17 +695,14 @@ const PostProjectPage: React.FC = () => {
                   ❌ {errorMsg}
                 </div>
               )}
+
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
                   onClick={finish}
                   disabled={isSaving}
                   style={{ background: isSaving ? colors.border : colors.primary, color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.7 : 1 }}
                 >
-                  {isSaving
-                    ? "Saving..."
-                    : invitedIds.size > 0
-                      ? `Save & Send ${invitedIds.size} Invite${invitedIds.size > 1 ? "s" : ""}`
-                      : "Save & Post to Marketplace"}
+                  {isSaving ? "Saving..." : invitedIds.size > 0 ? `Save & Send ${invitedIds.size} Invite${invitedIds.size > 1 ? "s" : ""}` : "Save & Post to Marketplace"}
                 </button>
               </div>
             </div>
