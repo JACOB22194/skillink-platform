@@ -83,6 +83,8 @@ def register(body: schema.RegisterRequest, background_tasks: BackgroundTasks, db
         status      = models.UserStatus.unverified,
         mfa_enabled = False,
         mfa_secret  = None,
+        first_name  = body.first_name or None,
+        last_name   = body.last_name  or None,
     )
     db.add(user)
     db.flush()   # get user.id before committing

@@ -1113,14 +1113,44 @@ def get_skill_demand(
     }
 
 
+# ── ML-05: chi-squared helper ────────────────────────────────────────────────
+
+def _chi2_independence(table: list) -> tuple:
+    """
+    Chi-squared test of independence on a 2-column contingency table.
+    table: [[accepted, rejected], ...] one row per category.
+    Returns (chi2_stat, degrees_of_freedom, bias_detected_at_p005).
+    """
+    if not table or len(table) < 2:
+        return None, None, False
+    row_sums = [sum(row) for row in table]
+    col_sums = [sum(table[r][c] for r in range(len(table))) for c in range(2)]
+    grand    = sum(row_sums)
+    if grand == 0 or any(s == 0 for s in col_sums):
+        return None, None, False
+
+    chi2 = 0.0
+    for r, row in enumerate(table):
+        for c, obs in enumerate(row):
+            exp = row_sums[r] * col_sums[c] / grand
+            if exp > 0:
+                chi2 += (obs - exp) ** 2 / exp
+
+    df = len(table) - 1
+    # Critical values at p = 0.05
+    _crit = {1: 3.841, 2: 5.991, 3: 7.815, 4: 9.488, 5: 11.070}
+    crit  = _crit.get(df, df * 2.5)
+    return round(chi2, 3), df, bool(chi2 > crit)
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  GET /admin/analytics/fairness  (ADM-03)
+#  GET /admin/analytics/fairness  (ADM-03 / ML-05)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get(
     "/analytics/fairness",
     summary="Fairness and bias report",
-    description="Proposal acceptance rates by category, trust score distribution, and review ratings.",
+    description="Acceptance rates by category & country, precision/recall vs AI scores, chi-squared bias test, trust score & rating distributions.",
 )
 def get_fairness_report(
     db:    Session     = Depends(get_db),
@@ -1128,16 +1158,19 @@ def get_fairness_report(
 ):
     from collections import defaultdict
 
-    # Proposal acceptance by category
-    cat_proposals = defaultdict(lambda: {"total": 0, "accepted": 0, "total_ai_score": 0.0, "ai_count": 0})
-    for p in db.query(models.Proposal).join(models.Project).all():
+    # ── 1. Load all proposals once ────────────────────────────────────────────
+    all_proposals = db.query(models.Proposal).join(models.Project).all()
+
+    # ── 2. Acceptance by project category ────────────────────────────────────
+    cat_data = defaultdict(lambda: {"total": 0, "accepted": 0, "total_ai_score": 0.0, "ai_count": 0})
+    for p in all_proposals:
         cat = (p.project.category or "Uncategorized") if p.project else "Uncategorized"
-        cat_proposals[cat]["total"] += 1
+        cat_data[cat]["total"] += 1
         if p.status == models.ProposalStatus.accepted:
-            cat_proposals[cat]["accepted"] += 1
+            cat_data[cat]["accepted"] += 1
         if p.ai_relevance_score is not None:
-            cat_proposals[cat]["total_ai_score"] += p.ai_relevance_score
-            cat_proposals[cat]["ai_count"]       += 1
+            cat_data[cat]["total_ai_score"] += p.ai_relevance_score
+            cat_data[cat]["ai_count"]       += 1
 
     acceptance_by_category = [
         {
@@ -1147,10 +1180,52 @@ def get_fairness_report(
             "acceptance_rate": round(v["accepted"] / v["total"] * 100, 1) if v["total"] > 0 else 0.0,
             "avg_ai_score":    round(v["total_ai_score"] / v["ai_count"], 2) if v["ai_count"] > 0 else None,
         }
-        for cat, v in sorted(cat_proposals.items(), key=lambda x: -x[1]["total"])
+        for cat, v in sorted(cat_data.items(), key=lambda x: -x[1]["total"])
     ]
 
-    # Trust score distribution (latest score per user)
+    # ── 3. Chi-squared bias test across categories ────────────────────────────
+    contingency = [
+        [v["accepted"], v["total"] - v["accepted"]]
+        for v in cat_data.values() if v["total"] > 0
+    ]
+    chi2_stat, chi2_df, bias_detected = _chi2_independence(contingency)
+
+    # ── 4. Precision / recall (AI recommendations → outcomes) ─────────────────
+    total_proposals = len(all_proposals)
+    ai_recommended  = [p for p in all_proposals if p.ai_relevance_score is not None]
+    total_accepted  = [p for p in all_proposals if p.status == models.ProposalStatus.accepted]
+    ai_accepted     = [p for p in ai_recommended if p.status == models.ProposalStatus.accepted]
+
+    tp = len(ai_accepted)
+    fp = len(ai_recommended) - tp
+    fn = len(total_accepted) - tp
+
+    precision       = round(tp / (tp + fp), 3) if (tp + fp) > 0 else None
+    recall          = round(tp / (tp + fn), 3) if (tp + fn) > 0 else None
+    f1              = round(2 * precision * recall / (precision + recall), 3) \
+                      if precision and recall and (precision + recall) > 0 else None
+    acceptance_rate = round(len(total_accepted) / total_proposals * 100, 1) if total_proposals > 0 else 0.0
+
+    # ── 5. Acceptance by freelancer country (demographic bias) ────────────────
+    country_data = defaultdict(lambda: {"total": 0, "accepted": 0})
+    for p in all_proposals:
+        country = (p.freelancer.country or "Unknown") if p.freelancer else "Unknown"
+        country_data[country]["total"] += 1
+        if p.status == models.ProposalStatus.accepted:
+            country_data[country]["accepted"] += 1
+
+    acceptance_by_country = [
+        {
+            "country":         country,
+            "total_proposals": v["total"],
+            "accepted":        v["accepted"],
+            "acceptance_rate": round(v["accepted"] / v["total"] * 100, 1) if v["total"] > 0 else 0.0,
+        }
+        for country, v in sorted(country_data.items(), key=lambda x: -x[1]["total"])
+        if v["total"] >= 3
+    ]
+
+    # ── 6. Trust score distribution ───────────────────────────────────────────
     buckets = {"0–25": 0, "26–50": 0, "51–75": 0, "76–100": 0}
     for ts in db.query(models.TrustScore).all():
         s = ts.score or 0
@@ -1161,21 +1236,93 @@ def get_fairness_report(
 
     trust_dist = [{"bucket": k, "count": v} for k, v in buckets.items()]
 
-    # Review rating distribution
+    # ── 7. Review rating distribution ─────────────────────────────────────────
     rating_dist = defaultdict(int)
     for r in db.query(models.Review).all():
         rating_dist[str(r.rating)] += 1
 
-    rating_distribution = [
-        {"rating": k, "count": v}
-        for k, v in sorted(rating_dist.items())
-    ]
+    rating_distribution = [{"rating": k, "count": v} for k, v in sorted(rating_dist.items())]
+
+    # ── 8. Log snapshot to ai_health_logs ─────────────────────────────────────
+    db.add(models.AIHealthLog(
+        precision_score = precision,
+        recall_score    = recall,
+        f1_score        = f1,
+        acceptance_rate = acceptance_rate,
+        total_proposals = total_proposals,
+        ai_proposals    = len(ai_recommended),
+        chi2_stat       = chi2_stat,
+        chi2_df         = chi2_df,
+        bias_detected   = bias_detected,
+        snapshot_json   = json.dumps({
+            "acceptance_rate": acceptance_rate,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "chi2_stat": chi2_stat,
+            "bias_detected": bias_detected,
+        }),
+    ))
+    db.commit()
 
     return {
-        "acceptance_by_category":  acceptance_by_category,
-        "trust_score_distribution": trust_dist,
+        "acceptance_by_category":     acceptance_by_category,
+        "acceptance_by_country":      acceptance_by_country,
+        "trust_score_distribution":   trust_dist,
         "review_rating_distribution": rating_distribution,
+        "model_accuracy": {
+            "total_proposals": total_proposals,
+            "ai_recommended":  len(ai_recommended),
+            "acceptance_rate": acceptance_rate,
+            "precision":       precision,
+            "recall":          recall,
+            "f1_score":        f1,
+        },
+        "bias_test": {
+            "chi2_statistic":      chi2_stat,
+            "degrees_of_freedom":  chi2_df,
+            "bias_detected":       bias_detected,
+            "description": "Chi-squared test of independence: does acceptance rate vary significantly across project categories?",
+        },
     }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /admin/analytics/ai-health  (ML-05)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/analytics/ai-health",
+    summary="AI model health history",
+    description="Historical precision/recall/f1 and bias snapshots logged each time the fairness report is generated.",
+)
+def get_ai_health_history(
+    limit: int     = Query(30, ge=1, le=200),
+    db:    Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    logs = (
+        db.query(models.AIHealthLog)
+        .order_by(models.AIHealthLog.recorded_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "log_id":          log.log_id,
+            "recorded_at":     log.recorded_at,
+            "precision":       log.precision_score,
+            "recall":          log.recall_score,
+            "f1_score":        log.f1_score,
+            "acceptance_rate": log.acceptance_rate,
+            "total_proposals": log.total_proposals,
+            "ai_proposals":    log.ai_proposals,
+            "chi2_stat":       log.chi2_stat,
+            "chi2_df":         log.chi2_df,
+            "bias_detected":   log.bias_detected,
+        }
+        for log in logs
+    ]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1219,10 +1366,27 @@ def export_analytics_csv(
 
     elif report == "fairness":
         data = get_fairness_report(db=db, admin=admin)
+        acc = data["model_accuracy"]
+        bias = data["bias_test"]
+        w.writerow(["=== Model Accuracy ==="])
+        w.writerow(["Total Proposals", "AI Recommended", "Acceptance Rate", "Precision", "Recall", "F1"])
+        w.writerow([acc["total_proposals"], acc["ai_recommended"], f"{acc['acceptance_rate']}%",
+                    acc["precision"] or "N/A", acc["recall"] or "N/A", acc["f1_score"] or "N/A"])
+        w.writerow([])
+        w.writerow(["=== Bias Test ==="])
+        w.writerow(["Chi2 Statistic", "Degrees of Freedom", "Bias Detected"])
+        w.writerow([bias["chi2_statistic"] or "N/A", bias["degrees_of_freedom"] or "N/A", bias["bias_detected"]])
+        w.writerow([])
+        w.writerow(["=== Acceptance by Category ==="])
         w.writerow(["Category", "Total Proposals", "Accepted", "Acceptance Rate (%)", "Avg AI Score"])
         for row in data["acceptance_by_category"]:
             w.writerow([row["category"], row["total_proposals"], row["accepted"],
                         row["acceptance_rate"], row["avg_ai_score"] or "N/A"])
+        w.writerow([])
+        w.writerow(["=== Acceptance by Country ==="])
+        w.writerow(["Country", "Total Proposals", "Accepted", "Acceptance Rate (%)"])
+        for row in data["acceptance_by_country"]:
+            w.writerow([row["country"], row["total_proposals"], row["accepted"], row["acceptance_rate"]])
         w.writerow([])
         w.writerow(["Trust Score Bucket", "User Count"])
         for row in data["trust_score_distribution"]:
@@ -1337,9 +1501,28 @@ def export_analytics_pdf(
 
     elif report == "fairness":
         data = get_fairness_report(db=db, admin=admin)
+        acc  = data["model_accuracy"]
+        bias = data["bias_test"]
         elements += [
             Paragraph("SkillLink — Fairness & Bias Report", styles["h1"]),
             Paragraph(f"Generated: {now_str}", styles["Normal"]),
+            Spacer(1, 0.2 * inch),
+            Paragraph("Model Accuracy", styles["h2"]),
+            Spacer(1, 0.1 * inch),
+            _tbl(
+                ["Total Proposals", "AI Recommended", "Acceptance Rate", "Precision", "Recall", "F1"],
+                [[str(acc["total_proposals"]), str(acc["ai_recommended"]),
+                  f"{acc['acceptance_rate']}%",
+                  str(acc["precision"] or "N/A"), str(acc["recall"] or "N/A"), str(acc["f1_score"] or "N/A")]],
+            ),
+            Spacer(1, 0.2 * inch),
+            Paragraph("Bias Test (Chi-Squared)", styles["h2"]),
+            Spacer(1, 0.1 * inch),
+            _tbl(
+                ["Chi2 Statistic", "Degrees of Freedom", "Bias Detected (p<0.05)"],
+                [[str(bias["chi2_statistic"] or "N/A"), str(bias["degrees_of_freedom"] or "N/A"),
+                  "YES" if bias["bias_detected"] else "NO"]],
+            ),
             Spacer(1, 0.2 * inch),
             Paragraph("Acceptance by Category", styles["h2"]),
             Spacer(1, 0.1 * inch),
@@ -1349,6 +1532,14 @@ def export_analytics_pdf(
                   f"{r['acceptance_rate']}%", str(r["avg_ai_score"] or "N/A")]
                  for r in data["acceptance_by_category"]],
             ),
+            Spacer(1, 0.2 * inch),
+            Paragraph("Acceptance by Freelancer Country", styles["h2"]),
+            Spacer(1, 0.1 * inch),
+            _tbl(
+                ["Country", "Total Proposals", "Accepted", "Acceptance Rate"],
+                [[r["country"], str(r["total_proposals"]), str(r["accepted"]), f"{r['acceptance_rate']}%"]
+                 for r in data["acceptance_by_country"]],
+            ) if data["acceptance_by_country"] else Paragraph("Not enough data per country.", styles["Normal"]),
             Spacer(1, 0.2 * inch),
             Paragraph("Trust Score Distribution", styles["h2"]),
             Spacer(1, 0.1 * inch),
@@ -1800,4 +1991,252 @@ def get_alerts(
             "info":     sum(1 for a in alerts if a["severity"] == "info"),
             "total":    len(alerts),
         },
+    }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ML-02: Automated Model Retraining Management
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/ml/retrain",
+    summary="Trigger AI model retraining",
+    description="Collects labeled project data and sends it to the AI service for retraining.",
+)
+def trigger_ml_retrain(
+    db:    Session     = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    import httpx as _httpx
+
+    # Collect labeled projects directly from the backend DB
+    projects = (
+        db.query(models.Project)
+        .filter(
+            models.Project.sub_category.isnot(None),
+            models.Project.category.isnot(None),
+        )
+        .all()
+    )
+    data = [
+        {
+            "project_id":   p.project_id,
+            "title":        p.title       or "",
+            "description":  p.description or "",
+            "category":     p.category,
+            "sub_category": p.sub_category,
+        }
+        for p in projects if p.sub_category and p.category
+    ]
+
+    ai_url = _os.environ.get("AI_SERVICE_URL", "http://ai:8000")
+    try:
+        r = _httpx.post(f"{ai_url}/retrain/trigger", json={"projects": data}, timeout=30)
+        r.raise_for_status()
+        resp = r.json()
+    except Exception as exc:
+        raise HTTPException(502, f"AI service unreachable: {exc}")
+
+    db.add(models.SystemLog(
+        action=f"Admin [{admin.email}] triggered model retraining ({len(data)} samples)",
+        performed_by=admin.id,
+    ))
+    db.commit()
+    return {"triggered": True, "n_projects": len(data), **resp}
+
+
+@router.get(
+    "/ml/retrain-status",
+    summary="Current model retrain status",
+)
+def get_ml_retrain_status(admin: models.User = Depends(require_admin)):
+    import httpx as _httpx
+    ai_url = _os.environ.get("AI_SERVICE_URL", "http://ai:8000")
+    try:
+        r = _httpx.get(f"{ai_url}/retrain/status", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        raise HTTPException(502, f"AI service unreachable: {exc}")
+
+
+@router.get(
+    "/ml/model-versions",
+    summary="Model version history",
+)
+def get_ml_model_versions(admin: models.User = Depends(require_admin)):
+    import httpx as _httpx
+    ai_url = _os.environ.get("AI_SERVICE_URL", "http://ai:8000")
+    try:
+        r = _httpx.get(f"{ai_url}/retrain/history", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        raise HTTPException(502, f"AI service unreachable: {exc}")
+
+
+@router.get(
+    "/ml/prediction-logs",
+    summary="Classifier prediction accuracy logs",
+)
+def get_ml_prediction_logs(
+    limit: int         = Query(50, ge=1, le=500),
+    db:    Session     = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    logs = (
+        db.query(models.PredictionLog)
+        .order_by(models.PredictionLog.recorded_at.desc())
+        .limit(limit)
+        .all()
+    )
+    total   = db.query(models.PredictionLog).count()
+    correct = db.query(models.PredictionLog).filter(models.PredictionLog.correct == True).count()
+    return {
+        "total_logged":   total,
+        "correct":        correct,
+        "accuracy":       round(correct / total, 4) if total else None,
+        "logs": [
+            {
+                "log_id":             l.log_id,
+                "project_id":         l.project_id,
+                "predicted_category": l.predicted_category,
+                "predicted_sub":      l.predicted_sub,
+                "confidence":         l.confidence,
+                "actual_category":    l.actual_category,
+                "actual_sub":         l.actual_sub,
+                "correct":            l.correct,
+                "model_version":      l.model_version,
+                "recorded_at":        l.recorded_at,
+            }
+            for l in logs
+        ],
+    }
+
+
+# ── ML-06: A/B Testing & Hot-swap ─────────────────────────────────────────────
+
+@router.post("/ml/hotswap", summary="Hot-swap a retrained model version into production")
+def ml_hotswap(
+    body:  dict       = Body(..., example={"version": 1}),
+    admin: models.User = Depends(require_admin),
+):
+    import httpx as _httpx
+    ai_url = _os.environ.get("AI_SERVICE_URL", "http://ai:8000")
+    try:
+        r = _httpx.post(f"{ai_url}/retrain/hotswap", json=body, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        raise HTTPException(502, f"AI service unreachable: {exc}")
+
+
+@router.post("/ml/ab/start", summary="Start an A/B experiment (original vs retrained version)")
+def ml_ab_start(
+    body:  dict        = Body(..., example={"name": "v1-vs-original", "treatment_version": 1, "traffic_split": 0.5}),
+    db:    Session     = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    import httpx as _httpx
+    ai_url = _os.environ.get("AI_SERVICE_URL", "http://ai:8000")
+    try:
+        r = _httpx.post(f"{ai_url}/retrain/ab/start", json=body, timeout=10)
+        r.raise_for_status()
+        result = r.json()
+    except Exception as exc:
+        raise HTTPException(502, f"AI service unreachable: {exc}")
+
+    # Record experiment in backend DB
+    try:
+        exp = models.ABExperiment(
+            name              = body.get("name", "experiment"),
+            treatment_version = body.get("treatment_version", 1),
+            traffic_split     = body.get("traffic_split", 0.5),
+            status            = "active",
+        )
+        db.add(exp)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return result
+
+
+@router.post("/ml/ab/stop", summary="Stop the active A/B experiment")
+def ml_ab_stop(
+    db:    Session     = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    import httpx as _httpx
+    ai_url = _os.environ.get("AI_SERVICE_URL", "http://ai:8000")
+    try:
+        r = _httpx.post(f"{ai_url}/retrain/ab/stop", timeout=10)
+        r.raise_for_status()
+        result = r.json()
+    except Exception as exc:
+        raise HTTPException(502, f"AI service unreachable: {exc}")
+
+    # Mark latest active experiment as stopped
+    try:
+        active = (
+            db.query(models.ABExperiment)
+            .filter(models.ABExperiment.status == "active")
+            .order_by(models.ABExperiment.started_at.desc())
+            .first()
+        )
+        if active:
+            active.status     = "stopped"
+            active.stopped_at = datetime.now(timezone.utc)
+            db.commit()
+    except Exception:
+        db.rollback()
+
+    return result
+
+
+@router.get("/ml/ab/status", summary="Get current A/B experiment metrics")
+def ml_ab_status(admin: models.User = Depends(require_admin)):
+    import httpx as _httpx
+    ai_url = _os.environ.get("AI_SERVICE_URL", "http://ai:8000")
+    try:
+        r = _httpx.get(f"{ai_url}/retrain/ab/status", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        raise HTTPException(502, f"AI service unreachable: {exc}")
+
+
+@router.get("/ml/ab/history", summary="All A/B experiments from the database")
+def ml_ab_history(
+    db:    Session     = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    exps = (
+        db.query(models.ABExperiment)
+        .order_by(models.ABExperiment.started_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    def _acc(correct, total):
+        return round(correct / total, 4) if total else None
+
+    return {
+        "experiments": [
+            {
+                "experiment_id":      e.experiment_id,
+                "name":               e.name,
+                "control_version":    e.control_version,
+                "treatment_version":  e.treatment_version,
+                "traffic_split":      e.traffic_split,
+                "status":             e.status,
+                "control_accuracy":   _acc(e.control_correct,   e.control_total),
+                "treatment_accuracy": _acc(e.treatment_correct, e.treatment_total),
+                "control_total":      e.control_total,
+                "treatment_total":    e.treatment_total,
+                "started_at":         e.started_at,
+                "stopped_at":         e.stopped_at,
+            }
+            for e in exps
+        ]
     }

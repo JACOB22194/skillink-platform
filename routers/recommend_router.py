@@ -272,6 +272,25 @@ def recommend_for_job(
     category           = classification.get("category", "")
     top3_predictions   = classification.get("top3_predictions")   # [[sub_cat, prob], ...]
 
+    # ML-02: log classifier prediction for accuracy tracking
+    try:
+        pred_correct = (
+            (sub_category == project.sub_category)
+            if project.sub_category else None
+        )
+        db.add(models.PredictionLog(
+            project_id         = job_id,
+            predicted_category = category,
+            predicted_sub      = sub_category,
+            confidence         = classification.get("confidence"),
+            actual_category    = project.category,
+            actual_sub         = project.sub_category,
+            correct            = pred_correct,
+        ))
+        db.commit()
+    except Exception:
+        pass
+
     # ── Load candidates ───────────────────────────────────────────────────────
     candidates = _load_candidates(db)
     if not candidates:

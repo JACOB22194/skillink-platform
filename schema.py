@@ -101,6 +101,8 @@ class RegisterRequest(BaseModel):
     email:        EmailStr
     password:     str
     role:         UserRole
+    first_name:   Optional[str] = None
+    last_name:    Optional[str] = None
     company_name: Optional[str] = None
 
     @field_validator("password")
@@ -159,16 +161,22 @@ class ChangePasswordRequest(BaseModel):
 # ═══════════════════════════════════════════════════
 
 class UserResponse(BaseModel):
-    user_id:     int = Field(validation_alias="id")
-    email:       str
-    role:        UserRole
-    status:      UserStatus
+    user_id:    int = Field(validation_alias="id")
+    email:      str
+    role:       UserRole
+    status:     UserStatus
     mfa_enabled: bool
-    created_at:  datetime
+    first_name: Optional[str] = None
+    last_name:  Optional[str] = None
+    avatar_url: Optional[str] = None
+    created_at: datetime
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 class FreelancerProfileResponse(BaseModel):
     freelancer_id:  int
+    first_name:     Optional[str] = None
+    last_name:      Optional[str] = None
+    avatar_url:     Optional[str] = None
     bio:            Optional[str]
     hourly_rate:    Optional[float]
     success_score:  float
@@ -179,8 +187,12 @@ class FreelancerProfileResponse(BaseModel):
     @classmethod
     def from_profile(cls, profile) -> "FreelancerProfileResponse":
         skill_names = [fs.skill.name for fs in (profile.skills or []) if fs.skill]
+        user = profile.user
         return cls(
             freelancer_id  = profile.freelancer_id,
+            first_name     = user.first_name if user else None,
+            last_name      = user.last_name  if user else None,
+            avatar_url     = user.avatar_url if user else None,
             bio            = profile.bio,
             hourly_rate    = profile.hourly_rate,
             success_score  = profile.success_score or 0.0,
@@ -201,15 +213,19 @@ class FreelancerSkillUpdate(BaseModel):
 class ClientProfileResponse(BaseModel):
     client_id:    int
     company_name: Optional[str]
+    avatar_url:   Optional[str] = None
     model_config = {"from_attributes": True}
 
 class ClientProfileUpdate(BaseModel):
     company_name: Optional[str] = None
 
 class UserSearchResult(BaseModel):
-    user_id: int = Field(validation_alias="id")
-    email:   str
-    role:    UserRole
+    user_id:    int          = Field(validation_alias="id")
+    email:      str
+    role:       UserRole
+    first_name: Optional[str] = None
+    last_name:  Optional[str] = None
+    avatar_url: Optional[str] = None
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 class FreelancerSearchResult(BaseModel):
@@ -217,6 +233,9 @@ class FreelancerSearchResult(BaseModel):
     freelancer_id:  int
     user_id:        int
     email:          str
+    first_name:     Optional[str] = None
+    last_name:      Optional[str] = None
+    avatar_url:     Optional[str] = None
     bio:            Optional[str]
     hourly_rate:    Optional[float]
     success_score:  float
@@ -710,6 +729,8 @@ class ChatMessageResponse(BaseModel):
 class ConversationSummary(BaseModel):
     other_user_id:    int
     other_user_email: str
+    display_name:     str          # first+last name, or email if not set
+    avatar_url:       Optional[str] = None
     last_message:     str
     last_message_at:  datetime
     unread_count:     int

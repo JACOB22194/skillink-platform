@@ -19,6 +19,7 @@ PHASE 3 FIXES:
 
 import os
 import uuid
+import json
 import aiofiles
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
@@ -107,12 +108,18 @@ Update your profile. Only included fields will change.
 """,
 )
 def update_my_profile(
-    me:   models.User = Depends(get_current_user),
-    db:   Session     = Depends(get_db),
-    bio:         Optional[str]   = None,
-    hourly_rate: Optional[float] = None,
-    company_name: Optional[str]  = None,
+    me:           models.User    = Depends(get_current_user),
+    db:           Session        = Depends(get_db),
+    first_name:   Optional[str]   = None,
+    last_name:    Optional[str]   = None,
+    bio:          Optional[str]   = None,
+    hourly_rate:  Optional[float] = None,
+    company_name: Optional[str]   = None,
 ):
+    # Name fields apply to all roles
+    if first_name is not None: me.first_name = first_name.strip() or None
+    if last_name  is not None: me.last_name  = last_name.strip()  or None
+
     if me.role == models.UserRole.freelancer:
         profile = db.query(models.Freelancer).filter(
             models.Freelancer.user_id == me.id
@@ -139,7 +146,50 @@ def update_my_profile(
         db.refresh(profile)
         return schema.ClientProfileResponse.model_validate(profile)
 
+    db.commit()
     raise HTTPException(400, "Admin accounts do not have a profile to edit.")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /users/me/avatar
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+@router.post(
+    "/me/avatar",
+    summary="Upload or replace profile picture",
+)
+async def upload_avatar(
+    file: UploadFile  = File(..., description="Image file (JPEG/PNG/WEBP/GIF, max 5 MB)"),
+    me:   models.User = Depends(get_current_user),
+    db:   Session     = Depends(get_db),
+):
+    if file.content_type not in AVATAR_TYPES:
+        raise HTTPException(400, "Only JPEG, PNG, WEBP, or GIF images are allowed.")
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Avatar file too large. Maximum is 5 MB.")
+
+    ext      = (file.filename or "avatar").rsplit(".", 1)[-1].lower()
+    filename = f"{me.id}.{ext}"
+    save_dir = os.path.join(UPLOAD_DIR, "avatars")
+    os.makedirs(save_dir, exist_ok=True)
+
+    async with aiofiles.open(os.path.join(save_dir, filename), "wb") as f:
+        await f.write(contents)
+
+    avatar_path = f"/uploads/avatars/{filename}"
+    me.avatar_url = avatar_path
+
+    # Also update client avatar if they have one
+    if me.role == models.UserRole.client:
+        client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
+        if client:
+            client.avatar_url = avatar_path
+
+    db.commit()
+    return {"avatar_url": avatar_path}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -476,7 +526,10 @@ def search_freelancers(
         results.append(schema.FreelancerSearchResult(
             freelancer_id = f.freelancer_id,
             user_id       = f.user_id,
-            email         = user.email if user else "",
+            email         = user.email      if user else "",
+            first_name    = user.first_name if user else None,
+            last_name     = user.last_name  if user else None,
+            avatar_url    = user.avatar_url if user else None,
             bio           = f.bio,
             hourly_rate   = f.hourly_rate,
             success_score = f.success_score or 0.0,
@@ -512,6 +565,9 @@ def get_freelancer_by_user(
         freelancer_id = freelancer.freelancer_id,
         user_id       = user_id,
         email         = user.email,
+        first_name    = user.first_name,
+        last_name     = user.last_name,
+        avatar_url    = user.avatar_url,
         bio           = freelancer.bio,
         hourly_rate   = freelancer.hourly_rate,
         success_score = freelancer.success_score or 0.0,
@@ -555,6 +611,87 @@ def get_score_breakdown(
         total_reviews  = total_reviews,
         jobs_completed = jobs_completed,
     )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /freelancers/{freelancer_id}/github-profile
+#  Public — any authenticated user (clients) can view a freelancer's GitHub
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@freelancer_router.get(
+    "/{freelancer_id}/github-profile",
+    summary="Get a freelancer's GitHub profile data",
+)
+def get_freelancer_github_profile(
+    freelancer_id: int,
+    me:            models.User = Depends(get_current_user),
+    db:            Session     = Depends(get_db),
+):
+    freelancer = db.query(models.Freelancer).filter(
+        models.Freelancer.freelancer_id == freelancer_id
+    ).first()
+    if not freelancer:
+        raise HTTPException(404, "Freelancer not found.")
+
+    stored = json.loads(freelancer.github_stats or "{}")
+
+    return {
+        "github_score":    freelancer.github_score or 0,
+        "github_url":      freelancer.github_url or "",
+        "top_languages":   json.loads(freelancer.top_languages or "[]"),
+        "username":        stored.get("username", ""),
+        "name":            stored.get("name", ""),
+        "avatar_url":      stored.get("avatar_url", ""),
+        "public_repos":    stored.get("public_repos", 0),
+        "followers":       stored.get("followers", 0),
+        "total_stars":     stored.get("total_stars", 0),
+        "account_created": stored.get("account_created", ""),
+        "location":        stored.get("location", ""),
+        "website":         stored.get("website", ""),
+        "experience":      stored.get("experience", []),
+        "suggestions":     stored.get("suggestions", []),
+    }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GET /clients/user/{user_id}/profile — public client profile
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@freelancer_router.get(
+    "/clients/{user_id}/profile",
+    summary="Get a client's public profile",
+)
+def get_client_public_profile(
+    user_id: int,
+    me:      models.User = Depends(get_current_user),
+    db:      Session     = Depends(get_db),
+):
+    user = db.query(models.User).filter(
+        models.User.id     == user_id,
+        models.User.status == models.UserStatus.active,
+    ).first()
+    if not user or user.role != models.UserRole.client:
+        raise HTTPException(404, "Client not found.")
+    client = db.query(models.Client).filter(models.Client.user_id == user_id).first()
+
+    total_projects  = db.query(models.Project).filter(models.Project.client_id == client.client_id).count() if client else 0
+    active_projects = (
+        db.query(models.Project)
+        .filter(models.Project.client_id == client.client_id, models.Project.status == models.ProjectStatus.open)
+        .count() if client else 0
+    )
+
+    return {
+        "user_id":          user.user_id if hasattr(user, "user_id") else user.id,
+        "first_name":       user.first_name,
+        "last_name":        user.last_name,
+        "avatar_url":       user.avatar_url,
+        "company_name":     client.company_name if client else None,
+        "company_avatar":   client.avatar_url   if client else None,
+        "total_projects":   total_projects,
+        "active_projects":  active_projects,
+        "member_since":     user.created_at,
+    }
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -121,6 +121,9 @@ class User(Base):
     status      = Column(Enum(UserStatus), default=UserStatus.active, index=True)
     mfa_enabled = Column(Boolean, default=False)
     mfa_secret  = Column(String(64), nullable=True)
+    first_name  = Column(String(100), nullable=True)
+    last_name   = Column(String(100), nullable=True)
+    avatar_url  = Column(String(500), nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     freelancer        = relationship("Freelancer",    back_populates="user", uselist=False, cascade="all, delete")
@@ -160,6 +163,7 @@ class Freelancer(Base):
     github_stats       = Column(Text, nullable=True)   # JSON object
     profile_text       = Column(Text, nullable=True)   # TF-IDF document
     sub_category_tags  = Column(Text, nullable=True)   # JSON list
+    country            = Column(String(100), nullable=True, index=True)
 
     user                = relationship("User",              back_populates="freelancer")
     proposals           = relationship("Proposal",          back_populates="freelancer", cascade="all, delete")
@@ -181,6 +185,7 @@ class Client(Base):
     client_id    = Column(Integer, primary_key=True, index=True)
     user_id      = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
     company_name = Column(String(255))
+    avatar_url   = Column(String(500), nullable=True)
 
     user     = relationship("User",    back_populates="client")
     projects = relationship("Project", back_populates="client", cascade="all, delete")
@@ -765,3 +770,66 @@ class Invitation(Base):
     project    = relationship("Project")
     freelancer = relationship("Freelancer")
     client     = relationship("Client")
+
+
+# ─────────────────────────────────────────
+#  TABLE: ai_health_logs  (ML-05: Bias & Accuracy Reporting)
+# ─────────────────────────────────────────
+
+class AIHealthLog(Base):
+    __tablename__ = "ai_health_logs"
+
+    log_id          = Column(Integer, primary_key=True, index=True)
+    recorded_at     = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    precision_score = Column(Float, nullable=True)
+    recall_score    = Column(Float, nullable=True)
+    f1_score        = Column(Float, nullable=True)
+    acceptance_rate = Column(Float, nullable=True)
+    total_proposals = Column(Integer, nullable=True)
+    ai_proposals    = Column(Integer, nullable=True)
+    chi2_stat       = Column(Float, nullable=True)
+    chi2_df         = Column(Integer, nullable=True)
+    bias_detected   = Column(Boolean, nullable=True)
+    snapshot_json   = Column(Text, nullable=True)
+
+
+# ─────────────────────────────────────────
+#  TABLE: prediction_logs  (ML-02: Outcome Data Capture)
+# ─────────────────────────────────────────
+
+class PredictionLog(Base):
+    __tablename__ = "prediction_logs"
+
+    log_id             = Column(Integer, primary_key=True, index=True)
+    project_id         = Column(Integer, ForeignKey("projects.project_id", ondelete="SET NULL"), nullable=True, index=True)
+    predicted_category = Column(String(100), nullable=True)
+    predicted_sub      = Column(String(100), nullable=True)
+    confidence         = Column(Float, nullable=True)
+    actual_category    = Column(String(100), nullable=True)
+    actual_sub         = Column(String(100), nullable=True)
+    correct            = Column(Boolean, nullable=True)
+    model_version      = Column(Integer, nullable=True, default=0)
+    recorded_at        = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    project = relationship("Project")
+
+
+# ─────────────────────────────────────────
+#  TABLE: ab_experiments  (ML-06: A/B Testing)
+# ─────────────────────────────────────────
+
+class ABExperiment(Base):
+    __tablename__ = "ab_experiments"
+
+    experiment_id     = Column(Integer, primary_key=True, index=True)
+    name              = Column(String(100), nullable=False)
+    control_version   = Column(Integer, nullable=False, default=0)   # 0 = original model
+    treatment_version = Column(Integer, nullable=False)
+    traffic_split     = Column(Float, nullable=False, default=0.5)   # fraction to treatment
+    status            = Column(String(20), default="active", index=True)
+    control_correct   = Column(Integer, default=0)
+    control_total     = Column(Integer, default=0)
+    treatment_correct = Column(Integer, default=0)
+    treatment_total   = Column(Integer, default=0)
+    started_at        = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    stopped_at        = Column(DateTime(timezone=True), nullable=True)

@@ -104,14 +104,15 @@ def send_message(
     db.refresh(msg)
 
     # Notify receiver
-    preview = body.content[:60] + ("..." if len(body.content) > 60 else "")
+    preview      = body.content[:60] + ("..." if len(body.content) > 60 else "")
+    sender_name  = (((me.first_name or "") + " " + (me.last_name or "")).strip()) or me.email
     notify(
         db        = db,
         user_id   = body.receiver_id,
         type      = models.NotificationType.message,
-        title     = f"New message from {me.email}",
+        title     = f"New message from {sender_name}",
         body      = preview,
-        entity_id = me.id,   # entity_id = sender's user_id so frontend can open the thread
+        entity_id = me.id,
     )
 
     # Also push the message itself over WS if receiver is online
@@ -185,9 +186,20 @@ def get_inbox(
             .count()
         )
 
+        if other_user:
+            fn = other_user.first_name or ""
+            ln = other_user.last_name  or ""
+            display = (fn + " " + ln).strip() or other_user.email
+            avatar  = other_user.avatar_url
+        else:
+            display = "Unknown"
+            avatar  = None
+
         summaries.append(schema.ConversationSummary(
             other_user_id    = other_id,
             other_user_email = other_user.email if other_user else "Unknown",
+            display_name     = display,
+            avatar_url       = avatar,
             last_message     = msg.content[:80] + ("..." if len(msg.content) > 80 else ""),
             last_message_at  = msg.sent_at,
             unread_count     = unread_count,
