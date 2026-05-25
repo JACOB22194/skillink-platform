@@ -291,6 +291,7 @@ class SkillinkRecommender:
         job: JobInput,
         candidates: list[FreelancerCandidate],
         top_k: int = 10,
+        weights: dict = None,
     ) -> list[MatchResult]:
         """
         Score all candidates against the job and return the top_k results.
@@ -301,15 +302,21 @@ class SkillinkRecommender:
         if not candidates:
             return []
 
+        # Use admin-configured weights when provided; fall back to module defaults.
+        w = weights or {}
+        w_skill    = float(w.get("skill_weight",  W_SKILL))
+        w_quality  = float(w.get("rating_weight", W_QUALITY))
+        w_semantic = max(0.0, 1.0 - w_skill - w_quality)
+
         semantic_arr            = self._semantic_scores(job, candidates)
         job_skills              = self._extract_job_skills(job)
         skill_arr, matched_list = self._skill_scores(job_skills, candidates)
         quality_arr             = self._quality_scores(candidates)
 
         final = (
-            W_SEMANTIC * semantic_arr +
-            W_SKILL    * skill_arr    +
-            W_QUALITY  * quality_arr
+            w_semantic * semantic_arr +
+            w_skill    * skill_arr    +
+            w_quality  * quality_arr
         )
 
         results: list[MatchResult] = []

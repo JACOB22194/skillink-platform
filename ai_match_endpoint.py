@@ -56,6 +56,7 @@ class MatchRequest(BaseModel):
     # Top-3 classifier predictions: [[sub_cat, prob], ...]
     # Optional — falls back to single sub_category if absent.
     top3_predictions:  Optional[list[list]] = None
+    weights:           Optional[dict] = None
 
 
 class MatchOut(BaseModel):
@@ -124,7 +125,7 @@ def match_freelancers(req: MatchRequest):
         for c in req.candidates
     ]
 
-    results = recommender.recommend(job, candidates, top_k=req.top_k)
+    results = recommender.recommend(job, candidates, top_k=req.top_k, weights=req.weights)
 
     return MatchResponse(matches=[
         MatchOut(
