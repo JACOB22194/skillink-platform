@@ -78,6 +78,21 @@ class OptimizeBioRequest(BaseModel):
 class OptimizeBioResponse(BaseModel):
     optimized_bio: str
 
+class ScoreRequest(BaseModel):
+    project_title: str
+    project_description: str
+    required_skills: list[str]
+    budget: float
+    bid_amount: float
+    cover_letter: str
+    freelancer_skills: list[str]
+    freelancer_bio: str
+    success_score: float
+
+class ScoreResponse(BaseModel):
+    score: float
+    reasoning: str
+
 
 # ── Classifier helpers ────────────────────────────────────────────────────────
 
@@ -281,6 +296,97 @@ def parse_github_endpoint(req: GitHubRequest):
         return parse_github(req.url)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Proposal Scorer ───────────────────────────────────────────────────────────
+
+@app.post("/score", response_model=ScoreResponse)
+async def score_proposal_endpoint(req: ScoreRequest):
+    import logging
+    import asyncio
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if api_key:
+        from google import genai
+        prompt = (
+            "You are an expert AI proposal reviewer for a freelancing platform.\n"
+            "Evaluate the relevance and quality of this freelancer's proposal draft for a client's project.\n\n"
+            f"Project Title: {req.project_title}\n"
+            f"Project Description: {req.project_description}\n"
+            f"Required Skills: {', '.join(req.required_skills)}\n"
+            f"Project Budget: ${req.budget}\n\n"
+            f"Freelancer Cover Letter: {req.cover_letter}\n"
+            f"Freelancer Bio: {req.freelancer_bio}\n"
+            f"Freelancer Skills: {', '.join(req.freelancer_skills)}\n"
+            f"Freelancer Bid Amount: ${req.bid_amount}\n"
+            f"Freelancer Platform Success Score: {req.success_score}\n\n"
+            "Provide:\n"
+            "1. A score between 0.0 and 1.0 representing how relevant, qualified, and well-aligned the proposal is.\n"
+            "2. A concise 1-2 sentence explanation of your scoring reasoning.\n\n"
+            "Return your response in strict JSON format with exactly two keys: 'score' and 'reasoning'."
+        )
+        t_start = time.perf_counter()
+        client = genai.Client(api_key=api_key)
+        for model in _GEMINI_MODELS:
+            if time.perf_counter() - t_start > 5.5:
+                logging.warning("score-proposal: spent too much time on Gemini calls, skipping to local fallback.")
+                break
+            try:
+                # Wrap the async generate_content call with a 4.0 second timeout!
+                response = await asyncio.wait_for(
+                    client.aio.models.generate_content(model=model, contents=prompt),
+                    timeout=4.0
+                )
+                raw = re.sub(r'^```json\s*|^```\s*|```$', '', response.text.strip(), flags=re.MULTILINE).strip()
+                res_data = json.loads(raw)
+                score_val = float(res_data['score'])
+                reasoning_val = str(res_data['reasoning'])
+                return {'score': score_val, 'reasoning': reasoning_val}
+            except asyncio.TimeoutError:
+                logging.warning("score-proposal: model %s call timed out after 4.0s", model)
+            except Exception as e:
+                logging.warning("score-proposal: model %s failed: %s", model, e)
+
+    # ── Local Fallback ──────────────────────────────────────────────────────────
+    from recommender import _ENCODER, _SEMANTIC
+    text_job = f"{req.project_title} {req.project_description}"
+    text_free = f"{req.cover_letter} {req.freelancer_bio}"
+    semantic_score = 0.5
+    if _SEMANTIC and _ENCODER is not None:
+        try:
+            vecs = await asyncio.to_thread(_ENCODER.encode, [text_job, text_free], normalize_embeddings=True)
+            semantic_score = float(vecs[0] @ vecs[1])
+            semantic_score = max(0.0, min(1.0, semantic_score))
+        except Exception:
+            pass
+    else:
+        try:
+            m = TFIDF.transform([text_job, text_free])
+            semantic_score = float((m[0] @ m[1].T).toarray()[0][0])
+            semantic_score = max(0.0, min(1.0, semantic_score))
+        except Exception:
+            pass
+
+    req_skills_set = {s.lower() for s in req.required_skills}
+    free_skills_set = {s.lower() for s in req.freelancer_skills}
+    if req_skills_set:
+        overlap = req_skills_set & free_skills_set
+        skill_score = len(overlap) / len(req_skills_set)
+    else:
+        skill_score = 1.0
+
+    if req.budget > 0:
+        diff = abs(req.bid_amount - req.budget) / req.budget
+        bid_score = max(0.0, min(1.0, 1.0 - diff))
+    else:
+        bid_score = 1.0
+
+    score = round(0.50 * semantic_score + 0.35 * skill_score + 0.15 * bid_score, 4)
+    reasoning = (
+        f"AI service unavailable. Estimated score based on skill overlap ({round(skill_score * 100)}%), "
+        f"semantic alignment ({round(semantic_score * 100)}%), and bid/budget fit ({round(bid_score * 100)}%)."
+    )
+    return {"score": score, "reasoning": reasoning}
+
 
 
 app.include_router(match_router)         # POST /match
