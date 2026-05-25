@@ -40,6 +40,28 @@ interface Proposal {
   created_at: string;
 }
 
+interface Milestone {
+  milestone_id: number;
+  contract_id: number;
+  title: string | null;
+  description: string | null;
+  amount: number;
+  status: "pending" | "revision_requested" | "approved" | "paid";
+  due_date: string | null;
+  created_at: string;
+  ai_verification_status: "passed" | "flagged" | "insufficient_evidence" | null;
+  ai_verification_report: string | null;
+  revision_feedback: string | null;
+}
+
+interface Escrow {
+  escrow_id: number;
+  contract_id: number;
+  amount: number;
+  released_amount: number;
+  status: "held" | "released";
+}
+
 // ─── Derived / UI Types ───────────────────────────────────────────────────────
 
 interface DashboardStats {
@@ -377,7 +399,8 @@ const IconSearch = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="n
 const IconClip   = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>;
 const IconInv    = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14l-4-4 4-4M15 10h5M15 6h3a2 2 0 012 2v8a2 2 0 01-2 2h-3"/></svg>;
 const IconRefresh = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>;
-const IconProp    = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+const IconProp       = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+const IconBriefcase  = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>;
 
 // ─── Company Profile View ─────────────────────────────────────────────────────
 
@@ -394,7 +417,22 @@ const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string)
   const [loading,      setLoading]      = useState(true);
   const [saving,       setSaving]       = useState(false);
   const [feedback,     setFeedback]     = useState<{ msg: string; ok: boolean } | null>(null);
-  const [activeTab,    setActiveTab]    = useState<"general" | "details">("general");
+  const [activeTab,    setActiveTab]    = useState<"general" | "details" | "verification">("general");
+
+  // Verification state
+  const [verifStatus,  setVerifStatus]  = useState<{ status: string; document_type: string | null; rejection_note: string | null; reviewed_at: string | null; created_at: string | null } | null>(null);
+  const [verifLoading, setVerifLoading] = useState(false);
+  const [verifDocType, setVerifDocType] = useState("passport");
+  const [verifFile,    setVerifFile]    = useState<File | null>(null);
+  const [verifMsg,     setVerifMsg]     = useState<{ msg: string; ok: boolean } | null>(null);
+  const [cancelling,   setCancelling]   = useState(false);
+
+  const fetchVerifStatus = async () => {
+    try {
+      const r = await apiClient.get<{ status: string; document_type: string | null; rejection_note: string | null; reviewed_at: string | null; created_at: string | null }>("/verification/status");
+      setVerifStatus(r.data);
+    } catch {}
+  };
 
   // Load persisted extra fields from localStorage
   useEffect(() => {
@@ -410,6 +448,7 @@ const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string)
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetchVerifStatus();
   }, []);
 
   const save = async () => {
@@ -426,6 +465,42 @@ const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string)
     } finally {
       setSaving(false);
       setTimeout(() => setFeedback(null), 3500);
+    }
+  };
+
+  const submitVerification = async () => {
+    if (!verifFile) return;
+    setVerifLoading(true);
+    setVerifMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("document_type", verifDocType);
+      fd.append("file", verifFile);
+      const res = await fetch(`${API_BASE_CLIENT}/verification/submit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Upload failed.");
+      setVerifMsg({ msg: "✓ Document submitted. Under review.", ok: true });
+      setVerifFile(null);
+      await fetchVerifStatus();
+    } catch (e: any) {
+      setVerifMsg({ msg: (e as Error).message || "Upload failed.", ok: false });
+    } finally {
+      setVerifLoading(false);
+      setTimeout(() => setVerifMsg(null), 5000);
+    }
+  };
+
+  const cancelVerification = async () => {
+    setCancelling(true);
+    try {
+      await apiClient.delete("/verification/cancel");
+      await fetchVerifStatus();
+    } catch {} finally {
+      setCancelling(false);
     }
   };
 
@@ -504,13 +579,13 @@ const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string)
 
       {/* ── Tabs ── */}
       <div style={{ display: "flex", gap: 4, marginBottom: 20, background: c.surface, border: `1px solid ${c.border}`, borderRadius: 10, padding: 4, width: "fit-content" }}>
-        {(["general", "details"] as const).map(tab => (
+        {(["general", "details", "verification"] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             style={{ padding: "7px 20px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all .2s",
               background: activeTab === tab ? c.primary : "transparent",
               color:      activeTab === tab ? "#fff" : c.subtext,
             }}>
-            {tab === "general" ? "General" : "Details"}
+            {tab === "general" ? "General" : tab === "details" ? "Details" : "Verification"}
           </button>
         ))}
       </div>
@@ -582,7 +657,99 @@ const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string)
           </div>
         )}
 
-        {/* ── Footer ── */}
+        {activeTab === "verification" && (() => {
+          const statusMap: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+            approved:      { label: "Verified",      color: "#22c55e", bg: "rgba(34,197,94,.12)",   icon: "✓" },
+            pending:       { label: "Under Review",  color: "#f59e0b", bg: "rgba(245,158,11,.10)", icon: "⏳" },
+            rejected:      { label: "Rejected",      color: "#ef4444", bg: "rgba(239,68,68,.10)",  icon: "✗" },
+            not_submitted: { label: "Not Submitted", color: "#888",    bg: "rgba(128,128,128,.1)", icon: "○" },
+          };
+          const vs = statusMap[verifStatus?.status ?? "not_submitted"] ?? statusMap["not_submitted"];
+          const canSubmit = !verifStatus || verifStatus.status === "not_submitted" || verifStatus.status === "rejected";
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {/* Status card */}
+              <div style={{ background: vs.bg, border: `1px solid ${vs.color}30`, borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={{ fontSize: 28 }}>{vs.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: vs.color }}>{vs.label}</div>
+                  {verifStatus?.document_type && (
+                    <div style={{ fontSize: 12, color: c.subtext, marginTop: 2 }}>Document: {verifStatus.document_type.replace(/_/g, " ")}</div>
+                  )}
+                  {verifStatus?.created_at && (
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 1 }}>Submitted: {new Date(verifStatus.created_at).toLocaleDateString()}</div>
+                  )}
+                  {verifStatus?.reviewed_at && verifStatus.status === "approved" && (
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 1 }}>Reviewed: {new Date(verifStatus.reviewed_at).toLocaleDateString()}</div>
+                  )}
+                </div>
+                {verifStatus?.status === "pending" && (
+                  <button onClick={cancelVerification} disabled={cancelling}
+                    style={{ fontSize: 11, padding: "5px 12px", borderRadius: 7, border: `1px solid rgba(239,68,68,.4)`, background: "rgba(239,68,68,.08)", color: "#ef4444", cursor: cancelling ? "not-allowed" : "pointer", opacity: cancelling ? 0.6 : 1 }}>
+                    {cancelling ? "Cancelling…" : "Cancel Submission"}
+                  </button>
+                )}
+              </div>
+
+              {verifStatus?.rejection_note && (
+                <div style={{ background: "rgba(239,68,68,.08)", border: `1px solid rgba(239,68,68,.25)`, borderRadius: 10, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#ef4444", marginBottom: 4, textTransform: "uppercase", letterSpacing: ".05em" }}>Rejection Reason</div>
+                  <div style={{ fontSize: 13, color: c.text }}>{verifStatus.rejection_note}</div>
+                </div>
+              )}
+
+              {canSubmit && (
+                <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, padding: "20px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 16 }}>
+                    {verifStatus?.status === "rejected" ? "Resubmit Document" : "Submit Business Verification"}
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div>
+                      <label style={labelStyle}>Document Type</label>
+                      <select value={verifDocType} onChange={e => setVerifDocType(e.target.value)}
+                        style={{ ...inputStyle, appearance: "none" }}>
+                        <option value="passport">Passport</option>
+                        <option value="national_id">National ID</option>
+                        <option value="drivers_license">Driver's License</option>
+                        <option value="residence_permit">Residence Permit</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={labelStyle}>Document File</label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: c.surface, border: `1px dashed ${verifFile ? c.primary : c.border}`, borderRadius: 8, cursor: "pointer", fontSize: 12, color: verifFile ? c.primary : c.subtext, boxSizing: "border-box" as const }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {verifFile ? verifFile.name : "Choose file (PDF, JPEG, PNG)"}
+                        </span>
+                        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={e => setVerifFile(e.target.files?.[0] ?? null)} style={{ display: "none" }} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 11, color: c.subtext, marginTop: 10 }}>
+                    Accepted formats: PDF, JPEG, PNG, Word — max 10 MB.
+                  </div>
+
+                  {verifMsg && (
+                    <div style={{ marginTop: 12, fontSize: 13, fontWeight: 500, color: verifMsg.ok ? "#22c55e" : "#f87171" }}>{verifMsg.msg}</div>
+                  )}
+
+                  <button onClick={submitVerification} disabled={verifLoading || !verifFile}
+                    style={{ marginTop: 16, background: c.primary, color: "#fff", border: "none", borderRadius: 9, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: verifLoading || !verifFile ? "not-allowed" : "pointer", opacity: verifLoading || !verifFile ? 0.7 : 1 }}>
+                    {verifLoading ? "Uploading…" : "Submit for Verification"}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── Footer (profile save — hidden on verification tab) ── */}
+        {activeTab !== "verification" && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 24, paddingTop: 20, borderTop: `1px solid ${c.border}` }}>
           {feedback ? (
             <span style={{ fontSize: 13, fontWeight: 500, color: feedback.ok ? "#22c55e" : "#f87171" }}>{feedback.msg}</span>
@@ -596,6 +763,7 @@ const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string)
             {saving ? "Saving…" : "Save Changes"}
           </button>
         </div>
+        )}
       </div>
     </div>
   );
@@ -940,7 +1108,7 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
                           </button>
                         )}
                         <button
-                          onClick={() => setViewProfile(m)}
+                          onClick={() => navigate(`/freelancer/${m.user_id}`)}
                           style={{ fontSize: 11, fontWeight: 500, padding: "5px 14px", borderRadius: 8, background: colors.primary, color: "#fff", border: "none", cursor: "pointer" }}
                         >
                           View Profile
@@ -1367,6 +1535,528 @@ const SentInvitationsView: React.FC<{ colors: ThemeColors }> = ({ colors: c }) =
   );
 };
 
+// ─── Workspace Modals ─────────────────────────────────────────────────────────
+
+const WsModal: React.FC<{ colors: ThemeColors; children: React.ReactNode }> = ({ colors: c, children }) => (
+  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
+    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 16, padding: 28, width: "100%", maxWidth: 460 }}>
+      {children}
+    </div>
+  </div>
+);
+
+const WsAddMilestoneModal: React.FC<{
+  colors: ThemeColors; contractId: number; escrowRemaining: number;
+  onClose: () => void; onDone: () => void;
+}> = ({ colors: c, contractId, escrowRemaining, onClose, onDone }) => {
+  const [title, setTitle] = useState("");
+  const [desc, setDesc]   = useState("");
+  const [amount, setAmount] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]         = useState("");
+  const API_WS = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+
+  const submit = async () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) { setErr("Amount must be > $0"); return; }
+    if (amt > escrowRemaining + 0.01) { setErr(`Cannot exceed escrow remaining (${fmt(escrowRemaining)})`); return; }
+    setLoading(true); setErr("");
+    try {
+      const r = await fetch(`${API_WS}/contracts/${contractId}/milestones`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title || null, description: desc || null, amount: amt, due_date: dueDate || null }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+      onDone();
+    } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
+  };
+
+  const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 13, background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 8, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
+
+  return (
+    <WsModal colors={c}>
+      <div style={{ fontSize: 11, color: c.primary, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 4 }}>New Milestone</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: c.text, marginBottom: 4 }}>Add Payment Milestone</div>
+      <div style={{ fontSize: 12, color: c.subtext, marginBottom: 18 }}>Escrow remaining: <strong style={{ color: "#22c55e" }}>{fmt(escrowRemaining)}</strong></div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5, textTransform: "uppercase", letterSpacing: ".05em" }}>Title</div>
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Initial Mockup" style={inp} />
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5, textTransform: "uppercase", letterSpacing: ".05em" }}>Description</div>
+          <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} style={{ ...inp, resize: "vertical" } as any} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5, textTransform: "uppercase", letterSpacing: ".05em" }}>Amount (USD) *</div>
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: c.subtext }}>$</span>
+              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={{ ...inp, paddingLeft: 24 }} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5, textTransform: "uppercase", letterSpacing: ".05em" }}>Due Date</div>
+            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={inp} />
+          </div>
+        </div>
+      </div>
+      {err && <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(239,68,68,.1)", color: "#ef4444", borderRadius: 7, fontSize: 12 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+        <button onClick={onClose} style={{ flex: 1, padding: "10px 0", background: "transparent", border: `1px solid ${c.border}`, borderRadius: 8, color: c.subtext, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>Cancel</button>
+        <button onClick={submit} disabled={loading} style={{ flex: 2, padding: "10px 0", background: c.primary, border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 13, opacity: loading ? 0.7 : 1, fontFamily: "inherit" }}>
+          {loading ? "Adding…" : "Add Milestone"}
+        </button>
+      </div>
+    </WsModal>
+  );
+};
+
+const WsRevisionModal: React.FC<{
+  colors: ThemeColors; milestoneId: number; milestoneTitle: string | null;
+  onClose: () => void; onDone: () => void;
+}> = ({ colors: c, milestoneId, milestoneTitle, onClose, onDone }) => {
+  const [feedback, setFeedback] = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [err, setErr]           = useState("");
+  const API_WS = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+
+  const submit = async () => {
+    if (!feedback.trim()) { setErr("Please describe what needs to be revised."); return; }
+    setLoading(true); setErr("");
+    try {
+      const r = await fetch(`${API_WS}/milestones/${milestoneId}/request-revision`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: feedback.trim() }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "Request failed"); }
+      onDone();
+    } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
+  };
+
+  const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 13, background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 8, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
+
+  return (
+    <WsModal colors={c}>
+      <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>🔄</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: c.text, marginBottom: 6 }}>Request Revision</div>
+        <div style={{ fontSize: 12, color: c.subtext, lineHeight: 1.6 }}>
+          Tell the freelancer what needs to be changed on <strong style={{ color: c.text }}>{milestoneTitle || `Milestone #${milestoneId}`}</strong>.
+        </div>
+      </div>
+      <textarea value={feedback} onChange={e => setFeedback(e.target.value)} rows={5}
+        placeholder="e.g. The login screen design doesn't match the mockup. Please update the colour scheme…"
+        style={{ ...inp, resize: "vertical" } as any} />
+      {err && <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(239,68,68,.1)", color: "#ef4444", borderRadius: 7, fontSize: 12 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+        <button onClick={onClose} style={{ flex: 1, padding: "10px 0", background: "transparent", border: `1px solid ${c.border}`, borderRadius: 8, color: c.subtext, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>Cancel</button>
+        <button onClick={submit} disabled={loading} style={{ flex: 2, padding: "10px 0", background: "#f97316", border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 13, opacity: loading ? 0.7 : 1, fontFamily: "inherit" }}>
+          {loading ? "Sending…" : "Send Revision Request"}
+        </button>
+      </div>
+    </WsModal>
+  );
+};
+
+// ─── Client Workspace View ────────────────────────────────────────────────────
+
+interface ContractDetail {
+  project: Project | null;
+  milestones: Milestone[];
+  escrow: Escrow | null;
+  loading: boolean;
+}
+
+const WS_MS_COLORS = {
+  pending:            { bg: "rgba(245,158,11,.1)",  color: "#f59e0b",  label: "Pending" },
+  revision_requested: { bg: "rgba(249,115,22,.1)",  color: "#f97316",  label: "Revision" },
+  approved:           { bg: "rgba(59,130,246,.1)",  color: "#3b82f6",  label: "Approved" },
+  paid:               { bg: "rgba(34,197,94,.1)",   color: "#22c55e",  label: "Paid ✓" },
+};
+
+const ClientWorkspaceView: React.FC<{
+  colors: ThemeColors;
+  contracts: Contract[];
+  projects: Project[];
+  loading: boolean;
+  onRefresh: () => void;
+}> = ({ colors: c, contracts, projects, loading, onRefresh }) => {
+  const navigate = useNavigate();
+  const [filter, setFilter]             = useState<"all" | "active" | "completed" | "disputed">("active");
+  const [selected, setSelected]         = useState<number | null>(null);
+  const [details, setDetails]           = useState<Record<number, ContractDetail>>({});
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [toast, setToast]               = useState<{ msg: string; ok: boolean } | null>(null);
+  const [showAddMs, setShowAddMs]       = useState<number | null>(null);
+  const [revisionTarget, setRevisionTarget] = useState<{ milestoneId: number; milestoneTitle: string | null } | null>(null);
+
+  const API_WS = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+  const wsAuth = () => ({ Authorization: `Bearer ${localStorage.getItem("access_token")}` });
+
+  const showToast = (msg: string, ok: boolean) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const loadDetail = useCallback(async (contractId: number, force = false) => {
+    if (details[contractId] && !force) return;
+    const ct = contracts.find(x => x.contract_id === contractId);
+    if (!ct) return;
+    setDetails(prev => ({ ...prev, [contractId]: { project: null, milestones: [], escrow: null, loading: true } }));
+    try {
+      const [mr, pr, er] = await Promise.all([
+        fetch(`${API_WS}/contracts/${contractId}/milestones`, { headers: wsAuth() }),
+        fetch(`${API_WS}/projects/${ct.project_id}`, { headers: wsAuth() }),
+        fetch(`${API_WS}/escrow/contract/${contractId}`, { headers: wsAuth() }),
+      ]);
+      const [milestones, project, escrow] = await Promise.all([
+        mr.ok ? mr.json() : Promise.resolve([]),
+        pr.ok ? pr.json() : Promise.resolve(null),
+        er.ok ? er.json() : Promise.resolve(null),
+      ]);
+      setDetails((prev: Record<number, ContractDetail>) => ({
+        ...prev,
+        [contractId]: { milestones, project, escrow, loading: false },
+      }));
+    } catch {
+      setDetails(prev => ({ ...prev, [contractId]: { ...prev[contractId], loading: false } }));
+    }
+  }, [contracts, API_WS]);
+
+  const handleSelect = (contractId: number) => {
+    if (selected === contractId) { setSelected(null); return; }
+    setSelected(contractId);
+    loadDetail(contractId);
+  };
+
+  const updateMilestone = async (contractId: number, milestoneId: number, status: "approved" | "paid") => {
+    setActionLoading(milestoneId);
+    try {
+      const r = await fetch(`${API_WS}/milestones/${milestoneId}/status`, {
+        method: "PUT",
+        headers: { ...wsAuth(), "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+      showToast(status === "approved" ? "Payment released! 💸" : "Milestone marked as paid ✓", true);
+      await loadDetail(contractId, true);
+      onRefresh();
+    } catch (e: any) { showToast(e.message, false); } finally { setActionLoading(null); }
+  };
+
+  const completeContract = async (contractId: number) => {
+    try {
+      const r = await fetch(`${API_WS}/contracts/${contractId}/complete`, { method: "POST", headers: wsAuth() });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+      showToast("Contract completed! 🎉", true);
+      await loadDetail(contractId, true);
+      onRefresh();
+    } catch (e: any) { showToast(e.message, false); }
+  };
+
+  const filtered = filter === "all" ? contracts : contracts.filter(ct => ct.status === filter);
+  const counts = {
+    all:       contracts.length,
+    active:    contracts.filter(ct => ct.status === "active").length,
+    completed: contracts.filter(ct => ct.status === "completed").length,
+    disputed:  contracts.filter(ct => ct.status === "disputed").length,
+  };
+
+  return (
+    <div style={{ animation: "fadeIn 0.5s ease" }}>
+      {toast && (
+        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 3000, padding: "12px 20px", borderRadius: 12, background: toast.ok ? "#22c55e" : "#ef4444", color: toast.ok ? "#000" : "#fff", fontWeight: 600, fontSize: 13, boxShadow: "0 8px 32px rgba(0,0,0,.4)" }}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Workspace</div>
+          <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Manage your contracts and milestones</div>
+        </div>
+        <button onClick={onRefresh} style={{ background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
+          <IconRefresh /> Refresh
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {(["all", "active", "completed", "disputed"] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            style={{ fontSize: 11, padding: "5px 14px", borderRadius: 100, border: `0.5px solid ${filter === f ? c.primary : c.border}`, background: filter === f ? c.primarySoft : "transparent", color: filter === f ? c.primary : c.subtext, cursor: "pointer", fontFamily: "inherit", fontWeight: filter === f ? 600 : 400 }}>
+            {f.charAt(0).toUpperCase() + f.slice(1)}{counts[f] > 0 ? ` (${counts[f]})` : ""}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{[1, 2, 3].map(i => <Skeleton key={i} h={72} />)}</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>
+            {filter === "all" ? "No contracts yet" : `No ${filter} contracts`}
+          </div>
+          <div style={{ fontSize: 12, color: c.subtext }}>Accept a proposal to create a contract with a freelancer.</div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filtered.map(ct => {
+            const proj = projects.find(p => p.project_id === ct.project_id);
+            const cs   = contractStatusColor(ct.status);
+            const det  = details[ct.contract_id];
+            const isOpen      = selected === ct.contract_id;
+            const paidCount   = det?.milestones.filter(m => m.status === "paid").length ?? 0;
+            const totalCount  = det?.milestones.length ?? 0;
+            const pendingCount = det?.milestones.filter(m => m.status === "pending").length ?? 0;
+            const allPaid     = totalCount > 0 && paidCount === totalCount;
+
+            return (
+              <div key={ct.contract_id} style={{ background: c.surface, border: `0.5px solid ${isOpen ? c.primary + "60" : c.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color .2s" }}>
+
+                {/* ── Contract header row ── */}
+                <div
+                  onClick={() => handleSelect(ct.contract_id)}
+                  style={{ padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = c.bg + "80"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
+                >
+                  <div style={{ width: 9, height: 9, borderRadius: "50%", background: cs.color, flexShrink: 0, boxShadow: `0 0 8px ${cs.color}88` }} />
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {proj?.title ?? `Project #${ct.project_id}`}
+                      </span>
+                      <Badge bg={cs.bg} color={cs.color} border={cs.border} style={{ margin: 0 }}>{ct.status}</Badge>
+                      {pendingCount > 0 && (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 100, background: "#f59e0b18", color: "#f59e0b", border: "0.5px solid #f59e0b30" }}>
+                          {pendingCount} pending
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 2, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      <span>#{ct.contract_id}</span>
+                      <span>Freelancer #{ct.freelancer_id}</span>
+                      <span>{new Date(ct.created_at).toLocaleDateString()}</span>
+                      {proj && <span style={{ color: "#22c55e" }}>{fmt(proj.budget)}</span>}
+                    </div>
+                  </div>
+
+                  {/* Milestone progress bar (shown after detail is loaded) */}
+                  {det && !det.loading && totalCount > 0 && (
+                    <div style={{ flexShrink: 0, textAlign: "right" }}>
+                      <div style={{ fontSize: 10, color: c.subtext, marginBottom: 3 }}>{paidCount}/{totalCount} paid</div>
+                      <div style={{ width: 72, height: 4, background: c.border, borderRadius: 100, overflow: "hidden" }}>
+                        <div style={{ width: `${(paidCount / totalCount) * 100}%`, height: "100%", background: "#22c55e", borderRadius: 100, transition: "width .4s" }} />
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: 11, color: c.subtext, flexShrink: 0, transition: "transform .2s", transform: isOpen ? "rotate(180deg)" : "none" }}>▼</div>
+                </div>
+
+                {/* ── Expanded milestone panel ── */}
+                {isOpen && (
+                  <div style={{ borderTop: `0.5px solid ${c.border}`, background: c.bg, padding: 16 }}>
+                    {det?.loading ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{[1, 2].map(i => <Skeleton key={i} h={60} />)}</div>
+                    ) : (
+                      <>
+                        {/* Escrow summary bar */}
+                        {det?.escrow && (
+                          <div style={{ display: "flex", marginBottom: 14, background: c.surface, borderRadius: 10, border: `0.5px solid ${c.border}`, overflow: "hidden" }}>
+                            {[
+                              { label: "Escrow Total", val: fmt(det.escrow.amount),                               color: c.text },
+                              { label: "Released",     val: fmt(det.escrow.released_amount),                      color: "#22c55e" },
+                              { label: "Remaining",    val: fmt(det.escrow.amount - det.escrow.released_amount),  color: "#f59e0b" },
+                            ].map((item, idx) => (
+                              <div key={item.label} style={{ flex: 1, padding: "10px 14px", borderRight: idx < 2 ? `0.5px solid ${c.border}` : "none" }}>
+                                <div style={{ fontSize: 10, color: c.subtext, marginBottom: 3, textTransform: "uppercase", letterSpacing: ".05em" }}>{item.label}</div>
+                                <div style={{ fontSize: 15, fontWeight: 700, color: item.color }}>{item.val}</div>
+                              </div>
+                            ))}
+                            <div style={{ flex: 2, padding: "10px 14px", display: "flex", alignItems: "center" }}>
+                              <div style={{ width: "100%", height: 5, background: c.border, borderRadius: 100, overflow: "hidden" }}>
+                                <div style={{ width: `${Math.min(100, (det.escrow.released_amount / det.escrow.amount) * 100)}%`, height: "100%", background: "#22c55e", borderRadius: 100, transition: "width .6s" }} />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Milestones header */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>
+                            Milestones
+                            {totalCount > 0 && <span style={{ fontSize: 11, color: c.subtext, fontWeight: 400, marginLeft: 6 }}>{paidCount}/{totalCount} paid</span>}
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            {ct.status === "active" && (
+                              <button
+                                onClick={() => setShowAddMs(ct.contract_id)}
+                                style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, background: c.primarySoft, color: c.primary, border: `0.5px solid ${c.primary}40`, cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
+                              >
+                                + Add Milestone
+                              </button>
+                            )}
+                            <button
+                              onClick={() => navigate(`/contract/${ct.contract_id}`)}
+                              style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, background: "transparent", color: c.subtext, border: `0.5px solid ${c.border}`, cursor: "pointer", fontFamily: "inherit" }}
+                            >
+                              Full View →
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Milestone list */}
+                        {!det?.milestones || det.milestones.length === 0 ? (
+                          <div style={{ textAlign: "center", padding: "28px 0", color: c.subtext }}>
+                            <div style={{ fontSize: 28, marginBottom: 8 }}>📌</div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 4 }}>No milestones yet</div>
+                            {ct.status === "active" && <div style={{ fontSize: 12 }}>Click "+ Add Milestone" to track work and release payments.</div>}
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {det.milestones.map(ms => {
+                              const msc    = WS_MS_COLORS[ms.status as keyof typeof WS_MS_COLORS] ?? WS_MS_COLORS.pending;
+                              const isAct  = actionLoading === ms.milestone_id;
+                              return (
+                                <div key={ms.milestone_id} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "12px 14px" }}>
+                                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: msc.color, marginTop: 5, flexShrink: 0, boxShadow: `0 0 6px ${msc.color}66` }} />
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                                        <div>
+                                          <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ms.title || `Milestone #${ms.milestone_id}`}</div>
+                                          {ms.description && <div style={{ fontSize: 11, color: c.subtext, marginTop: 2, lineHeight: 1.4 }}>{ms.description}</div>}
+                                          {ms.due_date && <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 3 }}>Due {new Date(ms.due_date).toLocaleDateString()}</div>}
+                                        </div>
+                                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                          <div style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{fmt(ms.amount)}</div>
+                                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: msc.bg, color: msc.color }}>{msc.label}</span>
+                                        </div>
+                                      </div>
+
+                                      {/* Revision feedback */}
+                                      {ms.status === "revision_requested" && ms.revision_feedback && (
+                                        <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(249,115,22,.08)", border: "0.5px solid rgba(249,115,22,.2)", borderRadius: 8 }}>
+                                          <div style={{ fontSize: 11, color: "#f97316", fontWeight: 600, marginBottom: 3 }}>🔄 Revision Requested</div>
+                                          <div style={{ fontSize: 11, color: c.text, lineHeight: 1.5 }}>{ms.revision_feedback}</div>
+                                        </div>
+                                      )}
+
+                                      {/* AI verdict badge */}
+                                      {ms.ai_verification_status && (
+                                        <div style={{ marginTop: 6 }}>
+                                          <span style={{
+                                            fontSize: 10, padding: "2px 8px", borderRadius: 100,
+                                            background: ms.ai_verification_status === "passed" ? "rgba(34,197,94,.1)" : ms.ai_verification_status === "flagged" ? "rgba(239,68,68,.1)" : "rgba(245,158,11,.1)",
+                                            color:      ms.ai_verification_status === "passed" ? "#22c55e"            : ms.ai_verification_status === "flagged" ? "#ef4444"           : "#f59e0b",
+                                          }}>
+                                            {ms.ai_verification_status === "passed" ? "🤖 AI: Passed ✓" : ms.ai_verification_status === "flagged" ? "🤖 AI: Flagged ⚠" : "🤖 AI: Needs more files"}
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {/* Client actions */}
+                                      {ct.status === "active" && (
+                                        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                                          {ms.status === "pending" && (
+                                            <>
+                                              <button
+                                                onClick={() => setRevisionTarget({ milestoneId: ms.milestone_id, milestoneTitle: ms.title })}
+                                                style={{ fontSize: 11, padding: "5px 10px", borderRadius: 7, background: "rgba(249,115,22,.1)", border: "0.5px solid rgba(249,115,22,.3)", color: "#f97316", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
+                                              >
+                                                🔄 Request Revision
+                                              </button>
+                                              <button
+                                                onClick={() => updateMilestone(ct.contract_id, ms.milestone_id, "approved")}
+                                                disabled={isAct}
+                                                style={{ fontSize: 11, padding: "5px 12px", borderRadius: 7, background: "#22c55e", border: "none", color: "#000", cursor: isAct ? "not-allowed" : "pointer", fontFamily: "inherit", fontWeight: 600, opacity: isAct ? 0.6 : 1 }}
+                                              >
+                                                {isAct ? "…" : "✓ Approve & Release"}
+                                              </button>
+                                            </>
+                                          )}
+                                          {ms.status === "approved" && (
+                                            <button
+                                              onClick={() => updateMilestone(ct.contract_id, ms.milestone_id, "paid")}
+                                              disabled={isAct}
+                                              style={{ fontSize: 11, padding: "5px 12px", borderRadius: 7, background: "rgba(59,130,246,.12)", border: "0.5px solid rgba(59,130,246,.3)", color: "#3b82f6", cursor: isAct ? "not-allowed" : "pointer", fontFamily: "inherit", fontWeight: 600 }}
+                                            >
+                                              {isAct ? "…" : "Mark as Paid"}
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Complete contract CTA */}
+                        {ct.status === "active" && allPaid && totalCount > 0 && (
+                          <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(34,197,94,.06)", border: "0.5px solid rgba(34,197,94,.25)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "#22c55e" }}>All milestones paid!</div>
+                              <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Ready to complete this contract.</div>
+                            </div>
+                            <button
+                              onClick={() => completeContract(ct.contract_id)}
+                              style={{ fontSize: 12, fontWeight: 600, padding: "8px 16px", borderRadius: 9, background: "#22c55e", color: "#000", border: "none", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                            >
+                              Complete Contract ✓
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add Milestone Modal */}
+      {showAddMs !== null && (() => {
+        const det = details[showAddMs];
+        const used  = det?.milestones?.reduce((a, m) => a + m.amount, 0) ?? 0;
+        const total = det?.escrow?.amount ?? 0;
+        return (
+          <WsAddMilestoneModal
+            colors={c}
+            contractId={showAddMs}
+            escrowRemaining={Math.max(0, total - used)}
+            onClose={() => setShowAddMs(null)}
+            onDone={() => { const id = showAddMs; setShowAddMs(null); loadDetail(id, true); showToast("Milestone added!", true); }}
+          />
+        );
+      })()}
+
+      {/* Revision Modal */}
+      {revisionTarget && (
+        <WsRevisionModal
+          colors={c}
+          milestoneId={revisionTarget.milestoneId}
+          milestoneTitle={revisionTarget.milestoneTitle}
+          onClose={() => setRevisionTarget(null)}
+          onDone={() => { setRevisionTarget(null); if (selected) loadDetail(selected, true); showToast("Revision request sent.", true); }}
+        />
+      )}
+    </div>
+  );
+};
+
 // ─── Main Dashboard Component ─────────────────────────────────────────────────
 
 const ClientDashboard: React.FC = () => {
@@ -1586,8 +2276,9 @@ const ClientDashboard: React.FC = () => {
           <NavItem label="Find Talent"    badge="New" active={activeView === "Find Talent"}    onClick={() => setActiveView("Find Talent")}    icon={<IconSearch />} colors={c} />
           <NavItem label="Proposals"  badge={proposals.filter(p => p.status === "pending").length || undefined} active={activeView === "Proposals"} onClick={() => setActiveView("Proposals")} icon={<IconProp />} colors={c} />
           <NavItem label="Invitations"                active={activeView === "Invitations"}     onClick={() => setActiveView("Invitations")}     icon={<IconMsg />}    colors={c} />
-          <NavItem label="Active Projects"            active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />}   colors={c} />
-          <NavItem label="Invoices"                   active={activeView === "Invoices"}        onClick={() => setActiveView("Invoices")}        icon={<IconInv />}    colors={c} />
+          <NavItem label="Active Projects"            active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />}       colors={c} />
+          <NavItem label="Workspace" badge={contracts.filter((ct: Contract) => ct.status === "active").length || undefined} active={activeView === "Workspace"} onClick={() => setActiveView("Workspace")} icon={<IconBriefcase />} colors={c} />
+          <NavItem label="Invoices"                   active={activeView === "Invoices"}        onClick={() => setActiveView("Invoices")}        icon={<IconInv />}        colors={c} />
 
           {/* Upgrade banner */}
           <div style={{ margin: "10px 12px 0" }}>
@@ -1716,7 +2407,7 @@ const ClientDashboard: React.FC = () => {
                 <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 14, padding: "18px 20px" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>Active Contracts</div>
-                    <span onClick={() => setActiveView("Active Projects")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>View all →</span>
+                    <span onClick={() => setActiveView("Workspace")} style={{ fontSize: 11, color: c.subtext, cursor: "pointer" }}>Workspace →</span>
                   </div>
                   {isLoading ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{[1,2].map(i => <Skeleton key={i} h={52} />)}</div>
@@ -1877,6 +2568,16 @@ const ClientDashboard: React.FC = () => {
 
           {activeView === "Invitations" && (
             <SentInvitationsView colors={c} />
+          )}
+
+          {activeView === "Workspace" && (
+            <ClientWorkspaceView
+              colors={c}
+              contracts={contracts}
+              projects={projects}
+              loading={loadingContracts || loadingProjects}
+              onRefresh={() => { fetchContracts(); fetchProjects(); }}
+            />
           )}
 
           {activeView === "Proposals" && (

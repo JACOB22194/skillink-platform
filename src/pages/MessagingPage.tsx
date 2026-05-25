@@ -219,6 +219,41 @@ const MessagingPage: React.FC = () => {
     );
   };
 
+  const sendFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || activeUserId === null) return;
+    e.target.value = "";
+    const form = new FormData();
+    form.append("file", file);
+    // Upload the file to the files endpoint, then send a chat message with the link
+    try {
+      const res = await fetch(`${API_BASE_URL}/files/upload/chat`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Upload failed");
+      const fileMsg = `📎 [${file.name}](${data.file_url ?? data.file_path ?? "#"})`;
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "chat_message", payload: { receiver_id: activeUserId, content: fileMsg } }));
+      } else {
+        const msgRes = await axios.post<ChatMessage>(
+          `${API_BASE_URL}/messages`,
+          { receiver_id: activeUserId, content: fileMsg },
+          getAuthHeaders(),
+        );
+        setMessages((prev) => [...prev, msgRes.data]);
+      }
+      setConversations((prev) =>
+        prev.map((conv) => conv.other_user_id === activeUserId ? { ...conv, last_message: `📎 ${file.name}` } : conv)
+      );
+    } catch (err: any) {
+      setErrorMsg(err.message || "File upload failed.");
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
@@ -422,7 +457,15 @@ const MessagingPage: React.FC = () => {
                         color: mine ? "#fff" : c.text,
                         border: mine ? "none" : `0.5px solid ${c.border}`,
                       }}>
-                        {msg.content}
+                        {/^📎 \[.+\]\(.+\)$/.test(msg.content) ? (() => {
+                          const m = msg.content.match(/^📎 \[(.+)\]\((.+)\)$/);
+                          return m ? (
+                            <a href={m[2]} target="_blank" rel="noopener noreferrer"
+                              style={{ color: mine ? "#fff" : c.primary, textDecoration: "underline", display: "flex", alignItems: "center", gap: 5 }}>
+                              📎 {m[1]}
+                            </a>
+                          ) : msg.content;
+                        })() : msg.content}
                         <div style={{ fontSize: 10, marginTop: 4, opacity: 0.65, textAlign: "right" }}>
                           {new Date(msg.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </div>
@@ -435,6 +478,28 @@ const MessagingPage: React.FC = () => {
 
               {/* Input */}
               <div style={{ padding: "12px 20px", borderTop: `0.5px solid ${c.border}`, background: c.surface, flexShrink: 0, display: "flex", gap: 10, alignItems: "flex-end" }}>
+                {/* File attach */}
+                <label
+                  title="Attach a file"
+                  style={{
+                    width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                    border: `0.5px solid ${c.border}`, background: c.bg,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: activeUserId !== null ? "pointer" : "default",
+                    opacity: activeUserId !== null ? 1 : 0.4,
+                  }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c.subtext} strokeWidth="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.zip,.doc,.docx,.txt,.mp4,.csv"
+                    style={{ display: "none" }}
+                    disabled={activeUserId === null}
+                    onChange={sendFile}
+                  />
+                </label>
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
