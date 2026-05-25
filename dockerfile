@@ -16,9 +16,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the AI code
 COPY . .
 
-# Regenerate clf_beginner.joblib with the installed numpy version so the
+# Regenerate joblib models with the installed numpy version so the
 # BitGenerator pickle format always matches the runtime environment.
 RUN python skillink_model/train_clf_beginner.py
+RUN python skillink_model/train_pricing_model.py
 
 # Expose port 8000 (Your docker-compose maps this to 8001 externally)
 EXPOSE 8000

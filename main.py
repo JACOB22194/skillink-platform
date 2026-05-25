@@ -9,6 +9,7 @@ from ai_match_endpoint import router as match_router
 from routers.launchpad_router import router as launchpad_router
 from routers.skill_growth_router import router as skill_growth_router
 from routers.retrain_router import router as retrain_router, set_registry as _set_retrain_registry
+from routers.pricing_router import router as pricing_router
 
 # ML-02: hot-swap registry for retrained models
 _MODELS: dict = {}
@@ -286,6 +287,7 @@ app.include_router(match_router)         # POST /match
 app.include_router(launchpad_router)     # POST /launchpad/recommend
 app.include_router(skill_growth_router)  # POST /skill-growth/analyze
 app.include_router(retrain_router)       # ML-02: POST /retrain/trigger, GET /retrain/status|history
+app.include_router(pricing_router)
 
 # Wire shared registry so retrain_router can hot-swap _MODELS
 _set_retrain_registry(_MODELS)
