@@ -1,6 +1,6 @@
-import os, re, json, time, joblib, numpy as np, scipy.sparse as sp
+import asyncio, atexit, os, re, json, time, joblib, uuid, numpy as np, scipy.sparse as sp
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -8,6 +8,10 @@ from parse_github import parse_github
 from ai_match_endpoint import router as match_router
 from routers.launchpad_router import router as launchpad_router
 from routers.skill_growth_router import router as skill_growth_router
+from routers.retrain_router import router as retrain_router, set_registry as _set_retrain_registry
+
+# ML-02: hot-swap registry for retrained models
+_MODELS: dict = {}
 
 # ── Load model artefacts once at startup ─────────────────────────────────────
 MODEL_DIR = Path("./skillink_model")
@@ -61,6 +65,7 @@ class PredictResponse(BaseModel):
     confidence:       float
     latency_ms:       float
     top_alternatives: list[Alternative]
+    model_variant:    Optional[str] = None   # ML-06: "control" | "treatment" | None
 
 class GitHubRequest(BaseModel):
     url: str = Field(..., example="https://github.com/torvalds")
@@ -96,10 +101,45 @@ def _ensemble_predict(X: sp.spmatrix) -> np.ndarray:
     return (p1 + p2) / 2.0
 
 
+def _predict_retrained(text: str, top_k: int) -> dict | None:
+    """Use retrained models when available (ML-02 hot-swap path)."""
+    tfidf   = _MODELS.get("retrained_tfidf")
+    lr_sub  = _MODELS.get("retrained_lr_sub")
+    svc_sub = _MODELS.get("retrained_svc_sub")
+    lr_cat  = _MODELS.get("retrained_lr_cat")
+    le_sub  = _MODELS.get("retrained_le_sub")
+    le_cat  = _MODELS.get("retrained_le_cat")
+    if not all([tfidf, lr_sub, svc_sub, lr_cat, le_sub, le_cat]):
+        return None
+    X         = tfidf.transform([text])
+    p_sub     = (lr_sub.predict_proba(X)[0] + svc_sub.predict_proba(X)[0]) / 2
+    class_ids = np.argsort(p_sub)[::-1]
+    top_id    = class_ids[0]
+    p_cat     = lr_cat.predict_proba(X)[0]
+    return {
+        "sub_category":     le_sub.classes_[top_id],
+        "category":         le_cat.classes_[np.argmax(p_cat)],
+        "confidence":       round(float(p_sub[top_id]) * 100, 1),
+        "top_alternatives": [
+            {"sub_category": le_sub.classes_[i], "confidence": round(float(p_sub[i]) * 100, 1)}
+            for i in class_ids[1:top_k + 1] if i != top_id
+        ],
+    }
+
+
 def _predict(title: str, description: str,
-             category_hint: str = None, top_k: int = 5) -> dict:
-    t0 = time.perf_counter()
+             category_hint: str = None, top_k: int = 5,
+             variant: str = "auto") -> dict:
+    t0   = time.perf_counter()
     text = _clean(title) + " " + _clean(description)
+
+    # ML-06: A/B routing — "control" forces original; "treatment"/"auto" try retrained first
+    if variant != "control":
+        retrained = _predict_retrained(text, top_k)
+        if retrained:
+            retrained["latency_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+            return retrained
+
     X    = _build_features(text, category_hint)
     proba     = _ensemble_predict(X)
     class_ids = np.argsort(proba)[::-1]
@@ -151,18 +191,45 @@ def categories():
         "sub_to_cat":     SUB_TO_CAT,
     }
 
+_INFERENCE_TIMEOUT = 5.0  # seconds — ML-04: server-side latency limit
+
+
 @app.post("/predict", response_model=PredictResponse)
-def predict(req: PredictRequest):
+async def predict(req: PredictRequest):
     if not req.title.strip() and not req.description.strip():
         raise HTTPException(status_code=422, detail="title or description must be non-empty")
-    return PredictResponse(**_predict(req.title, req.description, req.category_hint, req.top_k))
+    # ML-06: A/B routing
+    from services.ab_service import route_request
+    rid     = str(uuid.uuid4())
+    variant = route_request(rid)
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(_predict, req.title, req.description, req.category_hint, req.top_k, variant),
+            timeout=_INFERENCE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=503, detail="Inference timeout: exceeded 5 s limit")
+    result["model_variant"] = variant
+    return PredictResponse(**result)
 
 @app.post("/classify")
-def classify(req: PredictRequest):
+async def classify(req: PredictRequest):
     """Alias for /predict — used by the backend recommend_router."""
     if not req.title.strip() and not req.description.strip():
         raise HTTPException(status_code=422, detail="title or description must be non-empty")
-    return PredictResponse(**_predict(req.title, req.description, req.category_hint, req.top_k))
+    # ML-06: A/B routing
+    from services.ab_service import route_request
+    rid     = str(uuid.uuid4())
+    variant = route_request(rid)
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(_predict, req.title, req.description, req.category_hint, req.top_k, variant),
+            timeout=_INFERENCE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=503, detail="Inference timeout: exceeded 5 s limit")
+    result["model_variant"] = variant
+    return PredictResponse(**result)
 
 @app.post("/predict/batch")
 def predict_batch(jobs: list[PredictRequest]):
@@ -215,9 +282,28 @@ def parse_github_endpoint(req: GitHubRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-app.include_router(match_router)            # POST /match
-app.include_router(launchpad_router)        # POST /launchpad/recommend
-app.include_router(skill_growth_router)   # POST /skill-growth/analyze
+app.include_router(match_router)         # POST /match
+app.include_router(launchpad_router)     # POST /launchpad/recommend
+app.include_router(skill_growth_router)  # POST /skill-growth/analyze
+app.include_router(retrain_router)       # ML-02: POST /retrain/trigger, GET /retrain/status|history
+
+# Wire shared registry so retrain_router can hot-swap _MODELS
+_set_retrain_registry(_MODELS)
+
+# ML-02: nightly APScheduler — retrains at 02:00 every night
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+    def _nightly_retrain():
+        from services.retrain_service import run_scheduled_retrain
+        run_scheduled_retrain(_MODELS)
+
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(_nightly_retrain, "cron", hour=2, minute=0, id="nightly_retrain")
+    _scheduler.start()
+    atexit.register(_scheduler.shutdown)
+except ImportError:
+    pass  # apscheduler not installed yet — manual trigger still works
 
 
 if __name__ == "__main__":

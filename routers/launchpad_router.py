@@ -14,9 +14,12 @@ DEV-04 Requirements covered:
   ✓ Reserve Project  — is_reserved flag + slot enforcement
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
+
+_INFERENCE_TIMEOUT = 5.0  # seconds — ML-04
 
 from services.launchpad_service import (
     get_launchpad_recommendations,
@@ -65,7 +68,7 @@ class LaunchpadResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/recommend", response_model=LaunchpadResponse)
-def recommend_launchpad(req: LaunchpadRequest):
+async def recommend_launchpad(req: LaunchpadRequest):
     """
     AI Launchpad — returns starter projects tailored to a new freelancer.
 
@@ -79,7 +82,12 @@ def recommend_launchpad(req: LaunchpadRequest):
     freelancer does not meet the entry criteria.
     """
     try:
-        result = get_launchpad_recommendations(req.model_dump())
+        result = await asyncio.wait_for(
+            asyncio.to_thread(get_launchpad_recommendations, req.model_dump()),
+            timeout=_INFERENCE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=503, detail="Inference timeout: exceeded 5 s limit")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Launchpad service error: {e}")
 

@@ -9,10 +9,13 @@ Add this to your existing AI service main.py:
     app.include_router(match_router)
 """
 
-from fastapi import APIRouter
+import asyncio
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import json
+
+_INFERENCE_TIMEOUT = 5.0  # seconds — ML-04
 
 from recommender import (
     SkillinkRecommender,
@@ -84,13 +87,7 @@ class MatchResponse(BaseModel):
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 
-@router.post("/match", response_model=MatchResponse)
-def match_freelancers(req: MatchRequest):
-    """
-    Score all candidate freelancers against a job posting.
-    Called by the backend /recommend endpoints — not called directly by frontend.
-    """
-    # Convert top3_predictions from [[sub_cat, prob], ...] to [(sub_cat, prob), ...]
+def _run_match(req: MatchRequest) -> list:
     top3 = None
     if req.top3_predictions:
         top3 = [(item[0], float(item[1])) for item in req.top3_predictions]
@@ -125,7 +122,22 @@ def match_freelancers(req: MatchRequest):
         for c in req.candidates
     ]
 
-    results = recommender.recommend(job, candidates, top_k=req.top_k, weights=req.weights)
+    return recommender.recommend(job, candidates, top_k=req.top_k, weights=req.weights)
+
+
+@router.post("/match", response_model=MatchResponse)
+async def match_freelancers(req: MatchRequest):
+    """
+    Score all candidate freelancers against a job posting.
+    Called by the backend /recommend endpoints — not called directly by frontend.
+    """
+    try:
+        results = await asyncio.wait_for(
+            asyncio.to_thread(_run_match, req),
+            timeout=_INFERENCE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=503, detail="Inference timeout: exceeded 5 s limit")
 
     return MatchResponse(matches=[
         MatchOut(

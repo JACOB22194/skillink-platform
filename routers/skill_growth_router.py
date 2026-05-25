@@ -14,9 +14,12 @@ DEV-07 Requirements covered:
   ✓ Category Scores     — coverage % per IT category (for radar chart)
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
+
+_INFERENCE_TIMEOUT = 5.0  # seconds — ML-04
 
 from services.skill_growth_service import get_skill_growth_analysis
 
@@ -72,7 +75,7 @@ class SkillGrowthResponse(BaseModel):
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.post("/analyze", response_model=SkillGrowthResponse)
-def analyze_skill_growth(req: SkillGrowthRequest):
+async def analyze_skill_growth(req: SkillGrowthRequest):
     """
     DEV-07: Skill Growth & Analytics
 
@@ -88,7 +91,12 @@ def analyze_skill_growth(req: SkillGrowthRequest):
         )
 
     try:
-        result = get_skill_growth_analysis(req.model_dump())
+        result = await asyncio.wait_for(
+            asyncio.to_thread(get_skill_growth_analysis, req.model_dump()),
+            timeout=_INFERENCE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=503, detail="Inference timeout: exceeded 5 s limit")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Skill growth service error: {e}")
 
