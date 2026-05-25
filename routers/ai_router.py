@@ -297,34 +297,47 @@ def ai_suggest_pricing(
     if not project:
         raise HTTPException(404, "Project not found.")
 
-    required_skills = [ps.skill.name for ps in project.skills if ps.skill]
     suggested_min = None
     suggested_max = None
     reasoning     = None
     source        = "ai"
 
     try:
+        # Map budget to experience level
+        budget = float(project.budget or 0)
+        if budget < 300:
+            experience = "Beginner"
+        elif budget < 1500:
+            experience = "Intermediate"
+        else:
+            experience = "Expert"
+
+        # Use AI-classified category, fallback to sub_category then title
+        category = project.category or project.sub_category or project.title or "Web Development"
+
         response = httpx.post(
-            f"{AI_SERVICE_URL}/pricing",
+            f"{AI_SERVICE_URL}/pricing/recommend",
             json={
-                "project_id":      project_id,
-                "title":           project.title,
-                "description":     project.description or "",
-                "required_skills": required_skills,
-                "budget":          project.budget,
+                "category":   category,
+                "experience": experience,
             },
             timeout=AI_TIMEOUT,
         )
         response.raise_for_status()
         ai_data       = response.json()
-        suggested_min = ai_data.get("suggested_min")
-        suggested_max = ai_data.get("suggested_max")
-        reasoning     = ai_data.get("reasoning")
+        suggested_min = ai_data.get("min")
+        suggested_max = ai_data.get("max")
+        reasoning     = (
+            f"ML model prediction for '{ai_data.get('matched_category', category)}' "
+            f"({ai_data.get('experience', experience)} level). "
+            + ("Exact category match." if ai_data.get("exact_match")
+               else f"Closest match used: '{ai_data.get('matched_category')}'.")
+        )
 
     except Exception as exc:
         logger.warning("AI service unavailable for /pricing, using fallback. Error: %s", exc)
-        suggested_min = round(project.budget * 0.60, 2)
-        suggested_max = round(project.budget * 0.90, 2)
+        suggested_min = round(float(project.budget or 0) * 0.60, 2)
+        suggested_max = round(float(project.budget or 0) * 0.90, 2)
         reasoning     = "AI service unavailable. Using heuristic: 60–90% of stated budget."
         source        = "fallback"
 
@@ -965,5 +978,3 @@ def review_verification(
             body      = f"Reason: {body.rejection_note}. Please resubmit.",
             entity_id = v.verification_id,
         )
-
-    return v
