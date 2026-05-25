@@ -966,7 +966,15 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
   };
 
   useEffect(() => {
-    if (projects.length > 0 && !selectedId) setSelectedId(projects[0].project_id);
+    const openProjects = projects.filter(p => p.status === "open");
+    if (openProjects.length > 0) {
+      const selectedProject = openProjects.find(p => p.project_id === selectedId);
+      if (!selectedProject) {
+        setSelectedId(openProjects[0].project_id);
+      }
+    } else {
+      setSelectedId(null);
+    }
   }, [projects, selectedId]);
 
   const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -1007,8 +1015,8 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
               onChange={e => setSelectedId(Number(e.target.value))}
               style={{ flex: 1, minWidth: 200, padding: "8px 12px", fontSize: 13, background: colors.bg, color: colors.text, border: `0.5px solid ${colors.border}`, borderRadius: 8, outline: "none" }}
             >
-              {projects.length === 0
-                ? <option value="">No projects available</option>
+              {projects.filter(p => p.status === "open").length === 0
+                ? <option value="">No open projects available</option>
                 : projects.filter(p => p.status === "open").map(p => (
                     <option key={p.project_id} value={p.project_id}>{p.title}</option>
                   ))
