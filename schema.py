@@ -239,6 +239,7 @@ class FreelancerSearchResult(BaseModel):
     bio:            Optional[str]
     hourly_rate:    Optional[float]
     success_score:  float
+    trust_score:    Optional[float] = None
     skills:         List[str] = []
     ai_match_score: Optional[float] = None
 

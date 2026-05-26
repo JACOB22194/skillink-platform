@@ -58,6 +58,10 @@ def create_project(
     if not client:
         raise HTTPException(404, "Client profile not found.")
 
+    # Hard server-side budget enforcement (EMP-04)
+    if body.budget < 10.0:
+        raise HTTPException(400, "Budget must be at least $10.00.")
+
     # Create project
     project = models.Project(
         client_id     = client.client_id,
@@ -243,7 +247,10 @@ def update_project(
 
     if body.title        is not None: project.title        = body.title
     if body.description  is not None: project.description  = body.description
-    if body.budget       is not None: project.budget       = body.budget
+    if body.budget       is not None:
+        if body.budget < 10.0:
+            raise HTTPException(400, "Budget must be at least $10.00.")
+        project.budget = body.budget
     if body.sub_category is not None: project.sub_category = body.sub_category
     if body.category     is not None: project.category     = body.category
 

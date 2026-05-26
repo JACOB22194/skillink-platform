@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Phase 4 — AI, Disputes & Verification"])
 
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://ai:8001")
-AI_TIMEOUT     = 10.0
+AI_TIMEOUT     = 5.0
 UPLOAD_DIR     = os.getenv("UPLOAD_DIR", "uploads")
 
 

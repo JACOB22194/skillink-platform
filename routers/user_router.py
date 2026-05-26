@@ -519,6 +519,15 @@ def search_freelancers(
 
     freelancers = q.order_by(models.Freelancer.success_score.desc()).offset(skip).limit(limit).all()
 
+    def _latest_trust(user_id: int) -> Optional[float]:
+        ts = (
+            db.query(models.TrustScore)
+            .filter(models.TrustScore.user_id == user_id)
+            .order_by(models.TrustScore.calculated_at.desc())
+            .first()
+        )
+        return round(ts.score, 1) if ts else None
+
     results = []
     for f in freelancers:
         user        = db.query(models.User).filter(models.User.id == f.user_id).first()
@@ -533,6 +542,7 @@ def search_freelancers(
             bio           = f.bio,
             hourly_rate   = f.hourly_rate,
             success_score = f.success_score or 0.0,
+            trust_score   = _latest_trust(f.user_id),
             skills        = skill_names,
         ))
     return results
@@ -561,6 +571,12 @@ def get_freelancer_by_user(
     if not user:
         raise HTTPException(404, "User not found.")
     skill_names = [fs.skill.name for fs in freelancer.skills if fs.skill]
+    latest_ts = (
+        db.query(models.TrustScore)
+        .filter(models.TrustScore.user_id == user_id)
+        .order_by(models.TrustScore.calculated_at.desc())
+        .first()
+    )
     return schema.FreelancerSearchResult(
         freelancer_id = freelancer.freelancer_id,
         user_id       = user_id,
@@ -571,6 +587,7 @@ def get_freelancer_by_user(
         bio           = freelancer.bio,
         hourly_rate   = freelancer.hourly_rate,
         success_score = freelancer.success_score or 0.0,
+        trust_score   = round(latest_ts.score, 1) if latest_ts else None,
         skills        = skill_names,
     )
 

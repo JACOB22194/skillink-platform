@@ -1753,20 +1753,25 @@ def dispute_ai_summary(
 
 @router.post(
     "/overrides/match",
-    summary="Force a freelancer–project match",
-    description="Manually associates a freelancer with an open project (creates a pending proposal).",
+    summary="Force a freelancer–project match (bypasses AI)",
+    description=(
+        "Admin override: directly assigns a freelancer to an open project without AI scoring. "
+        "Accepts the proposal, rejects all other pending proposals, sets the project to in_progress, "
+        "and creates an active contract — bypassing the normal client-approval flow."
+    ),
 )
 def override_match(
-    project_id:         int = Body(..., embed=True),
-    freelancer_user_id: int = Body(..., embed=True),
-    db:   Session           = Depends(get_db),
-    admin: models.User      = Depends(require_admin),
+    project_id:         int           = Body(..., embed=True),
+    freelancer_user_id: int           = Body(..., embed=True),
+    reason:             Optional[str] = Body(None, embed=True),
+    db:   Session                     = Depends(get_db),
+    admin: models.User                = Depends(require_admin),
 ) -> Any:
     project = db.query(models.Project).filter(models.Project.project_id == project_id).first()
     if not project:
         raise HTTPException(404, "Project not found.")
     if project.status not in (models.ProjectStatus.open, "open"):
-        raise HTTPException(400, "Project is not open for proposals.")
+        raise HTTPException(400, "Project is not open — only open projects can be override-matched.")
 
     freelancer = db.query(models.Freelancer).filter(
         models.Freelancer.user_id == freelancer_user_id
@@ -1774,29 +1779,84 @@ def override_match(
     if not freelancer:
         raise HTTPException(404, "Freelancer profile not found.")
 
-    # Check for existing proposal
+    # Upsert the override proposal — accept it immediately
     existing = db.query(models.Proposal).filter(
         models.Proposal.project_id    == project_id,
         models.Proposal.freelancer_id == freelancer.freelancer_id,
     ).first()
+    cover = f"[Admin override by {admin.email}]{' Reason: ' + reason if reason else ''} Directly assigned to this project."
     if existing:
-        raise HTTPException(400, "A proposal from this freelancer already exists for this project.")
+        existing.status       = models.ProposalStatus.accepted
+        existing.cover_letter = cover
+        proposal = existing
+    else:
+        proposal = models.Proposal(
+            project_id         = project_id,
+            freelancer_id      = freelancer.freelancer_id,
+            cover_letter       = cover,
+            bid_amount         = project.budget or 0,
+            ai_relevance_score = 1.0,
+            status             = models.ProposalStatus.accepted,
+        )
+        db.add(proposal)
 
-    proposal = models.Proposal(
-        project_id    = project_id,
-        freelancer_id = freelancer.freelancer_id,
-        cover_letter  = f"[Admin override by {admin.email}] Manually matched to this project.",
-        bid_amount    = project.budget or 0,
-        status        = models.ProposalStatus.pending,
-    )
-    db.add(proposal)
+    # Reject every other pending proposal on this project
+    db.query(models.Proposal).filter(
+        models.Proposal.project_id    == project_id,
+        models.Proposal.freelancer_id != freelancer.freelancer_id,
+        models.Proposal.status        == models.ProposalStatus.pending,
+    ).update({"status": models.ProposalStatus.rejected})
+
+    # Move project to in_progress
+    project.status = models.ProjectStatus.in_progress
+
+    # Create an active contract (only if one doesn't already exist for this pairing)
+    existing_contract = db.query(models.Contract).filter(
+        models.Contract.project_id    == project_id,
+        models.Contract.freelancer_id == freelancer.freelancer_id,
+    ).first()
+    if not existing_contract:
+        contract = models.Contract(
+            project_id    = project_id,
+            freelancer_id = freelancer.freelancer_id,
+            status        = models.ContractStatus.active,
+        )
+        db.add(contract)
+    else:
+        contract = existing_contract
+
+    # Pin a 1.0 recommendation so the override appears in match history
+    existing_rec = db.query(models.Recommendation).filter(
+        models.Recommendation.project_id    == project_id,
+        models.Recommendation.freelancer_id == freelancer.freelancer_id,
+    ).first()
+    if not existing_rec:
+        db.add(models.Recommendation(
+            project_id    = project_id,
+            freelancer_id = freelancer.freelancer_id,
+            match_score   = 1.0,
+            text_score    = 1.0,
+            skill_score   = 1.0,
+            quality_score = 1.0,
+            matched_skills = "[]",
+        ))
+
     db.add(models.SystemLog(
-        action       = f"Admin [{admin.email}] force-matched freelancer #{freelancer_user_id} to project #{project_id}",
+        action       = (
+            f"Admin [{admin.email}] override-matched freelancer #{freelancer_user_id} "
+            f"to project #{project_id} (bypassed AI). Reason: {reason or 'not provided'}"
+        ),
         performed_by = admin.id,
     ))
     db.commit()
     db.refresh(proposal)
-    return {"message": f"Freelancer #{freelancer_user_id} matched to project #{project_id}.", "proposal_id": proposal.proposal_id}
+    return {
+        "message":      f"Freelancer #{freelancer_user_id} directly assigned to project #{project_id}.",
+        "proposal_id":  proposal.proposal_id,
+        "contract_id":  contract.contract_id if not existing_contract else existing_contract.contract_id,
+        "project_status": project.status.value,
+        "ai_bypassed":  True,
+    }
 
 
 @router.post(
@@ -1894,24 +1954,103 @@ def override_release_escrow(
 #  ADM-08: System Alerts Dashboard
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+_VALID_SEVERITIES  = {"critical", "warning", "info"}
+_VALID_COMPONENTS  = {
+    "error_rate", "db_latency", "ai_service",
+    "stale_disputes", "pending_verifications",
+    "unfunded_escrow", "overdue_milestones",
+    "expiring_subscriptions", "user_spike",
+}
+
+
+def _build_alert(
+    component: str,
+    title: str,
+    message: str,
+    severity: str,
+    value: Any,
+    recommended_action: str,
+    generated_at: datetime,
+) -> dict:
+    return {
+        "component":          component,
+        "title":              title,
+        "message":            message,
+        "severity":           severity,
+        "value":              value,
+        "recommended_action": recommended_action,
+        "generated_at":       generated_at.isoformat(),
+    }
+
+
 @router.get(
     "/alerts",
     summary="System alerts dashboard",
-    description="Returns threshold-based alerts. Filterable by severity and component.",
+    description=(
+        "Real-time threshold-based alerts across all platform components. "
+        "Filter by `severity` (critical|warning|info) and/or `component`. "
+        "Each alert includes a recommended action and exact timestamp."
+    ),
 )
 def get_alerts(
     severity:  Optional[str] = Query(None, description="critical | warning | info"),
-    component: Optional[str] = Query(None, description="error_rate | stale_disputes | pending_verifications | unfunded_escrow | user_spike"),
-    db:        Session        = Depends(get_db),
-    admin:     models.User    = Depends(require_admin),
+    component: Optional[str] = Query(None, description=(
+        "error_rate | db_latency | ai_service | stale_disputes | "
+        "pending_verifications | unfunded_escrow | overdue_milestones | "
+        "expiring_subscriptions | user_spike"
+    )),
+    db:    Session     = Depends(get_db),
+    admin: models.User = Depends(require_admin),
 ) -> Any:
-    alerts: list[dict] = []
-    cutoff_24h  = datetime.now(timezone.utc) - timedelta(hours=24)
-    cutoff_7d   = datetime.now(timezone.utc) - timedelta(days=7)
+    if severity and severity not in _VALID_SEVERITIES:
+        raise HTTPException(400, f"Invalid severity '{severity}'. Use: {', '.join(sorted(_VALID_SEVERITIES))}")
+    if component and component not in _VALID_COMPONENTS:
+        raise HTTPException(400, f"Invalid component '{component}'. Use: {', '.join(sorted(_VALID_COMPONENTS))}")
 
-    # ── Error rate ────────────────────────────────────────────────────────────
-    total_logs  = db.query(models.SystemLog).filter(models.SystemLog.timestamp >= cutoff_24h).count()
-    error_logs  = db.query(models.SystemLog).filter(
+    now         = datetime.now(timezone.utc)
+    cutoff_24h  = now - timedelta(hours=24)
+    cutoff_7d   = now - timedelta(days=7)
+    cutoff_3d   = now + timedelta(days=3)
+
+    alerts: list[dict] = []
+
+    # ── DB latency ────────────────────────────────────────────────────────────
+    db_t0 = time.time()
+    db.query(models.User).count()
+    db_latency_ms = round((time.time() - db_t0) * 1000, 1)
+    if db_latency_ms > 500:
+        alerts.append(_build_alert(
+            component           = "db_latency",
+            title               = "High Database Latency",
+            message             = f"DB responded in {db_latency_ms} ms (threshold: 500 ms)",
+            severity            = "critical" if db_latency_ms > 1500 else "warning",
+            value               = db_latency_ms,
+            recommended_action  = "Check PostgreSQL query load and connection pool saturation.",
+            generated_at        = now,
+        ))
+
+    # ── AI service reachability ───────────────────────────────────────────────
+    import httpx as _httpx
+    _ai_url = _os.environ.get("AI_SERVICE_URL", "http://ai:8000")
+    try:
+        _r = _httpx.get(f"{_ai_url}/health", timeout=3)
+        _ai_ok = _r.status_code == 200
+    except Exception:
+        _ai_ok = False
+    if not _ai_ok:
+        alerts.append(_build_alert(
+            component           = "ai_service",
+            title               = "AI Service Unreachable",
+            message             = f"Health check to {_ai_url}/health failed — AI features degraded",
+            severity            = "critical",
+            value               = 0,
+            recommended_action  = "Restart the AI container or check its logs for startup errors.",
+            generated_at        = now,
+        ))
+
+    # ── Error rate (last 24 h) ────────────────────────────────────────────────
+    total_logs = db.query(models.SystemLog).filter(models.SystemLog.timestamp >= cutoff_24h).count()
+    error_logs = db.query(models.SystemLog).filter(
         models.SystemLog.timestamp >= cutoff_24h,
         or_(
             models.SystemLog.action.ilike("%failed%"),
@@ -1920,13 +2059,15 @@ def get_alerts(
     ).count()
     error_rate = round(error_logs / total_logs * 100, 1) if total_logs > 0 else 0.0
     if error_rate > 10:
-        alerts.append({
-            "type":     "error_rate",
-            "title":    "High Error Rate",
-            "message":  f"{error_rate}% of system actions in the last 24 h are errors ({error_logs}/{total_logs})",
-            "severity": "critical" if error_rate > 25 else "warning",
-            "value":    error_rate,
-        })
+        alerts.append(_build_alert(
+            component           = "error_rate",
+            title               = "High Error Rate",
+            message             = f"{error_rate}% of system actions in the last 24 h are errors ({error_logs}/{total_logs})",
+            severity            = "critical" if error_rate > 25 else "warning",
+            value               = error_rate,
+            recommended_action  = "Review /admin/logs for repeated failure patterns and check external integrations.",
+            generated_at        = now,
+        ))
 
     # ── Stale disputes ────────────────────────────────────────────────────────
     stale_disputes = db.query(models.Dispute).filter(
@@ -1934,28 +2075,32 @@ def get_alerts(
         models.Dispute.created_at <  cutoff_7d,
     ).count()
     if stale_disputes > 0:
-        alerts.append({
-            "type":     "stale_disputes",
-            "title":    "Stale Open Disputes",
-            "message":  f"{stale_disputes} dispute(s) unresolved for more than 7 days",
-            "severity": "warning",
-            "value":    stale_disputes,
-        })
+        alerts.append(_build_alert(
+            component           = "stale_disputes",
+            title               = "Stale Open Disputes",
+            message             = f"{stale_disputes} dispute(s) have been open for more than 7 days",
+            severity            = "critical" if stale_disputes > 5 else "warning",
+            value               = stale_disputes,
+            recommended_action  = "Go to /admin/disputes and resolve or escalate overdue cases.",
+            generated_at        = now,
+        ))
 
     # ── Pending verifications ─────────────────────────────────────────────────
     pending_v = db.query(models.Verification).filter(
         models.Verification.status == models.VerificationStatus.pending
     ).count()
     if pending_v > 3:
-        alerts.append({
-            "type":     "pending_verifications",
-            "title":    "Pending Verifications",
-            "message":  f"{pending_v} freelancer verifications awaiting review",
-            "severity": "info",
-            "value":    pending_v,
-        })
+        alerts.append(_build_alert(
+            component           = "pending_verifications",
+            title               = "Pending Verifications Backlog",
+            message             = f"{pending_v} freelancer verification(s) awaiting admin review",
+            severity            = "warning" if pending_v > 10 else "info",
+            value               = pending_v,
+            recommended_action  = "Go to /admin/verifications to review and approve/reject submissions.",
+            generated_at        = now,
+        ))
 
-    # ── Escrow health (unfunded contracts) ────────────────────────────────────
+    # ── Unfunded active contracts (escrow health) ─────────────────────────────
     active_contracts = db.query(models.Contract).filter(
         models.Contract.status == models.ContractStatus.active
     ).count()
@@ -1964,33 +2109,149 @@ def get_alerts(
     ).count()
     unfunded = max(0, active_contracts - funded_escrows)
     if unfunded > 0:
-        alerts.append({
-            "type":     "unfunded_escrow",
-            "title":    "Unfunded Active Contracts",
-            "message":  f"{unfunded} active contract(s) have no funded escrow",
-            "severity": "warning",
-            "value":    unfunded,
-        })
+        alerts.append(_build_alert(
+            component           = "unfunded_escrow",
+            title               = "Unfunded Active Contracts",
+            message             = f"{unfunded} active contract(s) have no funded escrow — freelancers at risk",
+            severity            = "critical" if unfunded > 3 else "warning",
+            value               = unfunded,
+            recommended_action  = "Contact the client(s) involved and use /admin/overrides/force-release if necessary.",
+            generated_at        = now,
+        ))
 
-    # ── New users spike (> 20 in last 24 h) ──────────────────────────────────
+    # ── Overdue milestones ────────────────────────────────────────────────────
+    overdue_ms = db.query(models.Milestone).filter(
+        models.Milestone.due_date < now,
+        models.Milestone.status.in_([
+            models.MilestoneStatus.pending,
+            models.MilestoneStatus.revision_requested,
+        ]),
+    ).count()
+    if overdue_ms > 0:
+        alerts.append(_build_alert(
+            component           = "overdue_milestones",
+            title               = "Overdue Milestones",
+            message             = f"{overdue_ms} milestone(s) are past their due date and still pending",
+            severity            = "warning",
+            value               = overdue_ms,
+            recommended_action  = "Notify freelancers via the contract management panel or trigger dispute review.",
+            generated_at        = now,
+        ))
+
+    # ── Expiring subscriptions (next 3 days) ──────────────────────────────────
+    expiring_subs = db.query(models.Subscription).filter(
+        models.Subscription.status     == models.SubscriptionStatus.active,
+        models.Subscription.expires_at != None,  # noqa: E711
+        models.Subscription.expires_at <= cutoff_3d,
+        models.Subscription.expires_at >  now,
+    ).count()
+    if expiring_subs > 0:
+        alerts.append(_build_alert(
+            component           = "expiring_subscriptions",
+            title               = "Subscriptions Expiring Soon",
+            message             = f"{expiring_subs} active subscription(s) expire within 3 days",
+            severity            = "info",
+            value               = expiring_subs,
+            recommended_action  = "Send renewal reminders or review subscription management settings.",
+            generated_at        = now,
+        ))
+
+    # ── User registration spike ───────────────────────────────────────────────
     new_users_24h = db.query(models.User).filter(models.User.created_at >= cutoff_24h).count()
     if new_users_24h > 20:
-        alerts.append({
-            "type":     "user_spike",
-            "title":    "User Registration Spike",
-            "message":  f"{new_users_24h} new accounts registered in the last 24 hours",
-            "severity": "info",
-            "value":    new_users_24h,
-        })
+        alerts.append(_build_alert(
+            component           = "user_spike",
+            title               = "User Registration Spike",
+            message             = f"{new_users_24h} new accounts registered in the last 24 hours",
+            severity            = "warning" if new_users_24h > 50 else "info",
+            value               = new_users_24h,
+            recommended_action  = "Verify registrations are legitimate; consider enabling CAPTCHA if spike is abnormal.",
+            generated_at        = now,
+        ))
+
+    # ── Apply filters ─────────────────────────────────────────────────────────
+    if severity:
+        alerts = [a for a in alerts if a["severity"] == severity]
+    if component:
+        alerts = [a for a in alerts if a["component"] == component]
+
+    # Sort: critical first, then warning, then info
+    _order = {"critical": 0, "warning": 1, "info": 2}
+    alerts.sort(key=lambda a: _order.get(a["severity"], 3))
 
     return {
-        "alerts": alerts,
+        "generated_at": now.isoformat(),
+        "alerts":       alerts,
         "counts": {
             "critical": sum(1 for a in alerts if a["severity"] == "critical"),
             "warning":  sum(1 for a in alerts if a["severity"] == "warning"),
             "info":     sum(1 for a in alerts if a["severity"] == "info"),
             "total":    len(alerts),
         },
+        "components_checked": sorted(_VALID_COMPONENTS),
+    }
+
+
+@router.get(
+    "/alerts/history",
+    summary="Alert history — recent error log entries",
+    description="Returns the last N system log entries that indicate errors or failures, for audit purposes.",
+)
+def get_alerts_history(
+    limit: int         = Query(50, ge=1, le=200),
+    db:    Session     = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> Any:
+    entries = (
+        db.query(models.SystemLog)
+        .filter(or_(
+            models.SystemLog.action.ilike("%failed%"),
+            models.SystemLog.action.ilike("%error%"),
+            models.SystemLog.action.ilike("%override%"),
+            models.SystemLog.action.ilike("%suspend%"),
+            models.SystemLog.action.ilike("%reversal%"),
+        ))
+        .order_by(models.SystemLog.timestamp.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "count":   len(entries),
+        "entries": [
+            {
+                "log_id":       e.log_id,
+                "action":       e.action,
+                "performed_by": e.performed_by,
+                "timestamp":    e.timestamp,
+            }
+            for e in entries
+        ],
+    }
+
+
+@router.post(
+    "/alerts/acknowledge",
+    summary="Acknowledge an alert",
+    description="Records that an admin has acknowledged a specific alert component, logged to the audit trail.",
+)
+def acknowledge_alert(
+    component: str         = Body(..., embed=True),
+    note:      Optional[str] = Body(None, embed=True),
+    db:        Session     = Depends(get_db),
+    admin:     models.User = Depends(require_admin),
+) -> Any:
+    if component not in _VALID_COMPONENTS:
+        raise HTTPException(400, f"Unknown component '{component}'. Use: {', '.join(sorted(_VALID_COMPONENTS))}")
+    db.add(models.SystemLog(
+        action       = f"Admin [{admin.email}] acknowledged alert [{component}]" + (f": {note}" if note else ""),
+        performed_by = admin.id,
+    ))
+    db.commit()
+    return {
+        "acknowledged":  True,
+        "component":     component,
+        "acknowledged_by": admin.email,
+        "timestamp":     datetime.now(timezone.utc).isoformat(),
     }
 
 
