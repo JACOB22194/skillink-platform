@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL, getAuthHeaders } from "../shared/api";
+import { useLanguage, LangToggle } from "../shared/LanguageContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -99,6 +100,8 @@ const getInitials = (name: string): string => {
 
 const PostProjectPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t, isRTL } = useLanguage();
+  const fontFamily = isRTL ? "'Cairo', sans-serif" : "sans-serif";
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
@@ -321,13 +324,14 @@ const PostProjectPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: colors.bg, color: colors.text, fontFamily: "sans-serif", display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh", background: colors.bg, color: colors.text, fontFamily, display: "flex", flexDirection: "column" }} dir={isRTL ? "rtl" : "ltr"}>
       {/* ── Navbar ── */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.25rem 2rem", borderBottom: `0.5px solid ${colors.border}`, background: colors.surface }}>
         <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: "-0.3px", cursor: "pointer" }} onClick={() => navigate("/dashboard/client")}>
           Skill<span style={{ color: colors.primary }}>Link</span>
         </div>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          <LangToggle style={{ color: colors.text }} />
           <button
             style={{ background: "transparent", border: `0.5px solid ${colors.border}`, color: colors.text, padding: "8px 12px", borderRadius: 8, cursor: "pointer", fontSize: 16 }}
             onClick={() => setDarkMode(!darkMode)}
@@ -335,10 +339,10 @@ const PostProjectPage: React.FC = () => {
             {darkMode ? "☀️" : "🌙"}
           </button>
           <button
-            style={{ background: "transparent", border: "none", color: colors.subtext, cursor: "pointer", fontSize: 14 }}
+            style={{ background: "transparent", border: "none", color: colors.subtext, cursor: "pointer", fontSize: 14, fontFamily }}
             onClick={() => navigate("/dashboard/client")}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </nav>
@@ -351,18 +355,18 @@ const PostProjectPage: React.FC = () => {
           {step === "input" && (
             <div style={{ animation: "fadeIn 0.5s ease" }}>
               <div style={{ display: "inline-block", fontSize: 12, padding: "4px 12px", borderRadius: 100, marginBottom: "1.5rem", background: colors.primarySoft, color: colors.primary }}>
-                Step 1 of 2
+                {t("pp.step1")}
               </div>
               <h1 style={{ fontSize: 36, fontWeight: 500, lineHeight: 1.15, letterSpacing: "-1px", marginBottom: "1rem" }}>
-                What are you looking to <em style={{ fontStyle: "normal", color: colors.primary }}>build</em>?
+                {t("pp.step1.title")}
               </h1>
               <p style={{ fontSize: 15, color: colors.subtext, marginBottom: "2rem", lineHeight: 1.6 }}>
-                Give your project a title, describe what you need.
+                {t("pp.step1.subtitle")}
               </p>
 
               <input
                 type="text"
-                placeholder="Project Title (e.g. Build a Fintech Dashboard)"
+                placeholder={t("pp.title.placeholder")}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onFocus={handleFocus}
@@ -371,7 +375,7 @@ const PostProjectPage: React.FC = () => {
               />
 
               <textarea
-                placeholder="Describe your project requirements in detail..."
+                placeholder={t("pp.desc.placeholder")}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 onFocus={handleFocus as any}
@@ -380,11 +384,11 @@ const PostProjectPage: React.FC = () => {
               />
 
               <div style={{ marginBottom: "1.5rem" }}>
-                <label style={{ display: "block", fontSize: 14, fontWeight: 500, color: colors.text, marginBottom: "0.5rem" }}>Contract Type</label>
+                <label style={{ display: "block", fontSize: 14, fontWeight: 500, color: colors.text, marginBottom: "0.5rem" }}>{t("pp.contractType")}</label>
                 <div style={{ display: "flex", gap: 10 }}>
-                  {(["fixed", "hourly"] as const).map(t => (
-                    <button key={t} onClick={() => setContractType(t)} type="button" style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1.5px solid ${contractType === t ? colors.primary : colors.border}`, background: contractType === t ? (darkMode ? "#2a2640" : "#EEEDFE") : "transparent", color: contractType === t ? colors.primary : colors.subtext, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
-                      {t === "fixed" ? "Fixed Price" : "Hourly Rate"}
+                  {(["fixed", "hourly"] as const).map(ct => (
+                    <button key={ct} onClick={() => setContractType(ct)} type="button" style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1.5px solid ${contractType === ct ? colors.primary : colors.border}`, background: contractType === ct ? (darkMode ? "#2a2640" : "#EEEDFE") : "transparent", color: contractType === ct ? colors.primary : colors.subtext, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
+                      {ct === "fixed" ? t("pp.fixed") : t("pp.hourly")}
                     </button>
                   ))}
                 </div>
@@ -392,13 +396,13 @@ const PostProjectPage: React.FC = () => {
 
               <div style={{ marginBottom: "1.5rem" }}>
                 <label style={{ display: "block", fontSize: 14, fontWeight: 500, color: colors.text, marginBottom: "0.5rem" }}>
-                  {contractType === "hourly" ? "Hourly Budget Cap (minimum $10)" : "Budget (minimum $10)"}
+                  {contractType === "hourly" ? t("pp.budget.hourly") : t("pp.budget.label")}
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                   <span style={{ color: colors.subtext, fontSize: 16 }}>$</span>
                   <input
                     type="number"
-                    placeholder="e.g. 500"
+                    placeholder={t("pp.budget.placeholder")}
                     value={budget}
                     onChange={(e) => setBudget(e.target.value)}
                     onFocus={handleFocus}
@@ -409,7 +413,7 @@ const PostProjectPage: React.FC = () => {
                   />
                 </div>
                 {budget && !isBudgetValid && (
-                  <div style={{ fontSize: 12, color: "#ef4444", marginTop: "0.5rem" }}>❌ Budget must be at least $10.00</div>
+                  <div style={{ fontSize: 12, color: "#ef4444", marginTop: "0.5rem" }}>❌ {t("pp.budget.err")}</div>
                 )}
               </div>
 
@@ -439,7 +443,7 @@ const PostProjectPage: React.FC = () => {
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                         <div>
                           <div style={{ fontSize: 12, color: colors.subtext, marginBottom: 4 }}>
-                            💡 {isHourly ? "Recommended Hourly Rate" : "Recommended Budget"}
+                            💡 {isHourly ? t("pp.budget.recHourly") : t("pp.budget.rec")}
                           </div>
                           <div style={{ fontSize: 22, fontWeight: 600, color: colors.text, letterSpacing: "-0.5px" }}>
                             {isHourly ? (
@@ -550,7 +554,7 @@ const PostProjectPage: React.FC = () => {
                     cursor: (description.trim() && title.trim() && isBudgetValid) ? "pointer" : "not-allowed", transition: "opacity 0.2s",
                   }}
                 >
-                  Next — Find Matches
+                  {t("pp.next")}
                 </button>
               </div>
             </div>
@@ -564,19 +568,19 @@ const PostProjectPage: React.FC = () => {
                   onClick={() => setStep("input")}
                   style={{ background: "transparent", border: `0.5px solid ${colors.border}`, color: colors.subtext, padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 12 }}
                 >
-                  ← Back
+                  {t("common.back")}
                 </button>
                 <div style={{ display: "inline-block", fontSize: 12, padding: "4px 12px", borderRadius: 100, background: colors.primarySoft, color: colors.primary }}>
-                  Step 2 of 2
+                  {t("pp.step2")}
                 </div>
               </div>
 
               <h1 style={{ fontSize: 36, fontWeight: 500, lineHeight: 1.15, letterSpacing: "-1px", marginBottom: "0.5rem" }}>
-                Top matched <em style={{ fontStyle: "normal", color: colors.primary }}>freelancers</em>
+                {t("pp.step2.title")}
               </h1>
               <p style={{ fontSize: 15, color: colors.subtext, marginBottom: "2rem", lineHeight: 1.6 }}>
                 {matchLoading
-                  ? "Running AI matching engine..."
+                  ? t("pp.ai.running")
                   : matches.length > 0
                     ? <><strong style={{ color: colors.text }}>{matches.length}</strong> matches for "{analysisResult?.label || title}" in <strong style={{ color: colors.primary }}>{matchLatency.toFixed(0)}ms</strong></>
                     : "We ran your project through our matching engine."}
@@ -585,8 +589,8 @@ const PostProjectPage: React.FC = () => {
               {matchLoading && (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "3rem 0", gap: 16 }}>
                   <div style={{ color: colors.primary }}>{SPINNER}</div>
-                  <div style={{ fontSize: 14, color: colors.subtext }}>Scoring freelancer profiles against your project...</div>
-                  <div style={{ fontSize: 12, color: colors.subtext, opacity: 0.6 }}>TF-IDF similarity · skill overlap · GitHub quality · activity</div>
+                  <div style={{ fontSize: 14, color: colors.subtext }}>{t("pp.ai.scoring")}</div>
+                  <div style={{ fontSize: 12, color: colors.subtext, opacity: 0.6 }}>{t("pp.ai.algo")}</div>
                 </div>
               )}
 
@@ -605,9 +609,9 @@ const PostProjectPage: React.FC = () => {
               {!matchLoading && !matchError && matches.length === 0 && (
                 <div style={{ textAlign: "center", padding: "3rem 0", color: colors.subtext }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
-                  <div style={{ fontSize: 16, fontWeight: 500, color: colors.text, marginBottom: 6 }}>No matches yet</div>
+                  <div style={{ fontSize: 16, fontWeight: 500, color: colors.text, marginBottom: 6 }}>{t("pp.ai.noMatches")}</div>
                   <div style={{ fontSize: 13, maxWidth: 360, margin: "0 auto", lineHeight: 1.6 }}>
-                    No freelancers have connected their GitHub profiles yet. Matches will appear once freelancers set up their profiles.
+                    {t("pp.ai.noGithub")}
                   </div>
                 </div>
               )}
@@ -634,7 +638,7 @@ const PostProjectPage: React.FC = () => {
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                             <span style={{ fontSize: 15, fontWeight: 500, color: colors.text }}>{f.name}</span>
                             {i === 0 && (
-                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: colors.primary, color: "#fff", fontWeight: 600 }}>BEST MATCH</span>
+                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: colors.primary, color: "#fff", fontWeight: 600 }}>{t("pp.match.best")}</span>
                             )}
                             {f.classifier_weight < 0.3 && f.matched_on && (
                               <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "rgba(168, 85, 247, 0.1)", color: colors.primary, fontWeight: 500 }}>
@@ -671,7 +675,7 @@ const PostProjectPage: React.FC = () => {
                           </div>
                           {invitedIds.has(f.freelancer_id) ? (
                             <div style={{ fontSize: 11, color: "#22c55e", fontWeight: 500, padding: "5px 10px", borderRadius: 6, background: "rgba(34,197,94,.1)", border: "1px solid rgba(34,197,94,.25)" }}>
-                              ✓ Invited
+                              {t("pp.match.invited")}
                             </div>
                           ) : (
                             <button
@@ -680,7 +684,7 @@ const PostProjectPage: React.FC = () => {
                               onMouseEnter={(e) => { e.currentTarget.style.background = colors.primarySoft; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                             >
-                              + Invite
+                              {t("pp.match.invite")}
                             </button>
                           )}
                         </div>
@@ -702,7 +706,7 @@ const PostProjectPage: React.FC = () => {
                   disabled={isSaving}
                   style={{ background: isSaving ? colors.border : colors.primary, color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.7 : 1 }}
                 >
-                  {isSaving ? "Saving..." : invitedIds.size > 0 ? `Save & Send ${invitedIds.size} Invite${invitedIds.size > 1 ? "s" : ""}` : "Save & Post to Marketplace"}
+                  {isSaving ? t("pp.saving") : invitedIds.size > 0 ? t("pp.saveInvite", { n: invitedIds.size }) : t("pp.save")}
                 </button>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import apiClient from "../api/client";
 import { logout } from "../shared/api";
 import UpgradeNowSection from "../components/UpgradeNowSection";
+import { useLanguage, LangToggle } from "../shared/LanguageContext";
 
 // ─── API Types (matching backend schema exactly) ──────────────────────────────
 
@@ -127,6 +128,7 @@ const API_BASE_CLIENT = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://l
 const authHdr = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
 
 const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
+  const { t } = useLanguage();
   const [open, setOpen]     = React.useState(false);
   const [notifs, setNotifs] = React.useState<AppNotif[]>([]);
   const [unread, setUnread] = React.useState(0);
@@ -197,12 +199,12 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
       {open && (
         <div style={{ position: "absolute", right: 0, top: 38, width: 300, background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, zIndex: 300, boxShadow: "0 8px 30px rgba(0,0,0,.2)", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderBottom: `0.5px solid ${c.border}` }}>
-            <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Notifications</span>
-            <span onClick={markAllRead} style={{ fontSize: 11, color: c.primary, cursor: "pointer" }}>Mark all read</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{t("common.notifications")}</span>
+            <span onClick={markAllRead} style={{ fontSize: 11, color: c.primary, cursor: "pointer" }}>{t("common.markAllRead")}</span>
           </div>
           <div style={{ maxHeight: 320, overflowY: "auto" }}>
             {notifs.length === 0 ? (
-              <div style={{ padding: "28px 16px", textAlign: "center", color: c.subtext, fontSize: 12 }}>No notifications yet</div>
+              <div style={{ padding: "28px 16px", textAlign: "center", color: c.subtext, fontSize: 12 }}>{t("common.noNotifs")}</div>
             ) : notifs.map(n => (
               <div key={n.notification_id} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: `0.5px solid ${c.border}`, background: n.is_read ? "transparent" : c.primarySoft + "60" }}>
                 <div style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{NOTIF_ICON[n.type] ?? "🔔"}</div>
@@ -2074,6 +2076,8 @@ const ClientWorkspaceView: React.FC<{
 
 const ClientDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { t, isRTL } = useLanguage();
+  const fontFamily = isRTL ? "'Cairo', sans-serif" : "sans-serif";
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const s = localStorage.getItem("skilllink-darkMode");
@@ -2224,7 +2228,7 @@ const ClientDashboard: React.FC = () => {
   const isLoading = loadingProjects || loadingContracts;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif", fontSize: 13 }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: c.bg, color: c.text, fontFamily, fontSize: 13 }} dir={isRTL ? "rtl" : "ltr"}>
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
@@ -2236,11 +2240,12 @@ const ClientDashboard: React.FC = () => {
           Skill<span style={{ color: c.primary }}>Link</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <LangToggle style={{ color: c.text }} />
           <button
             onClick={() => navigate("/post-project")}
             style={{ background: c.primary, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", marginRight: 8 }}
           >
-            + Post Project
+            {t("cl.postProject")}
           </button>
           <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
             {darkMode ? "☀️" : "🌙"}
@@ -2257,24 +2262,24 @@ const ClientDashboard: React.FC = () => {
               <div style={{ position: "absolute", right: 0, top: 36, background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "6px 0", minWidth: 180, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,.15)" }}>
                 <div style={{ padding: "6px 14px 8px", borderBottom: `0.5px solid ${c.border}`, marginBottom: 4 }}>
                   <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{companyName}</div>
-                  <div style={{ fontSize: 11, color: c.subtext }}>Client</div>
+                  <div style={{ fontSize: 11, color: c.subtext }}>{t("reg.role.client")}</div>
                 </div>
                 <a href="/settings/client" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: c.text, textDecoration: "none" }}
                   onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  ⚙️ Profile & Settings
+                  ⚙️ {t("common.settings")}
                 </a>
                 <a href="/settings/mfa" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: c.text, textDecoration: "none" }}
                   onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  🔐 Two-factor auth
+                  🔐 {t("common.mfa")}
                 </a>
                 <div
                   onClick={() => { localStorage.clear(); window.location.href = "/login"; }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: "#ef4444", cursor: "pointer" }}
                   onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  → Sign out
+                  {isRTL ? "←" : "→"} {t("common.signOut")}
                 </div>
               </div>
             )}
@@ -2286,17 +2291,17 @@ const ClientDashboard: React.FC = () => {
 
         {/* ── Sidebar ── */}
         <aside style={{ width: 200, borderRight: `0.5px solid ${c.border}`, background: c.surface, display: "flex", flexDirection: "column", padding: "16px 0", flexShrink: 0 }}>
-          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Main</div>
-          <NavItem label="Dashboard"       active={activeView === "Dashboard"}       onClick={() => setActiveView("Dashboard")}       icon={<IconGrid />}   colors={c} />
-          <NavItem label="Company Profile" active={activeView === "Company Profile"} onClick={() => setActiveView("Company Profile")} icon={<IconUser />}   colors={c} />
-          <NavItem label="Messages"        badge={unreadCount} icon={<IconMsg />}    colors={c} onClick={() => navigate("/messages")} />
-          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Hiring</div>
-          <NavItem label="Find Talent"    badge="New" active={activeView === "Find Talent"}    onClick={() => setActiveView("Find Talent")}    icon={<IconSearch />} colors={c} />
-          <NavItem label="Proposals"  badge={proposals.filter(p => p.status === "pending").length || undefined} active={activeView === "Proposals"} onClick={() => setActiveView("Proposals")} icon={<IconProp />} colors={c} />
-          <NavItem label="Invitations"                active={activeView === "Invitations"}     onClick={() => setActiveView("Invitations")}     icon={<IconMsg />}    colors={c} />
-          <NavItem label="Active Projects"            active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />}       colors={c} />
-          <NavItem label="Workspace" badge={contracts.filter((ct: Contract) => ct.status === "active").length || undefined} active={activeView === "Workspace"} onClick={() => setActiveView("Workspace")} icon={<IconBriefcase />} colors={c} />
-          <NavItem label="Invoices"                   active={activeView === "Invoices"}        onClick={() => setActiveView("Invoices")}        icon={<IconInv />}        colors={c} />
+          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>{t("fl.section.main")}</div>
+          <NavItem label={t("common.dashboard")}       active={activeView === "Dashboard"}       onClick={() => setActiveView("Dashboard")}       icon={<IconGrid />}   colors={c} />
+          <NavItem label={t("cl.nav.companyProfile")}  active={activeView === "Company Profile"} onClick={() => setActiveView("Company Profile")} icon={<IconUser />}   colors={c} />
+          <NavItem label={t("common.messages")}        badge={unreadCount} icon={<IconMsg />}    colors={c} onClick={() => navigate("/messages")} />
+          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>{t("cl.section.hiring")}</div>
+          <NavItem label={t("cl.nav.findTalent")}    badge="New" active={activeView === "Find Talent"}    onClick={() => setActiveView("Find Talent")}    icon={<IconSearch />} colors={c} />
+          <NavItem label={t("common.proposals")}  badge={proposals.filter(p => p.status === "pending").length || undefined} active={activeView === "Proposals"} onClick={() => setActiveView("Proposals")} icon={<IconProp />} colors={c} />
+          <NavItem label={t("cl.nav.invitations")}                active={activeView === "Invitations"}     onClick={() => setActiveView("Invitations")}     icon={<IconMsg />}    colors={c} />
+          <NavItem label={t("cl.nav.activeProjects")}             active={activeView === "Active Projects"} onClick={() => setActiveView("Active Projects")} icon={<IconClip />}       colors={c} />
+          <NavItem label={t("cl.nav.workspace")} badge={contracts.filter((ct: Contract) => ct.status === "active").length || undefined} active={activeView === "Workspace"} onClick={() => setActiveView("Workspace")} icon={<IconBriefcase />} colors={c} />
+          <NavItem label={t("cl.nav.invoices")}                   active={activeView === "Invoices"}        onClick={() => setActiveView("Invoices")}        icon={<IconInv />}        colors={c} />
 
           {/* Upgrade banner */}
           <div style={{ margin: "10px 12px 0" }}>
@@ -2307,16 +2312,16 @@ const ClientDashboard: React.FC = () => {
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
             >
               <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#7eb3f8", marginBottom: 4 }}>⭐ Premium</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 4 }}>Upgrade Now</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 4 }}>{t("cl.upgradeNow")}</div>
               <div style={{ fontSize: 10, color: "#7eb3f8", lineHeight: 1.4 }}>Post unlimited jobs, AI talent matching & more.</div>
               <div style={{ marginTop: 8, fontSize: 10, fontWeight: 600, color: "#3b82f6", background: "rgba(59,130,246,.15)", borderRadius: 6, padding: "4px 8px", display: "inline-block" }}>
-                View Plans →
+                {t("cl.viewPlans")}
               </div>
             </div>
           </div>
 
           <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
-            <div onClick={toggleTheme} style={{ fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Switch theme</div>
+            <div onClick={toggleTheme} style={{ fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>{t("cl.switchTheme")}</div>
           </div>
         </aside>
 
@@ -2335,18 +2340,18 @@ const ClientDashboard: React.FC = () => {
                   </div>
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 600, color: c.text, letterSpacing: "-0.3px" }}>
-                      {loadingProfile ? <Skeleton w={160} h={16} /> : `Welcome back, ${companyName}`}
+                      {loadingProfile ? <Skeleton w={160} h={16} /> : t("cl.welcome", { name: companyName })}
                     </div>
-                    <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Client · AI-assisted hiring dashboard</div>
+                    <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>{t("reg.role.client")} · AI-assisted hiring dashboard</div>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
                   {([
-                    { label: "Projects", val: String(stats.totalProjects), color: c.text },
-                    { label: "Active",   val: String(activeContracts),     color: "#22c55e" },
-                    { label: "Hired",    val: String(stats.totalHired),    color: c.primary },
-                    { label: "Spent",    val: fmt(stats.totalSpent),       color: "#f59e0b" },
-                  ] as const).map(s => (
+                    { label: t("cl.stat.projects"), val: String(stats.totalProjects), color: c.text },
+                    { label: t("cl.stat.active"),   val: String(activeContracts),     color: "#22c55e" },
+                    { label: t("cl.stat.hired"),     val: String(stats.totalHired),    color: c.primary },
+                    { label: t("cl.stat.spent"),     val: fmt(stats.totalSpent),       color: "#f59e0b" },
+                  ]).map(s => (
                     <div key={s.label} style={{ textAlign: "center" }}>
                       <div style={{ fontSize: 20, fontWeight: 700, color: isLoading ? c.subtext : s.color, lineHeight: 1 }}>{isLoading ? "…" : s.val}</div>
                       <div style={{ fontSize: 10, color: c.subtext, letterSpacing: ".05em", textTransform: "uppercase", marginTop: 4 }}>{s.label}</div>

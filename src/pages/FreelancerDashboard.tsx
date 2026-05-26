@@ -7,6 +7,7 @@ import { Skeleton, SkeletonCard, SkeletonMetric } from "../components/ui/Skeleto
 import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { API_BASE_URL, getAuthHeaders, logout } from "../shared/api";
 import UpgradeNowSection from "../components/UpgradeNowSection";
+import { useLanguage, LangToggle } from "../shared/LanguageContext";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -1114,6 +1115,8 @@ const FreelancerDashboard: React.FC = () => {
   const [walletLoading, setWalletLoading] = useState(false);
   const [inviteCount, setInviteCount] = useState(0);
   const c = getColors(darkMode);
+  const { t, isRTL } = useLanguage();
+  const fontFamily = isRTL ? "'Cairo', sans-serif" : "sans-serif";
 
   const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
   const displayName = user?.email ?? "…";
@@ -1191,13 +1194,14 @@ const FreelancerDashboard: React.FC = () => {
 
   return (
     <ErrorBoundary>
-      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif", fontSize: 13 }}>
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: c.bg, color: c.text, fontFamily, fontSize: 13 }} dir={isRTL ? "rtl" : "ltr"}>
 
         {/* ── Top Bar ── */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface }}>
           <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Skill<span style={{ color: c.primary }}>Link</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
+            <LangToggle style={{ color: c.text }} />
+            <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily }}>
               {darkMode ? "☀️" : "🌙"}
             </button>
             <NotificationBell c={c} />
@@ -1209,12 +1213,12 @@ const FreelancerDashboard: React.FC = () => {
                 <div style={{ position: "absolute", right: 0, top: 36, background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "6px 0", minWidth: 180, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,.15)" }}>
                   <div style={{ padding: "6px 14px 8px", borderBottom: `0.5px solid ${c.border}`, marginBottom: 4 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{displayName}</div>
-                    <div style={{ fontSize: 11, color: c.subtext }}>Freelancer</div>
+                    <div style={{ fontSize: 11, color: c.subtext }}>{t("reg.role.freelancer")}</div>
                   </div>
                   {[
-                    { href: "/settings",     label: "⚙️ Settings" },
-                    { href: "/settings/mfa", label: "🔐 Two-factor auth" },
-                    { href: "/github/review",label: "🐙 Update GitHub" },
+                    { href: "/settings",     label: `⚙️ ${t("common.settings")}` },
+                    { href: "/settings/mfa", label: `🔐 ${t("common.mfa")}` },
+                    { href: "/github/review",label: `🐙 ${t("fl.nav.updateGithub")}` },
                   ].map(({ href, label }) => (
                     <a key={href} href={href} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: c.text, textDecoration: "none" }}
                       onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
@@ -1225,7 +1229,7 @@ const FreelancerDashboard: React.FC = () => {
                     style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: "#ef4444", cursor: "pointer" }}
                     onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                  >→ Sign out</div>
+                  >{isRTL ? "←" : "→"} {t("common.signOut")}</div>
                 </div>
               )}
             </div>
@@ -1237,18 +1241,18 @@ const FreelancerDashboard: React.FC = () => {
 
           {/* ── Sidebar ── */}
           <aside style={{ width: 200, borderRight: `0.5px solid ${c.border}`, background: c.surface, display: "flex", flexDirection: "column", padding: "16px 0", flexShrink: 0 }}>
-            <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Main</div>
-            <NavItem label="Dashboard" active={activeView === "Dashboard"} icon={<IconGrid />} colors={c} onClick={() => setActiveView("Dashboard")} />
-            <NavItem label="Profile"   icon={<IconUser />} colors={c} onClick={() => navigate("/settings")} />
-            <NavItem label="Messages"  badge={unreadCount} icon={<IconMsg />} colors={c} onClick={() => navigate("/messages")} />
-            <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Skillink</div>
-            <NavItem label="Proposals"   icon={<IconDoc />}    colors={c} onClick={() => navigate("/proposals")} />
-            <NavItem label="Invitations" active={activeView === "Invitations"} badge={inviteCount > 0 ? inviteCount : undefined} icon={<IconTeam />} colors={c} onClick={() => setActiveView("Invitations")} />
-            <NavItem label="AI Matches"   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
+            <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>{t("fl.section.main")}</div>
+            <NavItem label={t("common.dashboard")} active={activeView === "Dashboard"} icon={<IconGrid />} colors={c} onClick={() => setActiveView("Dashboard")} />
+            <NavItem label={t("common.profile")}   icon={<IconUser />} colors={c} onClick={() => navigate("/settings")} />
+            <NavItem label={t("common.messages")}  badge={unreadCount} icon={<IconMsg />} colors={c} onClick={() => navigate("/messages")} />
+            <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>{t("fl.section.skilllink")}</div>
+            <NavItem label={t("common.proposals")}   icon={<IconDoc />}    colors={c} onClick={() => navigate("/proposals")} />
+            <NavItem label={t("fl.inv.title")} active={activeView === "Invitations"} badge={inviteCount > 0 ? inviteCount : undefined} icon={<IconTeam />} colors={c} onClick={() => setActiveView("Invitations")} />
+            <NavItem label={t("fl.nav.aiMatches")}   badge="New" active={activeView === "AI Matches"} icon={<IconBulb />} colors={c} onClick={() => setActiveView("AI Matches")} />
             <NavItem label="Launchpad"    badge="🚀" icon={<IconRocket />} colors={c} onClick={() => navigate("/launchpad")} />
             <NavItem label="Skill Growth" badge="📈" icon={<IconChart />}  colors={c} onClick={() => navigate("/skill-growth")} />
-            <NavItem label="Verification" active={activeView === "Verification"} icon={<IconShield />} colors={c} onClick={() => setActiveView("Verification")} />
-            <NavItem label="Workrooms" active={activeView === "Workrooms"} icon={<IconTeam />} colors={c} onClick={() => setActiveView("Workrooms")} />
+            <NavItem label={t("common.verification")} active={activeView === "Verification"} icon={<IconShield />} colors={c} onClick={() => setActiveView("Verification")} />
+            <NavItem label={t("fl.nav.workrooms")} active={activeView === "Workrooms"} icon={<IconTeam />} colors={c} onClick={() => setActiveView("Workrooms")} />
             {/* ── Upgrade Banner ── */}
             <div style={{ margin: "10px 12px 0" }}>
               <div
@@ -1265,15 +1269,15 @@ const FreelancerDashboard: React.FC = () => {
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
               >
                 <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#c4b5fd", marginBottom: 4 }}>⭐ Premium</div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 4 }}>Upgrade Now</div>
-                <div style={{ fontSize: 10, color: "#c4b5fd", lineHeight: 1.4 }}>Unlimited proposals, AI scoring & more.</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 4 }}>{t("fl.nav.upgradeNow")}</div>
+                <div style={{ fontSize: 10, color: "#c4b5fd", lineHeight: 1.4 }}>{t("land.plan.pro.f1")}, {t("land.plan.pro.f3")} & more.</div>
                 <div style={{ marginTop: 8, fontSize: 10, fontWeight: 600, color: "#7F77DD", background: "rgba(127,119,221,0.2)", borderRadius: 6, padding: "4px 8px", display: "inline-block" }}>
-                  View Plans →
+                  {t("fl.nav.viewPlans")}
                 </div>
               </div>
             </div>
             <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
-              <NavItem label="Settings" icon={<IconSettings />} colors={c} onClick={() => navigate("/settings")} />
+              <NavItem label={t("common.settings")} icon={<IconSettings />} colors={c} onClick={() => navigate("/settings")} />
             </div>
           </aside>
 
@@ -1321,14 +1325,14 @@ const FreelancerDashboard: React.FC = () => {
                       {/* Inline stats row */}
                       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
                         {([
-                          { label: "GitHub Score", val: ghProfile?.github_score ? `${ghProfile.github_score}/100` : "—", color: c.primary },
-                          { label: "Hourly Rate",  val: profile?.hourly_rate ? `$${profile.hourly_rate}/hr` : "—",       color: "#22c55e" },
-                          { label: "Wallet",       val: `$${profile?.wallet_balance?.toFixed(2) ?? "0.00"}`,              color: "#f59e0b" },
-                          { label: "Skills",       val: String(profile?.skills?.length ?? 0),                             color: c.text },
+                          { label: t("fl.metric.ghScore"), val: ghProfile?.github_score ? `${ghProfile.github_score}/100` : "—", color: c.primary },
+                          { label: t("fl.metric.rate"),    val: profile?.hourly_rate ? `$${profile.hourly_rate}/hr` : "—",       color: "#22c55e" },
+                          { label: t("fl.metric.wallet"),  val: `$${profile?.wallet_balance?.toFixed(2) ?? "0.00"}`,              color: "#f59e0b" },
+                          { label: t("fl.match.skills"),   val: String(profile?.skills?.length ?? 0),                             color: c.text },
                           ...(proposalStats ? [
-                            { label: "Sent",       val: String(proposalStats.sent),                  color: c.text },
-                            { label: "Accepted",   val: String(proposalStats.accepted),              color: "#22c55e" },
-                            { label: "Response",   val: `${proposalStats.response_rate}%`,           color: "#f59e0b" },
+                            { label: t("fl.recentProposals").split(" ")[0], val: String(proposalStats.sent),     color: c.text },
+                            { label: t("contracts.active"),                  val: String(proposalStats.accepted), color: "#22c55e" },
+                            { label: "Response",                             val: `${proposalStats.response_rate}%`, color: "#f59e0b" },
                           ] : []),
                         ] as { label: string; val: string; color: string }[]).map(s => (
                           <div key={s.label}>
@@ -1340,8 +1344,8 @@ const FreelancerDashboard: React.FC = () => {
                     </div>
                     {/* Action buttons */}
                     <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                      <button onClick={openWallet} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, cursor: "pointer", fontFamily: "inherit" }}>Wallet →</button>
-                      <button onClick={() => navigate("/settings")} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, background: c.primary, border: "none", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>Edit Profile</button>
+                      <button onClick={openWallet} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, cursor: "pointer", fontFamily }}>{t("fl.metric.wallet")} {isRTL ? "←" : "→"}</button>
+                      <button onClick={() => navigate("/settings")} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, background: c.primary, border: "none", color: "#fff", cursor: "pointer", fontFamily, fontWeight: 500 }}>{t("common.edit")} {t("common.profile")}</button>
                     </div>
                   </div>
                   {/* Skills strip */}
@@ -1464,7 +1468,7 @@ const FreelancerDashboard: React.FC = () => {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 18, padding: 28, width: 420, maxWidth: "92vw", maxHeight: "80vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: c.text }}>Wallet</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: c.text }}>{t("fl.metric.wallet")}</div>
               <button onClick={() => setShowWallet(false)} style={{ background: "none", border: "none", color: c.subtext, fontSize: 18, cursor: "pointer" }}>✕</button>
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "#22c55e", marginBottom: 4 }}>${profile?.wallet_balance?.toFixed(2) ?? "0.00"}</div>

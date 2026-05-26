@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { API_BASE_URL, getAuthHeaders } from "../shared/api";
+import { useLanguage, LangToggle } from "../shared/LanguageContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -179,6 +180,9 @@ const IconBell    = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const AdminDashboard: React.FC = () => {
+  const { t, isRTL } = useLanguage();
+  const fontFamily = isRTL ? "'Cairo', sans-serif" : "sans-serif";
+
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
@@ -744,7 +748,7 @@ const AdminDashboard: React.FC = () => {
   const tdStyle: React.CSSProperties = { padding: "9px 8px", fontSize: 12, color: c.text, borderBottom: `0.5px solid ${c.border}` };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif", fontSize: 13 }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: c.bg, color: c.text, fontFamily, fontSize: 13 }} dir={isRTL ? "rtl" : "ltr"}>
 
       {/* ── Top Bar ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface }}>
@@ -753,6 +757,7 @@ const AdminDashboard: React.FC = () => {
           <span style={{ fontSize: 10, color: c.subtext, marginLeft: 8, letterSpacing: ".08em" }}>ADMIN</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <LangToggle style={{ color: c.text }} />
           <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
             {darkMode ? "☀️" : "🌙"}
           </button>
@@ -772,7 +777,7 @@ const AdminDashboard: React.FC = () => {
                   onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
-                  🔐 Two-factor auth
+                  🔐 {t("common.mfa")}
                 </a>
                 <div
                   onClick={() => { localStorage.clear(); window.location.href = "/login"; }}
@@ -780,7 +785,7 @@ const AdminDashboard: React.FC = () => {
                   onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
-                  → Sign out
+                  {isRTL ? "←" : "→"} {t("common.signOut")}
                 </div>
               </div>
             )}
@@ -792,25 +797,25 @@ const AdminDashboard: React.FC = () => {
 
         {/* ── Sidebar ── */}
         <aside style={{ width: 200, borderRight: `0.5px solid ${c.border}`, background: c.surface, display: "flex", flexDirection: "column", padding: "16px 0", flexShrink: 0 }}>
-          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Platform</div>
-          <NavItem label="Overview" active={activeTab === "Overview"} onClick={() => setActiveTab("Overview")} icon={<IconGrid />} colors={c} />
-          <NavItem label="Users" active={activeTab === "Users"} onClick={() => setActiveTab("Users")} badge={stats ? stats.total_users : undefined} icon={<IconUsers />} colors={c} />
-          <NavItem label="Roles" active={activeTab === "Roles"} onClick={() => setActiveTab("Roles")} icon={<IconKey />} colors={c} />
-          <NavItem label="Projects" active={activeTab === "Projects"} onClick={() => setActiveTab("Projects")} badge={stats ? stats.total_projects : undefined} icon={<IconClip />} colors={c} />
-          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>AI Systems</div>
-          <NavItem label="Match Engine" active={activeTab === "Match Engine"} onClick={() => setActiveTab("Match Engine")} icon={<IconBulb />} colors={c} />
-          <NavItem label="Vetting Gate" active={activeTab === "Vetting Gate"} onClick={() => setActiveTab("Vetting Gate")} badge={verifications.length} icon={<IconShield />} colors={c} />
-          <NavItem label="Audit Logs" active={activeTab === "Audit Logs"} onClick={() => setActiveTab("Audit Logs")} icon={<IconList />} colors={c} />
-          <NavItem label="Analytics" active={activeTab === "Analytics"} onClick={() => setActiveTab("Analytics")} icon={<IconChart />} colors={c} />
-          <NavItem label="AI Config" active={activeTab === "AI Config"} onClick={() => setActiveTab("AI Config")} icon={<IconCog />} colors={c} />
-          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>Finance</div>
-          <NavItem label="Revenue" active={activeTab === "Revenue"} onClick={() => setActiveTab("Revenue")} icon={<IconDollar />} colors={c} />
-          <NavItem label="Disputes" active={activeTab === "Disputes"} onClick={() => setActiveTab("Disputes")} badge={disputes.length} icon={<IconAlert />} colors={c} />
-          <NavItem label="Overrides" active={activeTab === "Overrides"} onClick={() => setActiveTab("Overrides")} icon={<IconSwitch />} colors={c} />
-          <NavItem label="Alerts" active={activeTab === "Alerts"} onClick={() => setActiveTab("Alerts")} badge={alertsData?.counts?.total || undefined} icon={<IconBell />} colors={c} />
+          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>{t("adm.section.platform")}</div>
+          <NavItem label={t("adm.nav.overview")} active={activeTab === "Overview"} onClick={() => setActiveTab("Overview")} icon={<IconGrid />} colors={c} />
+          <NavItem label={t("adm.nav.users")} active={activeTab === "Users"} onClick={() => setActiveTab("Users")} badge={stats ? stats.total_users : undefined} icon={<IconUsers />} colors={c} />
+          <NavItem label={t("adm.nav.roles")} active={activeTab === "Roles"} onClick={() => setActiveTab("Roles")} icon={<IconKey />} colors={c} />
+          <NavItem label={t("adm.nav.projects")} active={activeTab === "Projects"} onClick={() => setActiveTab("Projects")} badge={stats ? stats.total_projects : undefined} icon={<IconClip />} colors={c} />
+          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>{t("adm.section.ai")}</div>
+          <NavItem label={t("adm.nav.matchEngine")} active={activeTab === "Match Engine"} onClick={() => setActiveTab("Match Engine")} icon={<IconBulb />} colors={c} />
+          <NavItem label={t("adm.nav.vettingGate")} active={activeTab === "Vetting Gate"} onClick={() => setActiveTab("Vetting Gate")} badge={verifications.length} icon={<IconShield />} colors={c} />
+          <NavItem label={t("adm.nav.auditLogs")} active={activeTab === "Audit Logs"} onClick={() => setActiveTab("Audit Logs")} icon={<IconList />} colors={c} />
+          <NavItem label={t("adm.nav.analytics")} active={activeTab === "Analytics"} onClick={() => setActiveTab("Analytics")} icon={<IconChart />} colors={c} />
+          <NavItem label={t("adm.nav.aiConfig")} active={activeTab === "AI Config"} onClick={() => setActiveTab("AI Config")} icon={<IconCog />} colors={c} />
+          <div style={{ fontSize: 9, letterSpacing: ".12em", color: c.subtext, padding: "12px 16px 4px", opacity: .6, textTransform: "uppercase" }}>{t("adm.section.finance")}</div>
+          <NavItem label={t("adm.nav.revenue")} active={activeTab === "Revenue"} onClick={() => setActiveTab("Revenue")} icon={<IconDollar />} colors={c} />
+          <NavItem label={t("adm.nav.disputes")} active={activeTab === "Disputes"} onClick={() => setActiveTab("Disputes")} badge={disputes.length} icon={<IconAlert />} colors={c} />
+          <NavItem label={t("adm.nav.overrides")} active={activeTab === "Overrides"} onClick={() => setActiveTab("Overrides")} icon={<IconSwitch />} colors={c} />
+          <NavItem label={t("adm.nav.alerts")} active={activeTab === "Alerts"} onClick={() => setActiveTab("Alerts")} badge={alertsData?.counts?.total || undefined} icon={<IconBell />} colors={c} />
           <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
-            <div onClick={toggleTheme} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Switch theme</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>Contact us</div>
+            <div onClick={toggleTheme} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>{t("adm.switchTheme")}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>{t("adm.contactUs")}</div>
           </div>
         </aside>
 
