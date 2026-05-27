@@ -2379,7 +2379,7 @@ def get_ml_prediction_logs(
 
 @router.post("/ml/hotswap", summary="Hot-swap a retrained model version into production")
 def ml_hotswap(
-    body:  dict       = Body(..., example={"version": 1}),
+    body:  dict       = Body(..., examples=[{"version": 1}]),
     admin: models.User = Depends(require_admin),
 ):
     import httpx as _httpx
@@ -2394,7 +2394,7 @@ def ml_hotswap(
 
 @router.post("/ml/ab/start", summary="Start an A/B experiment (original vs retrained version)")
 def ml_ab_start(
-    body:  dict        = Body(..., example={"name": "v1-vs-original", "treatment_version": 1, "traffic_split": 0.5}),
+    body:  dict        = Body(..., examples=[{"name": "v1-vs-original", "treatment_version": 1, "traffic_split": 0.5}]),
     db:    Session     = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ):
