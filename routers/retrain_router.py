@@ -43,7 +43,7 @@ class HotswapRequest(BaseModel):
 
 
 class ABStartRequest(BaseModel):
-    name:              str   = Field(..., example="v1-vs-original")
+    name:              str   = Field(..., examples=["v1-vs-original"])
     treatment_version: int   = Field(..., ge=1, description="Retrained version to test")
     traffic_split:     float = Field(0.5, ge=0.0, le=1.0, description="Fraction of traffic to treatment")
 

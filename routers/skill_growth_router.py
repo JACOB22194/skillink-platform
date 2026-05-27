@@ -32,7 +32,7 @@ class SkillGrowthRequest(BaseModel):
     freelancer_id:  int
     skills:         List[str]      = Field(
                         default_factory=list,
-                        example=["Python", "SQL", "React", "Pandas"]
+                        examples=[["Python", "SQL", "React", "Pandas"]]
                     )
     top_n_courses:  Optional[int]  = Field(5, ge=1, le=10)
 

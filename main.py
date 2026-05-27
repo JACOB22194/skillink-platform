@@ -51,9 +51,9 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
 # ── Request / Response models ─────────────────────────────────────────────────
 
 class PredictRequest(BaseModel):
-    title:         str           = Field(..., example="Logo Design for Tech Startup")
-    description:   str           = Field(..., example="I need a clean modern logo.")
-    category_hint: Optional[str] = Field(None, example="Design")
+    title:         str           = Field(..., examples=["Logo Design for Tech Startup"])
+    description:   str           = Field(..., examples=["I need a clean modern logo."])
+    category_hint: Optional[str] = Field(None, examples=["Design"])
     top_k:         int           = Field(5, ge=1, le=20)
 
 class Alternative(BaseModel):
@@ -69,11 +69,11 @@ class PredictResponse(BaseModel):
     model_variant:    Optional[str] = None   # ML-06: "control" | "treatment" | None
 
 class GitHubRequest(BaseModel):
-    url: str = Field(..., example="https://github.com/torvalds")
+    url: str = Field(..., examples=["https://github.com/torvalds"])
 
 class OptimizeBioRequest(BaseModel):
-    bio: str = Field("", example="I am a developer.")
-    skills: list[str] = Field([], example=["Python", "React"])
+    bio: str = Field("", examples=["I am a developer."])
+    skills: list[str] = Field([], examples=[["Python", "React"]])
 
 class OptimizeBioResponse(BaseModel):
     optimized_bio: str

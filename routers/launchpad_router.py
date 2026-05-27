@@ -34,12 +34,12 @@ router = APIRouter(prefix="/launchpad", tags=["AI Launchpad"])
 class LaunchpadRequest(BaseModel):
     freelancer_id:      int
     skills:             List[str]        = Field(default_factory=list,
-                                                  example=["python", "fastapi", "sql"])
+                                                  examples=[["python", "fastapi", "sql"]])
     years_experience:   float            = Field(0.0, ge=0.0, le=50.0,
-                                                  example=0.5)
+                                                  examples=[0.5])
     completed_projects: int              = Field(0, ge=0,
-                                                  example=0)
-    bio:                Optional[str]    = Field("", example="Junior developer looking for first project.")
+                                                  examples=[0])
+    bio:                Optional[str]    = Field("", examples=["Junior developer looking for first project."])
 
 
 # ── Response schemas ──────────────────────────────────────────────────────────
