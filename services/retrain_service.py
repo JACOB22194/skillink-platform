@@ -10,9 +10,12 @@ Versioned artifacts are saved under:
     skillink_model/version_history.json  — all version metadata
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -33,8 +36,18 @@ MODEL_DIR    = Path("/app/skillink_model")
 VERSIONS_DIR = MODEL_DIR / "versions"
 VERSION_FILE = MODEL_DIR / "version_history.json"
 
-MIN_SAMPLES  = 30
-INTERNAL_KEY = os.environ.get("INTERNAL_SECRET", "skillink-retrain-internal-2024")
+MIN_SAMPLES      = 30
+INTERNAL_SECRET  = os.environ.get("INTERNAL_SECRET", "skillink-retrain-internal-2024")
+
+
+def _sign_request(method: str, path: str) -> dict:
+    """Return X-Timestamp + X-Signature headers for an internal API call."""
+    timestamp = str(int(time.time()))
+    message   = f"{timestamp}:{method}:{path}"
+    signature = hmac.new(
+        INTERNAL_SECRET.encode(), message.encode(), hashlib.sha256
+    ).hexdigest()
+    return {"X-Timestamp": timestamp, "X-Signature": signature}
 
 _status: dict = {
     "running":     False,
@@ -107,10 +120,11 @@ def _save_history(h: dict) -> None:
 
 
 def _fetch_from_backend(backend_url: str) -> list[dict]:
+    path = "/internal/ml/training-data"
     with httpx.Client(timeout=60) as c:
         r = c.get(
-            f"{backend_url}/internal/ml/training-data",
-            headers={"x-internal-key": INTERNAL_KEY},
+            f"{backend_url}{path}",
+            headers=_sign_request("GET", path),
         )
         r.raise_for_status()
     return r.json().get("projects", [])

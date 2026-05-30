@@ -15,37 +15,62 @@ from routers.pricing_router import router as pricing_router
 _MODELS: dict = {}
 
 # ── Load model artefacts once at startup ─────────────────────────────────────
-MODEL_DIR = Path("./skillink_model")
+import logging as _startup_log
 
-LR_SUB     = joblib.load(MODEL_DIR / "lr_sub.joblib")
-LR_CAT     = joblib.load(MODEL_DIR / "lr_cat.joblib")
-SVC_SUB    = joblib.load(MODEL_DIR / "svc_sub.joblib")
-TFIDF      = joblib.load(MODEL_DIR / "tfidf.joblib")
-OHE        = joblib.load(MODEL_DIR / "ohe.joblib")
-LE_CAT_OHE = joblib.load(MODEL_DIR / "le_cat_ohe.joblib")
-LE_CAT     = joblib.load(MODEL_DIR / "le_cat.joblib")
-LE_SUB     = joblib.load(MODEL_DIR / "le_sub.joblib")
+MODEL_DIR     = Path("./skillink_model")
+_MODELS_READY = False
+_STARTUP_ERROR: str | None = None
 
-with open(MODEL_DIR / "sub_to_cat.json") as f:
-    SUB_TO_CAT = json.load(f)
-with open(MODEL_DIR / "cat_to_subs.json") as f:
-    CAT_TO_SUBS = json.load(f)
-with open(MODEL_DIR / "cat_labels.json") as f:
-    CAT_LABELS = json.load(f)
-with open(MODEL_DIR / "sub_labels.json") as f:
-    SUB_LABELS = json.load(f)
-with open(MODEL_DIR / "filler_pattern.txt") as f:
-    FILLER_RE = re.compile(f.read(), flags=re.IGNORECASE)
-with open(MODEL_DIR / "metadata.json") as f:
-    META = json.load(f)
+try:
+    LR_SUB     = joblib.load(MODEL_DIR / "lr_sub.joblib")
+    LR_CAT     = joblib.load(MODEL_DIR / "lr_cat.joblib")
+    SVC_SUB    = joblib.load(MODEL_DIR / "svc_sub.joblib")
+    TFIDF      = joblib.load(MODEL_DIR / "tfidf.joblib")
+    OHE        = joblib.load(MODEL_DIR / "ohe.joblib")
+    LE_CAT_OHE = joblib.load(MODEL_DIR / "le_cat_ohe.joblib")
+    LE_CAT     = joblib.load(MODEL_DIR / "le_cat.joblib")
+    LE_SUB     = joblib.load(MODEL_DIR / "le_sub.joblib")
+
+    with open(MODEL_DIR / "sub_to_cat.json") as f:
+        SUB_TO_CAT = json.load(f)
+    with open(MODEL_DIR / "cat_to_subs.json") as f:
+        CAT_TO_SUBS = json.load(f)
+    with open(MODEL_DIR / "cat_labels.json") as f:
+        CAT_LABELS = json.load(f)
+    with open(MODEL_DIR / "sub_labels.json") as f:
+        SUB_LABELS = json.load(f)
+    with open(MODEL_DIR / "filler_pattern.txt") as f:
+        FILLER_RE = re.compile(f.read(), flags=re.IGNORECASE)
+    with open(MODEL_DIR / "metadata.json") as f:
+        META = json.load(f)
+
+    _MODELS_READY = True
+    _startup_log.info("✅ All model artefacts loaded successfully.")
+except Exception as _load_err:
+    _STARTUP_ERROR = str(_load_err)
+    _startup_log.error("❌ Failed to load model artefacts: %s", _load_err)
+    # Safe defaults so the module can be imported without crashing;
+    # /health will report 503 until artefacts are present.
+    LR_SUB = LR_CAT = SVC_SUB = TFIDF = OHE = LE_CAT_OHE = LE_CAT = LE_SUB = None
+    SUB_TO_CAT = CAT_TO_SUBS = CAT_LABELS = SUB_LABELS = META = {}
+    FILLER_RE = re.compile(r"$^")  # never matches anything
 
 app = FastAPI(
     title       = "Skillink AI API",
     description = "Job classification + GitHub profile parser",
     version     = "3.0.0",
 )
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_methods=["*"], allow_headers=["*"])
+_allowed_origins = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins = _allowed_origins,
+    allow_methods = ["*"],
+    allow_headers = ["*"],
+)
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
@@ -196,7 +221,13 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    if not _MODELS_READY:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "error": _STARTUP_ERROR or "models not loaded"},
+        )
+    return {"status": "healthy", "models_loaded": True}
 
 @app.get("/categories")
 def categories():
@@ -248,10 +279,20 @@ async def classify(req: PredictRequest):
     return PredictResponse(**result)
 
 @app.post("/predict/batch")
-def predict_batch(jobs: list[PredictRequest]):
+async def predict_batch(jobs: list[PredictRequest]):
     if len(jobs) > 100:
         raise HTTPException(status_code=422, detail="max 100 jobs per batch")
-    return [_predict(j.title, j.description, j.category_hint, j.top_k) for j in jobs]
+    results = []
+    for j in jobs:
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(_predict, j.title, j.description, j.category_hint, j.top_k),
+                timeout=_INFERENCE_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=503, detail="Inference timeout: exceeded 5 s limit")
+        results.append(result)
+    return results
 
 
 # ── Bio Optimizer ────────────────────────────────────────────────────────────
