@@ -5,6 +5,7 @@
  */
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLanguage } from "../shared/LanguageContext";
 
 const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
@@ -50,12 +51,6 @@ const T = {
   amberSoft: "#f5a62315",
 };
 
-const statusConfig = {
-  pending:  { color: T.amber,  bg: T.amberSoft,  label: "Pending Review",  dot: "●" },
-  accepted: { color: T.green,  bg: T.greenSoft,  label: "Accepted 🎉",     dot: "●" },
-  rejected: { color: T.red,    bg: T.redSoft,    label: "Not Selected",    dot: "●" },
-};
-
 const timeAgo = (iso: string) => {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (m < 1) return "just now";
@@ -65,10 +60,15 @@ const timeAgo = (iso: string) => {
   return `${Math.floor(h / 24)}d ago`;
 };
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Status Badge ──────────────────────────────────────────────────────────────
 
 const StatusBadge: React.FC<{ s: Proposal["status"] }> = ({ s }) => {
-  const cfg = statusConfig[s];
+  const { t } = useLanguage();
+  const cfg = {
+    pending:  { color: T.amber, bg: T.amberSoft, label: t("prop.status.pending") },
+    accepted: { color: T.green, bg: T.greenSoft,  label: t("prop.status.accepted") + " 🎉" },
+    rejected: { color: T.red,   bg: T.redSoft,    label: t("prop.status.rejected") },
+  }[s];
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 5,
@@ -77,7 +77,7 @@ const StatusBadge: React.FC<{ s: Proposal["status"] }> = ({ s }) => {
       background: cfg.bg, color: cfg.color,
       border: `1px solid ${cfg.color}33`,
     }}>
-      <span style={{ fontSize: 8 }}>{cfg.dot}</span>
+      <span style={{ fontSize: 8 }}>●</span>
       {cfg.label}
     </span>
   );
@@ -94,6 +94,7 @@ const SubmitModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ project, onClose, onSuccess }) => {
+  const { t } = useLanguage();
   const [bid, setBid]         = useState(String(Math.round(project.budget * 0.9)));
   const [letter, setLetter]   = useState("");
   const [loading, setLoading] = useState(false);
@@ -109,7 +110,7 @@ const SubmitModal: React.FC<{
 
   const checkScore = async () => {
     const amount = parseFloat(bid);
-    if (!amount || amount < 1) { setErr("Bid must be at least $1"); return; }
+    if (!amount || amount < 1) { setErr(t("prop.submit.rate")); return; }
     setChecking(true); setScoreErr("");
     try {
       const r = await fetch(`${API}/proposals/score-draft`, {
@@ -152,21 +153,20 @@ const SubmitModal: React.FC<{
     <div style={{ position: "fixed", inset: 0, background: "#000000cc", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20, overflowY: "auto" }}>
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 32, width: "100%", maxWidth: 540, position: "relative", margin: "auto" }}>
 
-        {/* Header */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>Submit Proposal</div>
+          <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>{t("prop.submit.title")}</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>{project.title}</div>
-          <div style={{ fontSize: 12, color: T.sub, marginTop: 4 }}>Budget: ${project.budget.toLocaleString()}</div>
+          <div style={{ fontSize: 12, color: T.sub, marginTop: 4 }}>{t("prop.budget")}: ${project.budget.toLocaleString()}</div>
         </div>
 
         {/* AI Gate explanation */}
         <div style={{ background: T.accentSoft, border: `1px solid ${T.accent}33`, borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: T.accent, lineHeight: 1.5 }}>
-          AI Comprehension Gate — Your proposal must score ≥ 40% relevance before it can be submitted. Write a specific cover letter explaining your approach to this project.
+          {t("prop.submit.ai")}
         </div>
 
         {/* Bid */}
         <label style={{ display: "block", marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Your Bid Amount (USD)</div>
+          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>{t("prop.submit.rate")} (USD)</div>
           <div style={{ position: "relative" }}>
             <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: T.sub, fontSize: 14 }}>$</span>
             <input
@@ -181,14 +181,14 @@ const SubmitModal: React.FC<{
         {/* Cover Letter */}
         <label style={{ display: "block", marginBottom: 12 }}>
           <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>
-            Cover Letter
-            <span style={{ color: T.accent, marginLeft: 6, fontSize: 10, textTransform: "none" }}>* required for AI gate</span>
+            {t("prop.submit.cover")}
+            <span style={{ color: T.accent, marginLeft: 6, fontSize: 10, textTransform: "none" }}>* {t("prop.submit.ai")}</span>
           </div>
           <textarea
             value={letter}
             onChange={e => setLetter(e.target.value)}
             rows={5}
-            placeholder="Explain your approach, relevant experience, and why you're the best fit for this specific project…"
+            placeholder={t("prop.submit.cover")}
             style={{ width: "100%", background: T.surface, border: `1px solid ${scoreStale ? T.amber : T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box", transition: "border-color .2s" }}
           />
         </label>
@@ -199,18 +199,16 @@ const SubmitModal: React.FC<{
           disabled={checking}
           style={{ width: "100%", padding: "11px", marginBottom: 14, background: T.accentSoft, border: `1px solid ${T.accent}55`, borderRadius: 10, color: T.accent, fontWeight: 600, cursor: checking ? "not-allowed" : "pointer", fontSize: 13, opacity: checking ? 0.7 : 1 }}
         >
-          {checking ? "Analyzing proposal…" : (scoreResult && !scoreStale) ? "Re-check AI Score →" : "Check AI Relevance Score →"}
+          {checking ? t("prop.submit.gen") : t("prop.submit.ai")}
         </button>
 
-        {/* Score Error */}
         {scoreErr && (
           <div style={{ background: T.redSoft, border: `1px solid ${T.red}33`, borderRadius: 8, padding: "10px 14px", color: T.red, fontSize: 13, marginBottom: 14 }}>{scoreErr}</div>
         )}
 
-        {/* Stale warning */}
         {scoreStale && (
           <div style={{ fontSize: 12, color: T.amber, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
-            ⚠ You've edited your proposal — re-check your AI score before submitting.
+            ⚠ {t("prop.submit.ai")}
           </div>
         )}
 
@@ -218,27 +216,25 @@ const SubmitModal: React.FC<{
         {scoreResult && !scoreStale && (
           <div style={{ background: T.surface, border: `1px solid ${scoreColor}55`, borderRadius: 12, padding: "16px 18px", marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>AI Relevance Score</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{t("clprop.aiScore")}</span>
               <span style={{ fontSize: 24, fontWeight: 700, color: scoreColor }}>{pct}%</span>
             </div>
 
-            {/* Score bar */}
             <div style={{ position: "relative", height: 8, background: T.border, borderRadius: 100, marginBottom: 6, overflow: "visible" }}>
               <div style={{ height: "100%", width: `${pct}%`, background: scoreColor, borderRadius: 100, transition: "width .5s" }} />
-              {/* Threshold marker at 40% */}
               <div style={{ position: "absolute", left: "40%", top: -4, height: 16, width: 2, background: T.amber, borderRadius: 1 }} />
             </div>
             <div style={{ fontSize: 10, color: T.sub, marginBottom: 10 }}>
-              Minimum threshold: <span style={{ color: T.amber }}>40%</span>
+              {t("prop.submit.ai")} <span style={{ color: T.amber }}>40%</span>
             </div>
 
             {scoreResult.passes ? (
               <div style={{ fontSize: 12, color: T.green, fontWeight: 600 }}>
-                ✓ Proposal meets the relevance threshold — you may submit.
+                ✓ {t("prop.submit.btn")}
               </div>
             ) : (
               <div style={{ fontSize: 12, color: T.red }}>
-                ✗ Score is below 40%. Improve your cover letter by explaining how your skills address the specific project requirements, then re-check.
+                ✗ {t("prop.submit.ai")}
               </div>
             )}
 
@@ -254,12 +250,11 @@ const SubmitModal: React.FC<{
 
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 13 }}>
-            Cancel
+            {t("prop.withdraw.no")}
           </button>
           <button
             onClick={submit}
             disabled={!canSubmit || loading}
-            title={!scoreResult ? "Check AI score first" : !scoreResult.passes ? "Improve your proposal to meet the 40% threshold" : scoreStale ? "Re-check AI score after editing" : ""}
             style={{
               flex: 2, padding: "12px",
               background: canSubmit ? T.accent : T.border,
@@ -268,7 +263,7 @@ const SubmitModal: React.FC<{
               fontSize: 14, opacity: loading ? 0.7 : 1, transition: "background .3s",
             }}
           >
-            {loading ? "Submitting…" : "Submit Proposal →"}
+            {loading ? t("prop.submit.gen") : t("prop.submit.btn")}
           </button>
         </div>
       </div>
@@ -283,6 +278,7 @@ const EditModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ proposal, onClose, onSuccess }) => {
+  const { t } = useLanguage();
   const [bid, setBid]       = useState(String(proposal.bid_amount));
   const [letter, setLetter] = useState(proposal.cover_letter ?? "");
   const [loading, setLoading] = useState(false);
@@ -290,7 +286,7 @@ const EditModal: React.FC<{
 
   const submit = async () => {
     const amount = parseFloat(bid);
-    if (!amount || amount < 1) { setErr("Bid must be at least $1"); return; }
+    if (!amount || amount < 1) { setErr(t("prop.submit.rate")); return; }
     setLoading(true); setErr("");
     try {
       const r = await fetch(`${API}/proposals/${proposal.proposal_id}`, {
@@ -307,11 +303,11 @@ const EditModal: React.FC<{
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000000cc", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 32, width: "100%", maxWidth: 520 }}>
-        <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>Edit Proposal</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 20 }}>Update Your Bid</div>
+        <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>{t("prop.edit.title")}</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 20 }}>{t("prop.edit.save")}</div>
 
         <label style={{ display: "block", marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Your Bid Amount (USD)</div>
+          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>{t("prop.submit.rate")} (USD)</div>
           <div style={{ position: "relative" }}>
             <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: T.sub, fontSize: 14 }}>$</span>
             <input type="number" value={bid} onChange={e => setBid(e.target.value)} min={1}
@@ -320,7 +316,7 @@ const EditModal: React.FC<{
         </label>
 
         <label style={{ display: "block", marginBottom: 20 }}>
-          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Cover Letter <span style={{ color: T.border }}>(optional)</span></div>
+          <div style={{ fontSize: 11, color: T.sub, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>{t("prop.submit.cover")}</div>
           <textarea value={letter} onChange={e => setLetter(e.target.value)} rows={5}
             style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box" }} />
         </label>
@@ -328,9 +324,9 @@ const EditModal: React.FC<{
         {err && <div style={{ background: T.redSoft, border: `1px solid ${T.red}33`, borderRadius: 8, padding: "10px 14px", color: T.red, fontSize: 13, marginBottom: 16 }}>{err}</div>}
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 13 }}>{t("prop.withdraw.no")}</button>
           <button onClick={submit} disabled={loading} style={{ flex: 2, padding: "12px", background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, opacity: loading ? 0.7 : 1 }}>
-            {loading ? "Saving…" : "Save Changes"}
+            {loading ? t("prop.submit.gen") : t("prop.edit.save")}
           </button>
         </div>
       </div>
@@ -341,6 +337,7 @@ const EditModal: React.FC<{
 // ── Withdraw Confirm ──────────────────────────────────────────────────────────
 
 const WithdrawConfirm: React.FC<{ id: number; onClose: () => void; onDone: () => void }> = ({ id, onClose, onDone }) => {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const go = async () => {
     setLoading(true);
@@ -351,12 +348,12 @@ const WithdrawConfirm: React.FC<{ id: number; onClose: () => void; onDone: () =>
     <div style={{ position: "fixed", inset: 0, background: "#000000cc", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 28, maxWidth: 380, width: "90%", textAlign: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 8 }}>Withdraw Proposal?</div>
-        <div style={{ fontSize: 13, color: T.sub, marginBottom: 24 }}>This action cannot be undone. Your proposal will be permanently removed.</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 8 }}>{t("prop.withdraw.title")}</div>
+        <div style={{ fontSize: 13, color: T.sub, marginBottom: 24 }}>{t("prop.withdraw.msg")}</div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: 12, background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer" }}>Keep It</button>
+          <button onClick={onClose} style={{ flex: 1, padding: 12, background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer" }}>{t("prop.withdraw.no")}</button>
           <button onClick={go} disabled={loading} style={{ flex: 1, padding: 12, background: T.red, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, cursor: "pointer" }}>
-            {loading ? "…" : "Withdraw"}
+            {loading ? "…" : t("prop.withdraw.yes")}
           </button>
         </div>
       </div>
@@ -368,6 +365,7 @@ const WithdrawConfirm: React.FC<{ id: number; onClose: () => void; onDone: () =>
 
 export const ProposalsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t, isRTL } = useLanguage();
   const [searchParams] = useSearchParams();
   const [proposals, setProposals]       = useState<Proposal[]>([]);
   const [openProjects, setOpenProjects] = useState<Project[]>([]);
@@ -410,9 +408,7 @@ export const ProposalsPage: React.FC = () => {
 
   useEffect(() => { fetchMyProposals(); }, [fetchMyProposals]);
   useEffect(() => { if (tab === "browse") fetchOpenProjects(); }, [tab, fetchOpenProjects]);
-  useEffect(() => {
-    if (applyProjectId) { setTab("browse"); }
-  }, [applyProjectId]);
+  useEffect(() => { if (applyProjectId) { setTab("browse"); } }, [applyProjectId]);
   useEffect(() => {
     if (applyProjectId && openProjects.length > 0 && !submitFor) {
       const p = openProjects.find((x: Project) => x.project_id === applyProjectId);
@@ -428,7 +424,7 @@ export const ProposalsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'DM Sans', sans-serif" }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'DM Sans', sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap'); input,textarea { font-family: inherit; } button { font-family: inherit; } *{box-sizing:border-box}`}</style>
 
       {/* Toast */}
@@ -440,194 +436,193 @@ export const ProposalsPage: React.FC = () => {
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px" }}>
 
-      {/* Back */}
-      <button onClick={() => navigate(-1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginBottom: 28, padding: 0 }}>
-        ← Back to Dashboard
-      </button>
+        {/* Back */}
+        <button onClick={() => navigate(-1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginBottom: 28, padding: 0 }}>
+          {isRTL ? "→" : "←"} {t("common.dashboard")}
+        </button>
 
-      {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, background: `linear-gradient(135deg, ${T.text}, ${T.accent})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>My Proposals</h1>
-        <p style={{ color: T.sub, margin: "6px 0 0", fontSize: 14 }}>Track your bids and find new opportunities</p>
-      </div>
-
-      {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
-        {[
-          { label: "Total", value: stats.total, color: T.text },
-          { label: "Pending", value: stats.pending, color: T.amber },
-          { label: "Accepted", value: stats.accepted, color: T.green },
-          { label: "Rejected", value: stats.rejected, color: T.red },
-        ].map(s => (
-          <div key={s.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px" }}>
-            <div style={{ fontSize: 10, color: T.sub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>{s.label}</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 2, background: T.surface, borderRadius: 12, padding: 4, marginBottom: 24, border: `1px solid ${T.border}` }}>
-        {(["my", "browse"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "9px 16px", borderRadius: 9, border: "none", background: tab === t ? T.accent : "transparent", color: tab === t ? "#fff" : T.sub, fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all .2s" }}>
-            {t === "my" ? `My Proposals (${stats.total})` : "Browse Open Projects"}
-          </button>
-        ))}
-      </div>
-
-      {/* My Proposals Tab */}
-      {tab === "my" && (
-        <div>
-          {loading ? (
-            <div style={{ textAlign: "center", padding: 60, color: T.sub }}>Loading proposals…</div>
-          ) : proposals.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 60, background: T.surface, borderRadius: 16, border: `1px solid ${T.border}` }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>No proposals yet</div>
-              <div style={{ fontSize: 13, color: T.sub, marginBottom: 20 }}>Browse open projects and submit your first bid</div>
-              <button onClick={() => setTab("browse")} style={{ padding: "10px 24px", background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 600, cursor: "pointer" }}>Browse Projects →</button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {proposals.map(p => (
-                <div key={p.proposal_id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22, display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 12, color: T.sub, marginBottom: 4 }}>Project #{p.project_id} · {timeAgo(p.created_at)}</div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: T.text }}>
-                        ${p.bid_amount.toLocaleString()}
-                        <span style={{ fontSize: 12, color: T.sub, fontWeight: 400, marginLeft: 6 }}>bid</span>
-                      </div>
-                    </div>
-                    <StatusBadge s={p.status} />
-                  </div>
-
-                  {p.cover_letter && (
-                    <div style={{ background: T.surface, borderRadius: 10, padding: "12px 14px", fontSize: 13, color: T.sub, lineHeight: 1.6, borderLeft: `3px solid ${T.accent}` }}>
-                      {p.cover_letter}
-                    </div>
-                  )}
-
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    {p.ai_relevance_score != null && (
-                      <span style={{ fontSize: 11, color: T.accent, background: T.accentSoft, padding: "3px 10px", borderRadius: 100 }}>
-                        AI Score: {Math.round(p.ai_relevance_score * 100)}%
-                      </span>
-                    )}
-                    {p.status === "accepted" && (
-                      <button onClick={() => navigate(`/contracts`)} style={{ padding: "6px 14px", background: T.greenSoft, border: `1px solid ${T.green}44`, borderRadius: 8, color: T.green, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                        View Contract →
-                      </button>
-                    )}
-                    {p.status === "pending" && (
-                      <>
-                        <button onClick={() => setEditProposal(p)} style={{ padding: "6px 14px", background: "transparent", border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontSize: 11, cursor: "pointer" }}>
-                          Edit
-                        </button>
-                        <button onClick={() => setWithdrawId(p.proposal_id)} style={{ marginLeft: "auto", padding: "6px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 8, color: T.red, fontSize: 11, cursor: "pointer" }}>
-                          Withdraw
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Header */}
+        <div style={{ marginBottom: 32 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, background: `linear-gradient(135deg, ${T.text}, ${T.accent})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{t("prop.title")}</h1>
+          <p style={{ color: T.sub, margin: "6px 0 0", fontSize: 14 }}>{t("prop.hint")}</p>
         </div>
-      )}
 
-      {/* Browse Projects Tab */}
-      {tab === "browse" && (
-        <div>
-          {/* Filters */}
-          <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-            <input
-              placeholder="Search by title or description…"
-              value={filterText} onChange={e => setFilterText(e.target.value)}
-              style={{ flex: "2 1 200px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", color: T.text, fontSize: 13, outline: "none" }}
-            />
-            <input
-              type="number" placeholder="Min $" value={filterMin} onChange={e => setFilterMin(e.target.value)}
-              style={{ flex: "1 1 80px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontSize: 13, outline: "none" }}
-            />
-            <input
-              type="number" placeholder="Max $" value={filterMax} onChange={e => setFilterMax(e.target.value)}
-              style={{ flex: "1 1 80px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontSize: 13, outline: "none" }}
-            />
-            {(filterText || filterMin || filterMax) && (
-              <button onClick={() => { setFilterText(""); setFilterMin(""); setFilterMax(""); }}
-                style={{ padding: "10px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 12 }}>
-                Clear
-              </button>
+        {/* Stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
+          {[
+            { label: t("contract.st.active").replace("Active", "Total"), value: stats.total, color: T.text },
+            { label: t("prop.status.pending"),  value: stats.pending,  color: T.amber },
+            { label: t("prop.status.accepted"), value: stats.accepted, color: T.green },
+            { label: t("prop.status.rejected"), value: stats.rejected, color: T.red },
+          ].map(s => (
+            <div key={s.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px" }}>
+              <div style={{ fontSize: 10, color: T.sub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>{s.label}</div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 2, background: T.surface, borderRadius: 12, padding: 4, marginBottom: 24, border: `1px solid ${T.border}` }}>
+          {(["my", "browse"] as const).map(tabKey => (
+            <button key={tabKey} onClick={() => setTab(tabKey)} style={{ flex: 1, padding: "9px 16px", borderRadius: 9, border: "none", background: tab === tabKey ? T.accent : "transparent", color: tab === tabKey ? "#fff" : T.sub, fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all .2s" }}>
+              {tabKey === "my" ? `${t("prop.tabs.mine")} (${stats.total})` : t("prop.tabs.browse")}
+            </button>
+          ))}
+        </div>
+
+        {/* My Proposals Tab */}
+        {tab === "my" && (
+          <div>
+            {loading ? (
+              <div style={{ textAlign: "center", padding: 60, color: T.sub }}>{t("clprop.loading")}</div>
+            ) : proposals.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 60, background: T.surface, borderRadius: 16, border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>{t("prop.noProposals")}</div>
+                <div style={{ fontSize: 13, color: T.sub, marginBottom: 20 }}>{t("prop.hint")}</div>
+                <button onClick={() => setTab("browse")} style={{ padding: "10px 24px", background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 600, cursor: "pointer" }}>{t("prop.tabs.browse")} →</button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {proposals.map(p => (
+                  <div key={p.proposal_id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 12, color: T.sub, marginBottom: 4 }}>Project #{p.project_id} · {timeAgo(p.created_at)}</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: T.text }}>
+                          ${p.bid_amount.toLocaleString()}
+                          <span style={{ fontSize: 12, color: T.sub, fontWeight: 400, marginLeft: 6 }}>{t("prop.submit.rate")}</span>
+                        </div>
+                      </div>
+                      <StatusBadge s={p.status} />
+                    </div>
+
+                    {p.cover_letter && (
+                      <div style={{ background: T.surface, borderRadius: 10, padding: "12px 14px", fontSize: 13, color: T.sub, lineHeight: 1.6, borderLeft: `3px solid ${T.accent}` }}>
+                        {p.cover_letter}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      {p.ai_relevance_score != null && (
+                        <span style={{ fontSize: 11, color: T.accent, background: T.accentSoft, padding: "3px 10px", borderRadius: 100 }}>
+                          {t("clprop.aiScore")}: {Math.round(p.ai_relevance_score * 100)}%
+                        </span>
+                      )}
+                      {p.status === "accepted" && (
+                        <button onClick={() => navigate(`/contracts`)} style={{ padding: "6px 14px", background: T.greenSoft, border: `1px solid ${T.green}44`, borderRadius: 8, color: T.green, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                          {t("contract.st.active")} →
+                        </button>
+                      )}
+                      {p.status === "pending" && (
+                        <>
+                          <button onClick={() => setEditProposal(p)} style={{ padding: "6px 14px", background: "transparent", border: `1px solid ${T.accent}44`, borderRadius: 8, color: T.accent, fontSize: 11, cursor: "pointer" }}>
+                            {t("prop.edit")}
+                          </button>
+                          <button onClick={() => setWithdrawId(p.proposal_id)} style={{ marginLeft: "auto", padding: "6px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 8, color: T.red, fontSize: 11, cursor: "pointer" }}>
+                            {t("prop.withdraw")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
+        )}
 
-          {projLoading ? (
-            <div style={{ textAlign: "center", padding: 60, color: T.sub }}>Finding open projects…</div>
-          ) : openProjects.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 60, background: T.surface, borderRadius: 16, border: `1px solid ${T.border}` }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>No new projects available</div>
-              <div style={{ fontSize: 13, color: T.sub }}>You've already bid on all open projects, or there are none right now.</div>
+        {/* Browse Projects Tab */}
+        {tab === "browse" && (
+          <div>
+            <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+              <input
+                placeholder={t("prop.tabs.browse")}
+                value={filterText} onChange={e => setFilterText(e.target.value)}
+                style={{ flex: "2 1 200px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", color: T.text, fontSize: 13, outline: "none" }}
+              />
+              <input
+                type="number" placeholder="Min $" value={filterMin} onChange={e => setFilterMin(e.target.value)}
+                style={{ flex: "1 1 80px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontSize: 13, outline: "none" }}
+              />
+              <input
+                type="number" placeholder="Max $" value={filterMax} onChange={e => setFilterMax(e.target.value)}
+                style={{ flex: "1 1 80px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontSize: 13, outline: "none" }}
+              />
+              {(filterText || filterMin || filterMax) && (
+                <button onClick={() => { setFilterText(""); setFilterMin(""); setFilterMax(""); }}
+                  style={{ padding: "10px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 12 }}>
+                  {t("common.back").replace("← ", "").replace(" →", "")}
+                </button>
+              )}
             </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {openProjects
-                .filter((p: Project) => !filterText || p.title.toLowerCase().includes(filterText.toLowerCase()) || (p.description ?? "").toLowerCase().includes(filterText.toLowerCase()))
-                .filter((p: Project) => !filterMin || p.budget >= Number(filterMin))
-                .filter((p: Project) => !filterMax || p.budget <= Number(filterMax))
-                .map((proj: Project) => (
-                <div key={proj.project_id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
-                    <div>
-                      {proj.sub_category && (
-                        <span style={{ fontSize: 10, color: T.accent, background: T.accentSoft, padding: "3px 8px", borderRadius: 100, marginBottom: 6, display: "inline-block" }}>{proj.sub_category}</span>
-                      )}
-                      <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginTop: 4 }}>{proj.title}</div>
+
+            {projLoading ? (
+              <div style={{ textAlign: "center", padding: 60, color: T.sub }}>{t("clprop.loading")}</div>
+            ) : openProjects.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 60, background: T.surface, borderRadius: 16, border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>{t("prop.noProjects")}</div>
+                <div style={{ fontSize: 13, color: T.sub }}>{t("prop.hint")}</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {openProjects
+                  .filter((p: Project) => !filterText || p.title.toLowerCase().includes(filterText.toLowerCase()) || (p.description ?? "").toLowerCase().includes(filterText.toLowerCase()))
+                  .filter((p: Project) => !filterMin || p.budget >= Number(filterMin))
+                  .filter((p: Project) => !filterMax || p.budget <= Number(filterMax))
+                  .map((proj: Project) => (
+                  <div key={proj.project_id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
+                      <div>
+                        {proj.sub_category && (
+                          <span style={{ fontSize: 10, color: T.accent, background: T.accentSoft, padding: "3px 8px", borderRadius: 100, marginBottom: 6, display: "inline-block" }}>{proj.sub_category}</span>
+                        )}
+                        <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginTop: 4 }}>{proj.title}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: T.green }}>${proj.budget.toLocaleString()}</div>
+                        <div style={{ fontSize: 10, color: T.sub }}>{t("prop.budget")}</div>
+                      </div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: T.green }}>${proj.budget.toLocaleString()}</div>
-                      <div style={{ fontSize: 10, color: T.sub }}>budget</div>
-                    </div>
+                    {proj.description && (
+                      <div style={{ fontSize: 13, color: T.sub, marginBottom: 14, lineHeight: 1.6 }}>
+                        {proj.description.length > 160 ? proj.description.slice(0, 160) + "…" : proj.description}
+                      </div>
+                    )}
+                    <button onClick={() => setSubmitFor(proj)} style={{ padding: "10px 22px", background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                      {t("prop.apply")}
+                    </button>
                   </div>
-                  {proj.description && (
-                    <div style={{ fontSize: 13, color: T.sub, marginBottom: 14, lineHeight: 1.6 }}>
-                      {proj.description.length > 160 ? proj.description.slice(0, 160) + "…" : proj.description}
-                    </div>
-                  )}
-                  <button onClick={() => setSubmitFor(proj)} style={{ padding: "10px 22px", background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    Submit Proposal
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-      </div>{/* end inner maxWidth wrapper */}
+      </div>
 
       {/* Modals */}
       {submitFor && (
         <SubmitModal
           project={submitFor}
           onClose={() => setSubmitFor(null)}
-          onSuccess={() => { setSubmitFor(null); setTab("my"); fetchMyProposals(); showToast("Proposal sent! The client will review it shortly."); }}
+          onSuccess={() => { setSubmitFor(null); setTab("my"); fetchMyProposals(); showToast(t("prop.submit.btn")); }}
         />
       )}
       {withdrawId !== null && (
         <WithdrawConfirm
           id={withdrawId}
           onClose={() => setWithdrawId(null)}
-          onDone={() => { setWithdrawId(null); fetchMyProposals(); showToast("Proposal withdrawn.", false); }}
+          onDone={() => { setWithdrawId(null); fetchMyProposals(); showToast(t("prop.withdraw.title"), false); }}
         />
       )}
       {editProposal && (
         <EditModal
           proposal={editProposal}
           onClose={() => setEditProposal(null)}
-          onSuccess={() => { setEditProposal(null); fetchMyProposals(); showToast("Proposal updated!"); }}
+          onSuccess={() => { setEditProposal(null); fetchMyProposals(); showToast(t("prop.edit.save")); }}
         />
       )}
     </div>

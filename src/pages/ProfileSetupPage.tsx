@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../shared/useAuth";
+import { useLanguage } from "../shared/LanguageContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -91,6 +92,7 @@ const ScoreBar: React.FC<{ score: number; c: ThemeColors }> = ({ score, c }) => 
 const ProfileSetupPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t, isRTL } = useLanguage();
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
@@ -192,7 +194,7 @@ const ProfileSetupPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, fontFamily: "sans-serif", padding: "2rem", position: "relative" }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, fontFamily: "sans-serif", padding: "2rem", position: "relative" }}>
 
       {/* Theme toggle */}
       <button
@@ -211,12 +213,12 @@ const ProfileSetupPage: React.FC = () => {
 
         {/* Title */}
         <h1 style={{ fontSize: 22, fontWeight: 500, color: c.text, textAlign: "center", margin: "0 0 6px" }}>
-          {step === 1 ? "Set up your profile" : "Review your profile"}
+          {step === 1 ? t("setup.title") : t("setup.review")}
         </h1>
         <p style={{ fontSize: 14, color: c.subtext, textAlign: "center", marginBottom: "2rem" }}>
           {step === 1
-            ? "Import your experience from GitHub so clients can find you."
-            : "AI-generated from your GitHub. Edit anything before saving."}
+            ? t("setup.step1of2")
+            : t("setup.step2of2")}
         </p>
 
         {/* Step indicator */}
@@ -237,7 +239,7 @@ const ProfileSetupPage: React.FC = () => {
         {step === 1 && (
           <div>
             <div style={{ marginBottom: "1.5rem" }}>
-              <label style={labelStyle}>GitHub Profile URL</label>
+              <label style={labelStyle}>{t("setup.github.label")}</label>
               <input
                 type="text"
                 placeholder="https://github.com/username"
@@ -246,9 +248,6 @@ const ProfileSetupPage: React.FC = () => {
                 onKeyDown={(e) => e.key === "Enter" && handleParse()}
                 style={inputBase}
               />
-              <p style={{ fontSize: 12, color: c.subtext, marginTop: 6, marginBottom: 0 }}>
-                We'll read your public repos, skills, and contributions.
-              </p>
             </div>
 
             <button
@@ -256,7 +255,7 @@ const ProfileSetupPage: React.FC = () => {
               disabled={loading}
               style={{ width: "100%", padding: 12, background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1, transition: "opacity .15s" }}
             >
-              {loading ? "Analyzing Profile..." : "Import from GitHub"}
+              {loading ? t("setup.github.analyzing") : t("setup.github.import")}
             </button>
 
             <div style={{ textAlign: "center", marginTop: 16 }}>
@@ -264,7 +263,7 @@ const ProfileSetupPage: React.FC = () => {
                 onClick={() => setStep(2)}
                 style={{ background: "none", border: "none", color: c.subtext, fontSize: 13, cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
               >
-                Skip for now
+                {t("setup.github.skip")}
               </button>
             </div>
           </div>
@@ -277,7 +276,7 @@ const ProfileSetupPage: React.FC = () => {
               <>
                 {/* Import banner */}
                 <div style={{ background: c.primarySoft, border: `0.5px solid ${c.primaryBorder}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: c.primary, marginBottom: "1.25rem" }}>
-                  <strong>AI Analysis Complete!</strong> We found {parsedData.skills.length} skills and generated a bio based on your top repositories. Review and edit them below.
+                  <strong>{t("setup.github.done")}</strong> We found {parsedData.skills.length} skills and generated a bio based on your top repositories.
                 </div>
 
                 <ScoreBar score={parsedData.score} c={c} />
@@ -286,9 +285,9 @@ const ProfileSetupPage: React.FC = () => {
                 {parsedData.github_stats && (
                   <div style={{ display: "flex", gap: 8, marginBottom: "1.25rem" }}>
                     {[
-                      { label: "Repos",     value: parsedData.github_stats.public_repos },
-                      { label: "Stars",     value: parsedData.github_stats.total_stars },
-                      { label: "Followers", value: parsedData.github_stats.followers },
+                      { label: t("ghrev.repos"),     value: parsedData.github_stats.public_repos },
+                      { label: t("ghrev.stars"),     value: parsedData.github_stats.total_stars },
+                      { label: t("ghrev.followers"), value: parsedData.github_stats.followers },
                     ].map(({ label, value }) => (
                       <div key={label} style={{ flex: 1, background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 12px", textAlign: "center" }}>
                         <div style={{ fontSize: 18, fontWeight: 500, color: c.text }}>{value}</div>
@@ -301,7 +300,7 @@ const ProfileSetupPage: React.FC = () => {
                 {/* Suggestions */}
                 {parsedData.suggestions.length > 0 && (
                   <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: "1.25rem" }}>
-                    <div style={{ fontSize: 11, fontWeight: 500, color: c.subtext, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Tips to improve your score</div>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: c.subtext, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{t("setup.github.tips")}</div>
                     {parsedData.suggestions.map((s, i) => (
                       <div key={i} style={{ fontSize: 13, color: c.subtext, marginBottom: 4, display: "flex", gap: 6 }}>
                         <span style={{ color: c.primary }}>·</span> {s}
@@ -314,7 +313,7 @@ const ProfileSetupPage: React.FC = () => {
 
             {/* Bio */}
             <div style={{ marginBottom: "1.25rem" }}>
-              <label style={labelStyle}>Professional Bio</label>
+              <label style={labelStyle}>{t("setup.bio")}</label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
@@ -326,7 +325,7 @@ const ProfileSetupPage: React.FC = () => {
 
             {/* Skills */}
             <div style={{ marginBottom: "1.25rem" }}>
-              <label style={labelStyle}>Skills</label>
+              <label style={labelStyle}>{t("setup.skills")}</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                 {skills.map((s, i) => (
                   <div key={i} style={{ background: c.primarySoft, border: `0.5px solid ${c.primaryBorder}`, padding: "4px 10px", borderRadius: 100, fontSize: 12, color: c.primary, display: "flex", alignItems: "center", gap: 6 }}>
@@ -342,7 +341,7 @@ const ProfileSetupPage: React.FC = () => {
               </div>
               <input
                 type="text"
-                placeholder="Type a skill and press Enter..."
+                placeholder={t("set.profile.addSkill")}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     const val = (e.target as HTMLInputElement).value.trim();
@@ -358,7 +357,7 @@ const ProfileSetupPage: React.FC = () => {
 
             {/* Hourly rate */}
             <div style={{ marginBottom: "2rem" }}>
-              <label style={labelStyle}>Hourly Rate (USD)</label>
+              <label style={labelStyle}>{t("setup.rate")}</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 14, color: c.subtext }}>$</span>
                 <input
@@ -378,14 +377,14 @@ const ProfileSetupPage: React.FC = () => {
                 onClick={() => setStep(1)}
                 style={{ flex: 1, padding: 12, background: "transparent", color: c.text, border: `0.5px solid ${c.border}`, borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}
               >
-                Back
+                {t("setup.back")}
               </button>
               <button
                 onClick={handleSave}
                 disabled={loading}
                 style={{ flex: 2, padding: 12, background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1, transition: "opacity .15s" }}
               >
-                {loading ? "Saving..." : "Save Profile & Continue"}
+                {loading ? t("setup.saving") : t("setup.save")}
               </button>
             </div>
           </div>

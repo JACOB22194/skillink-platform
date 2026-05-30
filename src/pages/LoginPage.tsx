@@ -369,6 +369,7 @@ const LoginPage: React.FC = () => {
                 style={inputStyle} type="email" name="email"
                 placeholder="you@example.com" value={form.email}
                 onChange={handleChange} autoComplete="email"
+                aria-required="true"
               />
             </div>
 
@@ -379,9 +380,11 @@ const LoginPage: React.FC = () => {
                   style={{ ...inputStyle, paddingRight: 44 }} type={showPassword ? "text" : "password"}
                   name="password" placeholder="••••••••" value={form.password}
                   onChange={handleChange} autoComplete="current-password"
+                  aria-required="true"
                 />
                 <button
                   onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: c.subtext, fontSize: 14, padding: 0 }}
                 >
                   {showPassword ? "🙈" : "👁️"}

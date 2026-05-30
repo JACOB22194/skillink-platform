@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { API_BASE_URL, getAuthHeaders } from "../shared/api";
 import type { AvailabilityStatus } from "../api/types";
+import { useLanguage } from "../shared/LanguageContext";
 
 interface ThemeColors {
   bg: string;
@@ -49,6 +50,7 @@ interface ParsedGitHub {
 }
 
 const ProfileSettingsPage: React.FC = () => {
+  const { t, isRTL } = useLanguage();
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
@@ -70,6 +72,7 @@ const ProfileSettingsPage: React.FC = () => {
   const [saveError, setSaveError]     = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [optimizeMsg, setOptimizeMsg] = useState("");
+  const [optimizeError, setOptimizeError] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -128,6 +131,7 @@ const ProfileSettingsPage: React.FC = () => {
     if (!bio.trim() && skills.length === 0) return;
     setOptimizing(true);
     setOptimizeMsg("");
+    setOptimizeError(false);
     try {
       const res = await fetch(`${API_BASE_URL}/ai/optimize-bio`, {
         method: "POST",
@@ -137,9 +141,10 @@ const ProfileSettingsPage: React.FC = () => {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setBio(data.optimized_bio);
-      setOptimizeMsg("Bio optimized — review and save when ready.");
+      setOptimizeMsg(t("set.profile.bioOptimized"));
     } catch {
-      setOptimizeMsg("Could not reach AI service. Try again.");
+      setOptimizeMsg(t("set.profile.bioOptErr"));
+      setOptimizeError(true);
     } finally {
       setOptimizing(false);
     }
@@ -193,7 +198,7 @@ const ProfileSettingsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif", fontSize: 13 }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif", fontSize: 13 }}>
 
       {/* Top bar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface }}>
@@ -212,14 +217,14 @@ const ProfileSettingsPage: React.FC = () => {
 
         {/* Breadcrumb + title */}
         <div style={{ marginBottom: 24 }}>
-          <a href="/dashboard/freelancer" style={{ fontSize: 12, color: c.subtext, textDecoration: "none" }}>← Back to Dashboard</a>
-          <div style={{ fontSize: 20, fontWeight: 500, marginTop: 8, color: c.text }}>Profile Settings</div>
-          <div style={{ fontSize: 12, color: c.subtext, marginTop: 4 }}>Import from GitHub or edit manually, then save.</div>
+          <a href="/dashboard/freelancer" style={{ fontSize: 12, color: c.subtext, textDecoration: "none" }}>{isRTL ? "→" : "←"} {t("common.back").replace("← ", "").replace(" →", "")}</a>
+          <div style={{ fontSize: 20, fontWeight: 500, marginTop: 8, color: c.text }}>{t("pset.title")}</div>
+          <div style={{ fontSize: 12, color: c.subtext, marginTop: 4 }}>{t("pset.subtitle")}</div>
         </div>
 
         {/* ── GitHub import ── */}
         <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 12 }}>Import from GitHub</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 12 }}>{t("pset.github.import")}</div>
           <div style={{ display: "flex", gap: 10 }}>
             <input
               type="text"
@@ -234,7 +239,7 @@ const ProfileSettingsPage: React.FC = () => {
               disabled={parsing || !githubUrl.trim()}
               style={{ padding: "9px 18px", borderRadius: 8, background: c.primary, color: "#fff", border: "none", cursor: parsing ? "not-allowed" : "pointer", fontSize: 13, fontFamily: "inherit", opacity: parsing ? 0.7 : 1 }}
             >
-              {parsing ? "Parsing…" : "Parse"}
+              {parsing ? t("pset.github.parsing") : t("pset.github.parse")}
             </button>
           </div>
           {parseError && <div style={{ marginTop: 10, fontSize: 12, color: "#ef4444" }}>{parseError}</div>}
@@ -308,16 +313,16 @@ const ProfileSettingsPage: React.FC = () => {
 
         {/* ── Editable profile fields ── */}
         <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 18 }}>Profile Details</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 18 }}>{t("pset.details")}</div>
 
           {/* Availability Status */}
           <div style={{ marginBottom: 18 }}>
-            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 8 }}>Availability Status</label>
+            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 8 }}>{t("pset.avail")}</label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {([
-                { value: "available",   label: "Available",   color: "#16a34a", bg: "#dcfce7" },
-                { value: "busy",        label: "Busy",        color: "#b45309", bg: "#fef3c7" },
-                { value: "unavailable", label: "Unavailable", color: "#6b7280", bg: "#f3f4f6" },
+                { value: "available",   label: t("set.profile.avail.avail"), color: "#16a34a", bg: "#dcfce7" },
+                { value: "busy",        label: t("set.profile.avail.busy"),  color: "#b45309", bg: "#fef3c7" },
+                { value: "unavailable", label: t("set.profile.avail.none"),  color: "#6b7280", bg: "#f3f4f6" },
               ] as { value: AvailabilityStatus; label: string; color: string; bg: string }[]).map(({ value, label, color, bg }) => (
                 <button
                   key={value}
@@ -339,7 +344,7 @@ const ProfileSettingsPage: React.FC = () => {
           {/* Bio */}
           <div style={{ marginBottom: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-              <label style={{ fontSize: 11, color: c.subtext }}>Bio / Summary</label>
+              <label style={{ fontSize: 11, color: c.subtext }}>{t("pset.bio")}</label>
               <button
                 onClick={handleOptimizeBio}
                 disabled={optimizing}
@@ -350,7 +355,7 @@ const ProfileSettingsPage: React.FC = () => {
                   opacity: optimizing ? 0.6 : 1,
                 }}
               >
-                {optimizing ? "Optimizing…" : "✦ Optimize Bio"}
+                {optimizing ? t("pset.optimizing") : t("pset.optimize")}
               </button>
             </div>
             <textarea
@@ -360,7 +365,7 @@ const ProfileSettingsPage: React.FC = () => {
               style={{ ...input, width: "100%", resize: "vertical", boxSizing: "border-box" }}
             />
             {optimizeMsg && (
-              <div style={{ marginTop: 6, fontSize: 11, color: optimizeMsg.includes("Could not") ? "#ef4444" : "#16a34a" }}>
+              <div style={{ marginTop: 6, fontSize: 11, color: optimizeError ? "#ef4444" : "#16a34a" }}>
                 {optimizeMsg}
               </div>
             )}
@@ -368,7 +373,7 @@ const ProfileSettingsPage: React.FC = () => {
 
           {/* Hourly rate */}
           <div style={{ marginBottom: 18 }}>
-            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 6 }}>Hourly Rate (USD)</label>
+            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 6 }}>{t("pset.rate")}</label>
             <input
               type="number"
               min="0"
@@ -382,7 +387,7 @@ const ProfileSettingsPage: React.FC = () => {
 
           {/* Skills */}
           <div>
-            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 8 }}>Skills</label>
+            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 8 }}>{t("pset.skills")}</label>
             {skills.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                 {skills.map(skill => (
@@ -396,7 +401,7 @@ const ProfileSettingsPage: React.FC = () => {
             <div style={{ display: "flex", gap: 8 }}>
               <input
                 type="text"
-                placeholder="Add a skill…"
+                placeholder={t("pset.addSkill")}
                 value={skillInput}
                 onChange={e => setSkillInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && addSkill()}
@@ -406,7 +411,7 @@ const ProfileSettingsPage: React.FC = () => {
                 onClick={addSkill}
                 style={{ padding: "9px 14px", borderRadius: 8, background: c.bg, color: c.text, border: `0.5px solid ${c.border}`, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}
               >
-                Add
+                {t("pset.add")}
               </button>
             </div>
           </div>
@@ -419,9 +424,9 @@ const ProfileSettingsPage: React.FC = () => {
             disabled={saving}
             style={{ padding: "10px 26px", borderRadius: 8, background: c.primary, color: "#fff", border: "none", cursor: saving ? "not-allowed" : "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 500, opacity: saving ? 0.7 : 1 }}
           >
-            {saving ? "Saving…" : "Save Profile"}
+            {saving ? t("set.profile.saving") : t("pset.save")}
           </button>
-          {saveSuccess && <span style={{ fontSize: 12, color: "#22c55e" }}>✓ Saved</span>}
+          {saveSuccess && <span style={{ fontSize: 12, color: "#22c55e" }}>{t("pset.saved")}</span>}
           {saveError  && <span style={{ fontSize: 12, color: "#ef4444" }}>{saveError}</span>}
         </div>
 

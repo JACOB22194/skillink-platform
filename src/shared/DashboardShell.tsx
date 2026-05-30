@@ -73,9 +73,13 @@ const DashboardShell: React.FC<Props> = ({ email, title, subtitle, children }) =
 
       {/* ── Navbar ── */}
       <nav style={s.nav}>
-        <div style={s.logo} onClick={() => navigate("/")} role="button" tabIndex={0}>
+        <button
+          style={{ ...s.logo, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+          onClick={() => navigate("/")}
+          aria-label="SkillLink home"
+        >
           Skill<span style={s.logoAccent}>Link</span>
-        </div>
+        </button>
         <div style={s.navRight}>
           {email && <span style={s.navEmail}>{email}</span>}
           <button

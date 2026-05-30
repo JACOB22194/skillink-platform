@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { API_BASE_URL, getAuthHeaders } from "../shared/api";
+import { API_BASE_URL, getAuthHeaders, logout } from "../shared/api";
 import { useLanguage, LangToggle } from "../shared/LanguageContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -247,6 +247,10 @@ const AdminDashboard: React.FC = () => {
   // ADM-08: Alerts
   const [alertsData, setAlertsData] = useState<any>(null);
   const [alertFilters, setAlertFilters] = useState({ severity: "", component: "" });
+  const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
+  const [expiringUsers, setExpiringUsers] = useState<any[]>([]);
+  const [subActionMsg, setSubActionMsg] = useState<{ [uid: number]: string }>({});
+  const [subActionLoading, setSubActionLoading] = useState<{ [uid: number]: string }>({});
   // ADM-01: Create User
   const [createUserModal, setCreateUserModal] = useState(false);
   const [createUserForm, setCreateUserForm] = useState({ email: "", password: "", role: "freelancer", company_name: "" });
@@ -266,42 +270,31 @@ const AdminDashboard: React.FC = () => {
   const c = getColors(darkMode);
 
   const fetchOverviewData = () => {
-    fetch(`${API_BASE_URL}/admin/stats`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data && typeof data.total_users === "number") setStats(data); })
-      .catch(() => {});
-    fetch(`${API_BASE_URL}/admin/users?limit=5`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (Array.isArray(data)) setRecentUsers(data); })
-      .catch(() => {});
-    fetch(`${API_BASE_URL}/admin/logs?limit=3`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (Array.isArray(data)) setSystemLogs(data); })
-      .catch(() => {});
-    fetch(`${API_BASE_URL}/admin/contracts?limit=4`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (Array.isArray(data)) setContracts(data); })
-      .catch(() => {});
-    fetch(`${API_BASE_URL}/admin/projects?limit=10`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (Array.isArray(data)) setProjects(data); })
-      .catch(() => {});
-    fetch(`${API_BASE_URL}/admin/ai-metrics`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data && typeof data.match_engine_accuracy === "number") setAiMetrics(data); })
-      .catch(() => {});
-    fetch(`${API_BASE_URL}/health/detailed`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
+    const token = localStorage.getItem("access_token");
+    if (!token) { logout(); return; }
+    const hdrs = { headers: { Authorization: `Bearer ${token}` } };
+    const safeGet = (url: string) =>
+      fetch(url, hdrs).then(res => { if (res.status === 401) { logout(); return null; } return res.ok ? res.json() : null; }).catch(() => null);
+
+    safeGet(`${API_BASE_URL}/admin/stats`)
+      .then(data => { if (data && typeof data.total_users === "number") setStats(data); });
+    safeGet(`${API_BASE_URL}/admin/users?limit=5`)
+      .then(data => { if (Array.isArray(data)) setRecentUsers(data); });
+    safeGet(`${API_BASE_URL}/admin/logs?limit=3`)
+      .then(data => { if (Array.isArray(data)) setSystemLogs(data); });
+    safeGet(`${API_BASE_URL}/admin/contracts?limit=4`)
+      .then(data => { if (Array.isArray(data)) setContracts(data); });
+    safeGet(`${API_BASE_URL}/admin/projects?limit=10`)
+      .then(data => { if (Array.isArray(data)) setProjects(data); });
+    safeGet(`${API_BASE_URL}/admin/ai-metrics`)
+      .then(data => { if (data && typeof data.match_engine_accuracy === "number") setAiMetrics(data); });
+    safeGet(`${API_BASE_URL}/health/detailed`)
       .then(data => { if (data && typeof data.status === "string") setHealthData(data); })
       .catch(() => {});
-    fetch(`${API_BASE_URL}/admin/system-health`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data && typeof data.uptime_seconds === "number") setSystemHealth(data); })
-      .catch(() => {});
-    fetch(`${API_BASE_URL}/admin/verifications`, getAuthHeaders())
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (Array.isArray(data)) setVerifications(data); })
-      .catch(() => {});
+    safeGet(`${API_BASE_URL}/admin/system-health`)
+      .then(data => { if (data && typeof data.uptime_seconds === "number") setSystemHealth(data); });
+    safeGet(`${API_BASE_URL}/admin/verifications`)
+      .then(data => { if (Array.isArray(data)) setVerifications(data); });
     setLastRefreshed(new Date());
   };
 
@@ -334,6 +327,28 @@ const AdminDashboard: React.FC = () => {
     if (filters.component) p.set("component", filters.component);
     fetch(`${API_BASE_URL}/admin/alerts?${p}`, getAuthHeaders())
       .then(r => r.json()).then(d => setAlertsData(d)).catch(() => {});
+  };
+
+  const fetchExpiringUsers = () => {
+    fetch(`${API_BASE_URL}/admin/subscriptions/expiring`, getAuthHeaders())
+      .then(r => r.json()).then(d => setExpiringUsers(d.expiring || [])).catch(() => {});
+  };
+
+  const cancelSubscription = async (userId: number) => {
+    setSubActionLoading(p => ({ ...p, [userId]: "cancel" }));
+    const res = await fetch(`${API_BASE_URL}/admin/subscriptions/${userId}/cancel`, { method: "POST", ...getAuthHeaders() });
+    const d = await res.json().catch(() => ({}));
+    setSubActionMsg(p => ({ ...p, [userId]: res.ok ? "Cancelled" : (d.detail || "Error") }));
+    setSubActionLoading(p => ({ ...p, [userId]: "" }));
+    if (res.ok) fetchExpiringUsers();
+  };
+
+  const notifyUser = async (userId: number) => {
+    setSubActionLoading(p => ({ ...p, [userId]: "notify" }));
+    const res = await fetch(`${API_BASE_URL}/admin/subscriptions/${userId}/notify`, { method: "POST", ...getAuthHeaders() });
+    const d = await res.json().catch(() => ({}));
+    setSubActionMsg(p => ({ ...p, [userId]: res.ok ? "Reminder sent!" : (d.detail || "Error") }));
+    setSubActionLoading(p => ({ ...p, [userId]: "" }));
   };
 
   const fetchRevenue = (filters = revFilters) => {
@@ -2019,22 +2034,93 @@ const AdminDashboard: React.FC = () => {
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {alertsData.alerts.map((alert: any, i: number) => {
-                        const sev = alert.severity;
+                        const sev   = alert.severity;
                         const color = sev === "critical" ? "#ef4444" : sev === "warning" ? "#f59e0b" : "#3b82f6";
                         const bg    = sev === "critical" ? "rgba(239,68,68,.08)" : sev === "warning" ? "rgba(245,158,11,.08)" : "rgba(59,130,246,.08)";
+                        const isExpSubs  = alert.component === "expiring_subscriptions";
+                        const isExpanded = expandedAlert === `${i}`;
                         return (
-                          <div key={i} style={{ background: bg, border: `0.5px solid ${color}33`, borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "flex-start", gap: 14 }}>
-                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, marginTop: 5, flexShrink: 0 }} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{alert.title}</span>
-                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: `${color}22`, color, fontWeight: 600, textTransform: "uppercase" as const }}>{sev}</span>
-                                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: c.bg, color: c.subtext, border: `0.5px solid ${c.border}` }}>{alert.type}</span>
+                          <div key={i} style={{ background: bg, border: `0.5px solid ${color}33`, borderRadius: 12, overflow: "hidden" }}>
+                            {/* Alert header row */}
+                            <div
+                              style={{ padding: "14px 18px", display: "flex", alignItems: "flex-start", gap: 14, cursor: isExpSubs ? "pointer" : "default" }}
+                              onClick={() => {
+                                if (!isExpSubs) return;
+                                if (isExpanded) { setExpandedAlert(null); } else { setExpandedAlert(`${i}`); fetchExpiringUsers(); }
+                              }}
+                            >
+                              <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, marginTop: 5, flexShrink: 0 }} />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{alert.title}</span>
+                                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: `${color}22`, color, fontWeight: 600, textTransform: "uppercase" as const }}>{sev}</span>
+                                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: c.bg, color: c.subtext, border: `0.5px solid ${c.border}` }}>{alert.type}</span>
+                                    {isExpSubs && <span style={{ fontSize: 11, color: c.subtext }}>{isExpanded ? "▲ Hide" : "▼ Show users"}</span>}
+                                  </div>
                                 </div>
+                                <div style={{ fontSize: 12, color: c.subtext, marginTop: 4 }}>{alert.message}</div>
                               </div>
-                              <div style={{ fontSize: 12, color: c.subtext, marginTop: 4 }}>{alert.message}</div>
                             </div>
+
+                            {/* Expanded: expiring subscription user table */}
+                            {isExpSubs && isExpanded && (
+                              <div style={{ borderTop: `1px solid ${color}33`, padding: "16px 18px", background: c.surface }}>
+                                {expiringUsers.length === 0 ? (
+                                  <div style={{ fontSize: 12, color: c.subtext }}>No users found.</div>
+                                ) : (
+                                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                    <thead>
+                                      <tr style={{ color: c.subtext, textAlign: "left" }}>
+                                        <th style={{ paddingBottom: 8, fontWeight: 600 }}>User</th>
+                                        <th style={{ paddingBottom: 8, fontWeight: 600 }}>Email</th>
+                                        <th style={{ paddingBottom: 8, fontWeight: 600 }}>Plan</th>
+                                        <th style={{ paddingBottom: 8, fontWeight: 600 }}>Expires</th>
+                                        <th style={{ paddingBottom: 8, fontWeight: 600 }}>Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {expiringUsers.map((u: any) => (
+                                        <tr key={u.user_id} style={{ borderTop: `1px solid ${c.border}` }}>
+                                          <td style={{ padding: "8px 0", color: c.text, fontWeight: 500 }}>{u.first_name} {u.last_name}</td>
+                                          <td style={{ padding: "8px 8px", color: c.subtext }}>{u.email}</td>
+                                          <td style={{ padding: "8px 8px" }}>
+                                            <span style={{ background: "#eef2ff", color: "#4f46e5", padding: "2px 8px", borderRadius: 12, fontWeight: 600, textTransform: "capitalize" as const }}>{u.plan_tier}</span>
+                                          </td>
+                                          <td style={{ padding: "8px 8px", color: u.days_left <= 1 ? "#ef4444" : "#f59e0b", fontWeight: 600 }}>
+                                            {u.days_left}d left
+                                          </td>
+                                          <td style={{ padding: "8px 0" }}>
+                                            {subActionMsg[u.user_id] ? (
+                                              <span style={{ fontSize: 11, color: subActionMsg[u.user_id].includes("Cancelled") || subActionMsg[u.user_id].includes("sent") ? "#22c55e" : "#ef4444" }}>
+                                                {subActionMsg[u.user_id]}
+                                              </span>
+                                            ) : (
+                                              <div style={{ display: "flex", gap: 6 }}>
+                                                <button
+                                                  disabled={!!subActionLoading[u.user_id]}
+                                                  onClick={() => notifyUser(u.user_id)}
+                                                  style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #6366f1", background: "transparent", color: "#6366f1", cursor: "pointer", fontWeight: 600 }}
+                                                >
+                                                  {subActionLoading[u.user_id] === "notify" ? "Sending…" : "Send Reminder"}
+                                                </button>
+                                                <button
+                                                  disabled={!!subActionLoading[u.user_id]}
+                                                  onClick={() => cancelSubscription(u.user_id)}
+                                                  style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #ef4444", background: "transparent", color: "#ef4444", cursor: "pointer", fontWeight: 600 }}
+                                                >
+                                                  {subActionLoading[u.user_id] === "cancel" ? "Cancelling…" : "Cancel Sub"}
+                                                </button>
+                                              </div>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}

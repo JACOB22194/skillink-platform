@@ -622,12 +622,12 @@ const RegisterPage: React.FC = () => {
           <div style={{ display: "flex", gap: 10, marginBottom: "1.25rem" }}>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>First Name</label>
-              <input style={{ ...inputBase, borderColor: fieldErrors.first_name ? c.errorText : c.inputBorder }} type="text" name="first_name" placeholder="John" value={form.first_name || ""} onChange={handleChange} autoComplete="given-name" />
+              <input style={{ ...inputBase, borderColor: fieldErrors.first_name ? c.errorText : c.inputBorder }} type="text" name="first_name" placeholder="John" value={form.first_name || ""} onChange={handleChange} autoComplete="given-name" aria-required="true" />
               {fieldErrors.first_name && <div style={errStyle}>{fieldErrors.first_name}</div>}
             </div>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Last Name</label>
-              <input style={{ ...inputBase, borderColor: fieldErrors.last_name ? c.errorText : c.inputBorder }} type="text" name="last_name" placeholder="Doe" value={form.last_name || ""} onChange={handleChange} autoComplete="family-name" />
+              <input style={{ ...inputBase, borderColor: fieldErrors.last_name ? c.errorText : c.inputBorder }} type="text" name="last_name" placeholder="Doe" value={form.last_name || ""} onChange={handleChange} autoComplete="family-name" aria-required="true" />
               {fieldErrors.last_name && <div style={errStyle}>{fieldErrors.last_name}</div>}
             </div>
           </div>
@@ -636,7 +636,7 @@ const RegisterPage: React.FC = () => {
         {/* Email */}
         <div style={{ marginBottom: "1.25rem" }}>
           <label style={labelStyle}>Email</label>
-          <input style={{ ...inputBase, borderColor: fieldErrors.email ? c.errorText : c.inputBorder }} type="email" name="email" placeholder="you@example.com" value={form.email} onChange={handleChange} autoComplete="email" />
+          <input style={{ ...inputBase, borderColor: fieldErrors.email ? c.errorText : c.inputBorder }} type="email" name="email" placeholder="you@example.com" value={form.email} onChange={handleChange} autoComplete="email" aria-required="true" />
           {fieldErrors.email && <div style={errStyle}>{fieldErrors.email}</div>}
         </div>
 
@@ -666,13 +666,19 @@ const RegisterPage: React.FC = () => {
               type={showPassword ? "text" : "password"} name="password"
               placeholder="Min. 8 chars, 1 uppercase, 1 number"
               value={form.password} onChange={handleChange} autoComplete="new-password"
+              aria-required="true" aria-describedby="reg-pw-hint"
             />
-            <button onClick={() => setShowPassword((s) => !s)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: c.subtext, fontSize: 14, padding: 0 }}>
+            <button onClick={() => setShowPassword((s) => !s)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: c.subtext, fontSize: 14, padding: 0 }} aria-label={showPassword ? "Hide password" : "Show password"}>
               {showPassword ? "🙈" : "👁️"}
             </button>
           </div>
           {fieldErrors.password && <div style={errStyle}>{fieldErrors.password}</div>}
-          <PasswordStrength password={form.password} colors={c} />
+          <div id="reg-pw-hint">
+            <span style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap", border: 0 }}>
+              Password must be at least 8 characters, include 1 uppercase letter and 1 number.
+            </span>
+            <PasswordStrength password={form.password} colors={c} />
+          </div>
         </div>
 
         {/* Confirm password */}
@@ -685,6 +691,7 @@ const RegisterPage: React.FC = () => {
             value={confirmPassword}
             onChange={(e) => { setConfirmPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, confirmPassword: "" })); }}
             autoComplete="new-password"
+            aria-required="true"
           />
           {fieldErrors.confirmPassword && <div style={errStyle}>{fieldErrors.confirmPassword}</div>}
         </div>

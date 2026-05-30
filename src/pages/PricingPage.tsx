@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useLanguage } from "../shared/LanguageContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,120 +33,6 @@ interface ThemeColors {
   primarySoft: string;
 }
 
-// ─── Plans ────────────────────────────────────────────────────────────────────
-
-const FREELANCER_PLANS: Plan[] = [
-  {
-    tier: "free",
-    name: "Starter",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    description: "Get started and explore the platform.",
-    features: [
-      { text: "5 proposals per month", included: true },
-      { text: "Basic AI job matching", included: true },
-      { text: "Public profile", included: true },
-      { text: "GitHub profile connect", included: true },
-      { text: "Priority proposal placement", included: false },
-      { text: "Unlimited proposals", included: false },
-      { text: "Advanced AI match scoring", included: false },
-      { text: "Dedicated success manager", included: false },
-    ],
-  },
-  {
-    tier: "pro",
-    name: "Pro",
-    monthlyPrice: 19,
-    yearlyPrice: 15,
-    description: "For active freelancers who want to win more.",
-    badge: "Most Popular",
-    highlight: true,
-    features: [
-      { text: "Unlimited proposals", included: true },
-      { text: "Priority proposal placement", included: true },
-      { text: "Advanced AI match scoring", included: true },
-      { text: "Smart proposal generator", included: true },
-      { text: "GitHub quality badge", included: true },
-      { text: "Analytics & earnings tracker", included: true },
-      { text: "Dedicated success manager", included: false },
-      { text: "Custom profile domain", included: false },
-    ],
-  },
-  {
-    tier: "business",
-    name: "Elite",
-    monthlyPrice: 49,
-    yearlyPrice: 39,
-    description: "For top earners who need every edge.",
-    features: [
-      { text: "Everything in Pro", included: true },
-      { text: "Dedicated success manager", included: true },
-      { text: "Custom profile domain", included: true },
-      { text: "Featured freelancer badge", included: true },
-      { text: "Early access to premium projects", included: true },
-      { text: "White-glove profile review", included: true },
-      { text: "Priority dispute resolution", included: true },
-      { text: "API access", included: true },
-    ],
-  },
-];
-
-const CLIENT_PLANS: Plan[] = [
-  {
-    tier: "free",
-    name: "Starter",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    description: "Post projects and find your first hire.",
-    features: [
-      { text: "2 active projects", included: true },
-      { text: "Basic AI talent matching", included: true },
-      { text: "Standard escrow", included: true },
-      { text: "Community support", included: true },
-      { text: "Unlimited projects", included: false },
-      { text: "AI-ranked candidates", included: false },
-      { text: "Team workrooms", included: false },
-      { text: "Dedicated account manager", included: false },
-    ],
-  },
-  {
-    tier: "pro",
-    name: "Growth",
-    monthlyPrice: 49,
-    yearlyPrice: 39,
-    description: "For growing teams hiring regularly.",
-    badge: "Most Popular",
-    highlight: true,
-    features: [
-      { text: "Unlimited active projects", included: true },
-      { text: "AI-ranked candidates", included: true },
-      { text: "Advanced talent filters", included: true },
-      { text: "Team workrooms (up to 5)", included: true },
-      { text: "Invoice management", included: true },
-      { text: "Priority support", included: true },
-      { text: "Dedicated account manager", included: false },
-      { text: "Custom contract templates", included: false },
-    ],
-  },
-  {
-    tier: "business",
-    name: "Enterprise",
-    monthlyPrice: 149,
-    yearlyPrice: 119,
-    description: "For companies that hire at scale.",
-    features: [
-      { text: "Everything in Growth", included: true },
-      { text: "Dedicated account manager", included: true },
-      { text: "Custom contract templates", included: true },
-      { text: "Unlimited workrooms & seats", included: true },
-      { text: "Analytics & spend reporting", included: true },
-      { text: "SSO / SAML integration", included: true },
-      { text: "SLA guarantee", included: true },
-      { text: "Custom AI training on your data", included: true },
-    ],
-  },
-];
-
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 const getColors = (dark: boolean): ThemeColors =>
@@ -177,7 +64,12 @@ const PlanCard: React.FC<{
   colors: ThemeColors;
   onSelect: (plan: Plan) => void;
   roleType: "freelancer" | "client";
-}> = ({ plan, billing, colors: c, onSelect, roleType }) => {
+  ctaStart: string;
+  ctaContact: string;
+  ctaTrial: string;
+  savingLabel: (pct: number) => string;
+  perMonth: string;
+}> = ({ plan, billing, colors: c, onSelect, ctaStart, ctaContact, ctaTrial, savingLabel, perMonth }) => {
   const price = billing === "monthly" ? plan.monthlyPrice : plan.yearlyPrice;
   const saving = plan.monthlyPrice > 0
     ? Math.round(((plan.monthlyPrice - plan.yearlyPrice) / plan.monthlyPrice) * 100)
@@ -218,14 +110,14 @@ const PlanCard: React.FC<{
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 6 }}>
           <span style={{ fontSize: 36, fontWeight: 600, color: c.text, letterSpacing: "-1px" }}>
-            {price === 0 ? "Free" : `$${price}`}
+            {price === 0 ? ctaStart : `$${price}`}
           </span>
           {price > 0 && (
-            <span style={{ fontSize: 13, color: c.subtext }}>/mo</span>
+            <span style={{ fontSize: 13, color: c.subtext }}>{perMonth}</span>
           )}
         </div>
         {billing === "yearly" && saving > 0 && (
-          <div style={{ fontSize: 11, color: "#22c55e", marginBottom: 4 }}>Save {saving}% with yearly billing</div>
+          <div style={{ fontSize: 11, color: "#22c55e", marginBottom: 4 }}>{savingLabel(saving)}</div>
         )}
         <p style={{ fontSize: 12, color: c.subtext, lineHeight: 1.5, margin: 0 }}>{plan.description}</p>
       </div>
@@ -250,7 +142,7 @@ const PlanCard: React.FC<{
         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.85"; }}
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
       >
-        {plan.tier === "free" ? "Get started free" : plan.tier === "business" ? "Contact sales" : "Upgrade now"}
+        {plan.tier === "free" ? ctaStart : plan.tier === "business" ? ctaContact : ctaTrial}
       </button>
 
       {/* Divider */}
@@ -276,6 +168,8 @@ const PlanCard: React.FC<{
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t, isRTL } = useLanguage();
+
   const [darkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("skilllink-darkMode");
     return saved !== null ? JSON.parse(saved) : true;
@@ -288,6 +182,119 @@ const PricingPage: React.FC = () => {
   });
   const c = getColors(darkMode);
 
+  // Plan data defined inside component so it can use t()
+  const FREELANCER_PLANS: Plan[] = [
+    {
+      tier: "free",
+      name: t("pricing.fl.free.name"),
+      monthlyPrice: 0,
+      yearlyPrice: 0,
+      description: t("pricing.fl.free.desc"),
+      features: [
+        { text: t("pricing.fl.free.f1"), included: true },
+        { text: t("pricing.fl.free.f2"), included: true },
+        { text: t("pricing.fl.free.f3"), included: true },
+        { text: t("pricing.fl.free.f4"), included: true },
+        { text: t("pricing.fl.pro.f1"),  included: false },
+        { text: t("pricing.fl.pro.f2"),  included: false },
+        { text: t("pricing.fl.pro.f3"),  included: false },
+        { text: t("pricing.fl.elite.f2"), included: false },
+      ],
+    },
+    {
+      tier: "pro",
+      name: t("pricing.fl.pro.name"),
+      monthlyPrice: 19,
+      yearlyPrice: 15,
+      description: t("pricing.fl.pro.desc"),
+      badge: t("pricing.popular"),
+      highlight: true,
+      features: [
+        { text: t("pricing.fl.pro.f1"), included: true },
+        { text: t("pricing.fl.pro.f2"), included: true },
+        { text: t("pricing.fl.pro.f3"), included: true },
+        { text: t("pricing.fl.pro.f4"), included: true },
+        { text: t("pricing.fl.free.f4"), included: true },
+        { text: t("pricing.fl.elite.f2"), included: false },
+        { text: t("pricing.fl.elite.f3"), included: false },
+        { text: t("pricing.fl.elite.f4"), included: false },
+      ],
+    },
+    {
+      tier: "business",
+      name: t("pricing.fl.elite.name"),
+      monthlyPrice: 49,
+      yearlyPrice: 39,
+      description: t("pricing.fl.elite.desc"),
+      features: [
+        { text: t("pricing.fl.elite.f1"), included: true },
+        { text: t("pricing.fl.elite.f2"), included: true },
+        { text: t("pricing.fl.elite.f3"), included: true },
+        { text: t("pricing.fl.elite.f4"), included: true },
+        { text: t("pricing.fl.pro.f3"), included: true },
+        { text: t("pricing.fl.pro.f4"), included: true },
+        { text: t("pricing.fl.free.f3"), included: true },
+        { text: t("pricing.fl.free.f4"), included: true },
+      ],
+    },
+  ];
+
+  const CLIENT_PLANS: Plan[] = [
+    {
+      tier: "free",
+      name: t("pricing.cl.basic.name"),
+      monthlyPrice: 0,
+      yearlyPrice: 0,
+      description: t("pricing.cl.basic.desc"),
+      features: [
+        { text: t("pricing.cl.basic.f1"), included: true },
+        { text: t("pricing.cl.basic.f2"), included: true },
+        { text: t("pricing.cl.basic.f3"), included: true },
+        { text: t("pricing.cl.biz.f1"),   included: false },
+        { text: t("pricing.cl.biz.f2"),   included: false },
+        { text: t("pricing.cl.biz.f3"),   included: false },
+        { text: t("pricing.cl.ent.f2"),   included: false },
+        { text: t("pricing.cl.ent.f3"),   included: false },
+      ],
+    },
+    {
+      tier: "pro",
+      name: t("pricing.cl.biz.name"),
+      monthlyPrice: 49,
+      yearlyPrice: 39,
+      description: t("pricing.cl.biz.desc"),
+      badge: t("pricing.popular"),
+      highlight: true,
+      features: [
+        { text: t("pricing.cl.biz.f1"), included: true },
+        { text: t("pricing.cl.biz.f2"), included: true },
+        { text: t("pricing.cl.biz.f3"), included: true },
+        { text: t("pricing.cl.basic.f2"), included: true },
+        { text: t("pricing.cl.basic.f3"), included: true },
+        { text: t("pricing.cl.ent.f2"),   included: false },
+        { text: t("pricing.cl.ent.f3"),   included: false },
+        { text: t("pricing.cl.ent.f1"),   included: false },
+      ],
+    },
+    {
+      tier: "business",
+      name: t("pricing.cl.ent.name"),
+      monthlyPrice: 149,
+      yearlyPrice: 119,
+      description: t("pricing.cl.ent.desc"),
+      features: [
+        { text: t("pricing.cl.ent.f1"), included: true },
+        { text: t("pricing.cl.ent.f2"), included: true },
+        { text: t("pricing.cl.ent.f3"), included: true },
+        { text: t("pricing.cl.biz.f1"), included: true },
+        { text: t("pricing.cl.biz.f2"), included: true },
+        { text: t("pricing.cl.biz.f3"), included: true },
+        { text: t("pricing.cl.basic.f2"), included: true },
+        { text: t("pricing.cl.basic.f3"), included: true },
+      ],
+    },
+  ];
+
   const plans = roleTab === "freelancer" ? FREELANCER_PLANS : CLIENT_PLANS;
 
   const handleSelect = (plan: Plan) => {
@@ -296,7 +303,6 @@ const PricingPage: React.FC = () => {
       return;
     }
     if (plan.tier === "business") {
-      // Enterprise / Elite → contact sales
       navigate("/register");
       return;
     }
@@ -304,7 +310,7 @@ const PricingPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif" }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif" }}>
       {/* ── Navbar ── */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.25rem 2rem", borderBottom: `0.5px solid ${c.border}` }}>
         <div
@@ -318,13 +324,13 @@ const PricingPage: React.FC = () => {
             onClick={() => navigate("/login")}
             style={{ padding: "8px 18px", borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 500, fontFamily: "inherit", background: "transparent", border: `0.5px solid ${c.border}`, color: c.text }}
           >
-            Log in
+            {t("common.logIn")}
           </button>
           <button
             onClick={() => navigate("/register")}
             style={{ padding: "8px 18px", borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 500, fontFamily: "inherit", background: c.primary, border: "none", color: "#fff" }}
           >
-            Sign up
+            {t("common.signUp")}
           </button>
         </div>
       </nav>
@@ -332,13 +338,13 @@ const PricingPage: React.FC = () => {
       {/* ── Hero ── */}
       <div style={{ textAlign: "center", padding: "4rem 2rem 2rem", maxWidth: 600, margin: "0 auto" }}>
         <div style={{ display: "inline-block", fontSize: 11, padding: "4px 12px", borderRadius: 100, background: c.primarySoft, color: c.primary, marginBottom: "1rem", letterSpacing: "0.05em", fontWeight: 600, textTransform: "uppercase" }}>
-          Pricing
+          {t("land.pricing.label")}
         </div>
         <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-1px", marginBottom: "0.75rem", color: c.text, lineHeight: 1.15 }}>
-          Simple, transparent<br />pricing
+          {t("pricing.title")}
         </h1>
         <p style={{ fontSize: 15, color: c.subtext, lineHeight: 1.7, margin: 0 }}>
-          Choose the plan that fits your goals. Upgrade or downgrade anytime.
+          {t("pricing.subtitle")}
         </p>
       </div>
 
@@ -356,14 +362,14 @@ const PricingPage: React.FC = () => {
               color: roleTab === r ? "#fff" : c.subtext,
             }}
           >
-            {r === "freelancer" ? "🧑‍💻 For Freelancers" : "🏢 For Clients"}
+            {r === "freelancer" ? `🧑‍💻 ${t("pricing.role.fl")}` : `🏢 ${t("pricing.role.cl")}`}
           </button>
         ))}
       </div>
 
       {/* ── Billing Toggle ── */}
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: "1.5rem", marginBottom: "2.5rem" }}>
-        <span style={{ fontSize: 13, color: billing === "monthly" ? c.text : c.subtext }}>Monthly</span>
+        <span style={{ fontSize: 13, color: billing === "monthly" ? c.text : c.subtext }}>{t("pricing.billing.month")}</span>
         <div
           onClick={() => setBilling(billing === "monthly" ? "yearly" : "monthly")}
           style={{
@@ -379,7 +385,7 @@ const PricingPage: React.FC = () => {
           }} />
         </div>
         <span style={{ fontSize: 13, color: billing === "yearly" ? c.text : c.subtext }}>
-          Yearly <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>Save up to 22%</span>
+          {t("pricing.billing.year")} <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>{t("pricing.billing.save")}</span>
         </span>
       </div>
 
@@ -400,20 +406,25 @@ const PricingPage: React.FC = () => {
             colors={c}
             onSelect={handleSelect}
             roleType={roleTab}
+            ctaStart={t("pricing.cta.start")}
+            ctaTrial={t("pricing.cta.trial")}
+            ctaContact={t("pricing.cta.contact")}
+            savingLabel={(pct) => `${t("pricing.billing.save").replace("20%", `${pct}%`)}`}
+            perMonth={t("pricing.perMonth")}
           />
         ))}
       </div>
 
-      {/* ── FAQ / Trust ── */}
+      {/* ── FAQ ── */}
       <div style={{ maxWidth: 700, margin: "0 auto 5rem", padding: "0 2rem" }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <h2 style={{ fontSize: 24, fontWeight: 600, color: c.text, letterSpacing: "-0.5px" }}>Questions & answers</h2>
+          <h2 style={{ fontSize: 24, fontWeight: 600, color: c.text, letterSpacing: "-0.5px" }}>{t("pricing.faq.title")}</h2>
         </div>
         {[
-          { q: "Can I switch plans later?", a: "Yes — you can upgrade or downgrade at any time. Changes take effect immediately and we prorate billing." },
-          { q: "Is there a free trial?", a: "All paid plans include a 7-day free trial. No credit card required to start." },
-          { q: "How does yearly billing work?", a: "Yearly plans are billed as a single upfront payment and offer up to 22% savings compared to monthly." },
-          { q: "What payment methods are accepted?", a: "We accept all major credit and debit cards via Stripe. No hidden fees." },
+          { q: t("faq.q1"), a: t("faq.a1") },
+          { q: t("faq.q2"), a: t("faq.a2") },
+          { q: t("faq.q3"), a: t("faq.a3") },
+          { q: t("faq.q4"), a: t("faq.a4") },
         ].map(({ q, a }) => (
           <div key={q} style={{ borderBottom: `0.5px solid ${c.border}`, padding: "16px 0" }}>
             <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{q}</div>
@@ -424,7 +435,7 @@ const PricingPage: React.FC = () => {
 
       {/* ── Footer ── */}
       <footer style={{ textAlign: "center", padding: "2rem", borderTop: `0.5px solid ${c.border}`, fontSize: 13, color: c.subtext }}>
-        © 2025 SkillLink. All rights reserved.
+        © 2025 SkillLink. {t("land.footer.rights")}
       </footer>
     </div>
   );

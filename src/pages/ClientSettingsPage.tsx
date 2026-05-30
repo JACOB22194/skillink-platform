@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL, getAuthHeaders } from "../shared/api";
+import { useLanguage } from "../shared/LanguageContext";
 
 interface C {
   bg: string; surface: string; border: string; text: string; subtext: string;
@@ -15,6 +16,7 @@ const getColors = (dark: boolean): C =>
 
 const ClientSettingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t, isRTL } = useLanguage();
   const [darkMode] = useState(() => {
     const s = localStorage.getItem("skilllink-darkMode");
     return s !== null ? JSON.parse(s) : true;
@@ -62,9 +64,9 @@ const ClientSettingsPage: React.FC = () => {
         ...getAuthHeaders(),
       });
       if (!res.ok) throw new Error();
-      setSaveMsg({ text: "Profile saved!", ok: true });
+      setSaveMsg({ text: t("clset.saved"), ok: true });
     } catch {
-      setSaveMsg({ text: "Save failed. Please try again.", ok: false });
+      setSaveMsg({ text: t("clset.saveFailed"), ok: false });
     } finally {
       setSaving(false);
     }
@@ -86,10 +88,10 @@ const ClientSettingsPage: React.FC = () => {
       const data = await res.json();
       setAvatarUrl(data.avatar_url);
       setAvatarFile(null);
-      setAvatarMsg("Profile picture updated!");
+      setAvatarMsg(t("clset.saved"));
       if (avatarInputRef.current) avatarInputRef.current.value = "";
     } catch {
-      setAvatarMsg("Upload failed. Try again.");
+      setAvatarMsg(t("clset.uploadFailed"));
     }
   };
 
@@ -104,20 +106,20 @@ const ClientSettingsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif" }}>
-      {/* Top bar */}
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface }}>
-        <button onClick={() => navigate("/dashboard/client")} style={{ background: "none", border: "none", cursor: "pointer", color: c.subtext, fontSize: 18, padding: 0 }}>←</button>
-        <span style={{ fontSize: 15, fontWeight: 500 }}>Account Settings</span>
+        <button onClick={() => navigate("/dashboard/client")} style={{ background: "none", border: "none", cursor: "pointer", color: c.subtext, fontSize: 18, padding: 0 }}>
+          {isRTL ? "→" : "←"}
+        </button>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>{t("clset.title")}</span>
       </div>
 
       <div style={{ maxWidth: 480, margin: "2rem auto", padding: "0 1rem" }}>
         <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.5rem" }}>
-          <h2 style={{ fontSize: 16, fontWeight: 500, margin: "0 0 1.5rem", color: c.text }}>Company Profile</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 500, margin: "0 0 1.5rem", color: c.text }}>{t("clset.company")}</h2>
 
-          {/* Avatar */}
           <div style={{ marginBottom: "1.5rem" }}>
-            <label style={labelStyle}>Company Logo</label>
+            <label style={labelStyle}>{t("clset.logo")}</label>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
               {avatarUrl ? (
                 <img src={`${API_BASE_URL}${avatarUrl}`} alt="avatar" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: `0.5px solid ${c.border}` }} />
@@ -127,23 +129,24 @@ const ClientSettingsPage: React.FC = () => {
                 </div>
               )}
               <div>
-                <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: "none" }} onChange={e => setAvatarFile(e.target.files?.[0] ?? null)} />
+                <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: "none" }} onChange={e => setAvatarFile(e.target.files?.[0] ?? null)} aria-label="Upload profile picture" />
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button onClick={() => avatarInputRef.current?.click()} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: c.inputBg, color: c.text, border: `0.5px solid ${c.inputBorder}`, cursor: "pointer", fontFamily: "inherit" }}>
-                    {avatarFile ? avatarFile.name : "Choose Image"}
+                    {avatarFile ? avatarFile.name : t("clset.choose")}
                   </button>
                   {avatarFile && (
-                    <button onClick={handleAvatarUpload} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Upload</button>
+                    <button onClick={handleAvatarUpload} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                      {t("clset.upload")}
+                    </button>
                   )}
                 </div>
-                {avatarMsg && <div style={{ fontSize: 12, marginTop: 6, color: avatarMsg.includes("failed") ? c.errorText : c.successText }}>{avatarMsg}</div>}
+                {avatarMsg && <div style={{ fontSize: 12, marginTop: 6, color: avatarMsg.includes("failed") || avatarMsg.includes("فشل") ? c.errorText : c.successText }}>{avatarMsg}</div>}
               </div>
             </div>
           </div>
 
-          {/* Company name */}
           <div style={{ marginBottom: "1.5rem" }}>
-            <label style={labelStyle}>Company Name</label>
+            <label style={labelStyle}>{t("clset.companyName")}</label>
             <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Acme Corp" style={inputStyle} />
           </div>
 
@@ -152,7 +155,7 @@ const ClientSettingsPage: React.FC = () => {
           )}
 
           <button onClick={handleSave} disabled={saving} style={{ padding: "11px 28px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.7 : 1 }}>
-            {saving ? "Saving…" : "Save Changes"}
+            {saving ? t("clset.saving") : t("clset.save")}
           </button>
         </div>
       </div>

@@ -8,6 +8,10 @@ import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { API_BASE_URL, getAuthHeaders, logout } from "../shared/api";
 import UpgradeNowSection from "../components/UpgradeNowSection";
 import { useLanguage, LangToggle } from "../shared/LanguageContext";
+import ProjectMatchView from "./freelancer/ProjectMatchView";
+import VerificationView from "./freelancer/VerificationView";
+import WorkroomsView from "./freelancer/WorkroomsView";
+import InvitationsView from "./freelancer/InvitationsView";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -41,7 +45,6 @@ const MetricCard: React.FC<{ label: string; value: React.ReactNode; sub: string;
       {badge}
     </div>
   );
-
 
 const EmptyState: React.FC<{ label: string; hint: string; c: ThemeColors }> = ({ label, hint, c }) => (
   <div style={{ padding: "28px 16px", textAlign: "center" }}>
@@ -137,9 +140,7 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    if (open) fetchNotifs();
-  }, [open]);
+  useEffect(() => { if (open) fetchNotifs(); }, [open]);
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
@@ -153,9 +154,14 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
     <div ref={ref} style={{ position: "relative" }}>
       <div
         onClick={() => setOpen(v => !v)}
+        role="button"
+        aria-label={`Notifications${unread > 0 ? `, ${unread} unread` : ""}`}
+        aria-expanded={open}
+        tabIndex={0}
+        onKeyDown={e => e.key === "Enter" && setOpen(v => !v)}
         style={{ width: 32, height: 32, borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative" }}
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: unread > 0 ? c.primary : c.subtext }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: unread > 0 ? c.primary : c.subtext }} aria-hidden="true">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
         </svg>
         {unread > 0 && (
@@ -191,264 +197,6 @@ const NotificationBell: React.FC<{ c: ThemeColors }> = ({ c }) => {
   );
 };
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface MatchedProject {
-  project_id:     number;
-  title:          string;
-  description:    string;
-  budget:         number;
-  contract_type:  string;
-  match_score:    number;
-  matched_skills: string[];
-  text_score:     number;
-  skill_score:    number;
-  quality_score:  number;
-}
-
-type DifficultyFilter = "all" | "beginner" | "intermediate" | "expert";
-type ContractFilter   = "all" | "fixed" | "hourly";
-
-// ─── Project Match View ───────────────────────────────────────────────────────
-
-const MATCH_PALETTE = [
-  { bg: "#2a2640", color: "#7F77DD" },
-  { bg: "rgba(34,197,94,.12)", color: "#22c55e" },
-  { bg: "rgba(59,130,246,.15)", color: "#3b82f6" },
-  { bg: "rgba(245,158,11,.1)", color: "#f59e0b" },
-  { bg: "rgba(239,68,68,.1)", color: "#ef4444" },
-];
-
-const DIFFICULTY_RANGES: Record<DifficultyFilter, [number, number]> = {
-  all:          [0,    Infinity],
-  beginner:     [0,    500],
-  intermediate: [500,  2000],
-  expert:       [2000, Infinity],
-};
-
-const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
-  const navigate = useNavigate();
-  const [allMatches, setAllMatches] = useState<MatchedProject[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState("");
-  const [latency, setLatency]       = useState(0);
-  const [ran, setRan]               = useState(false);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-
-  // ── Filter state ──────────────────────────────────────────────────
-  const [minBudget,    setMinBudget]    = useState("");
-  const [maxBudget,    setMaxBudget]    = useState("");
-  const [difficulty,   setDifficulty]   = useState<DifficultyFilter>("all");
-  const [contractType, setContractType] = useState<ContractFilter>("all");
-
-  const fetchMatches = async (minB?: string, maxB?: string, ct?: ContractFilter) => {
-    setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams({ top_k: "20" });
-      if (minB && !isNaN(Number(minB))) params.set("min_budget", minB);
-      if (maxB && !isNaN(Number(maxB))) params.set("max_budget", maxB);
-      if (ct && ct !== "all") params.set("contract_type", ct);
-
-      const res = await fetch(`${API_BASE_URL}/recommend/my-matches?${params}`, getAuthHeaders());
-      if (res.ok) {
-        const data = await res.json();
-        setAllMatches(data.matches || []);
-        setLatency(data.latency_ms || 0);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setError(err.detail || "Failed to load matches.");
-      }
-    } catch {
-      setError("Could not reach the recommendation service.");
-    } finally {
-      setLoading(false);
-      setRan(true);
-    }
-  };
-
-  useEffect(() => { fetchMatches(); }, []);
-
-  const applyFilters = () => fetchMatches(minBudget, maxBudget, contractType);
-
-  const resetFilters = () => {
-    setMinBudget(""); setMaxBudget("");
-    setDifficulty("all"); setContractType("all");
-    fetchMatches();
-  };
-
-  // Client-side difficulty filter applied on top of server-side budget/contract filters
-  const [diffMin, diffMax] = DIFFICULTY_RANGES[difficulty as DifficultyFilter];
-  const matches = allMatches.filter((p: MatchedProject) => p.budget >= diffMin && p.budget <= diffMax);
-
-  const pillStyle = (active: boolean) => ({
-    fontSize: 11, padding: "4px 12px", borderRadius: 20, cursor: "pointer" as const,
-    border: `0.5px solid ${active ? c.primary : c.border}`,
-    background: active ? c.primarySoft : "transparent",
-    color: active ? c.primary : c.subtext,
-    fontFamily: "inherit",
-  });
-
-  const inputStyle: React.CSSProperties = {
-    width: 90, padding: "5px 8px", borderRadius: 8, fontSize: 11,
-    background: c.surface, border: `0.5px solid ${c.border}`,
-    color: c.text, fontFamily: "inherit", outline: "none",
-  };
-
-  return (
-    <div style={{ animation: "fadeIn 0.5s ease" }}>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>AI Matches</div>
-        <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Open projects matched to your profile by TF-IDF · skill overlap · GitHub quality.</div>
-      </div>
-
-      {/* ── Filter Bar ── */}
-      <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-        {/* Budget row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: c.subtext, width: 56 }}>Budget</span>
-          <input
-            type="number" placeholder="Min $" value={minBudget}
-            onChange={e => setMinBudget(e.target.value)}
-            style={inputStyle}
-          />
-          <span style={{ fontSize: 11, color: c.subtext }}>–</span>
-          <input
-            type="number" placeholder="Max $" value={maxBudget}
-            onChange={e => setMaxBudget(e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-
-        {/* Difficulty row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: c.subtext, width: 56 }}>Difficulty</span>
-          {(["all", "beginner", "intermediate", "expert"] as DifficultyFilter[]).map(d => (
-            <button key={d} style={pillStyle(difficulty === d)} onClick={() => setDifficulty(d)}>
-              {d === "all" ? "All" : d === "beginner" ? "Beginner (<$500)" : d === "intermediate" ? "Intermediate ($500–$2k)" : "Expert (>$2k)"}
-            </button>
-          ))}
-        </div>
-
-        {/* Duration row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: c.subtext, width: 56 }}>Duration</span>
-          {(["all", "fixed", "hourly"] as ContractFilter[]).map(ct => (
-            <button key={ct} style={pillStyle(contractType === ct)} onClick={() => setContractType(ct)}>
-              {ct === "all" ? "Any" : ct === "fixed" ? "Short-term · Fixed" : "Long-term · Hourly"}
-            </button>
-          ))}
-        </div>
-
-        {/* Action row */}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button onClick={resetFilters} style={{ ...pillStyle(false), padding: "5px 14px" }}>Reset</button>
-          <button
-            onClick={applyFilters}
-            style={{ fontSize: 11, padding: "5px 16px", borderRadius: 20, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}
-          >Apply Filters</button>
-        </div>
-      </div>
-
-      {loading && (
-        <div style={{ textAlign: "center", padding: "3rem 0", color: c.subtext }}>
-          <div style={{ fontSize: 14, marginBottom: 8 }}>Loading your matches...</div>
-          <div style={{ fontSize: 11, opacity: 0.6 }}>Querying cached recommendations</div>
-        </div>
-      )}
-
-      {!loading && error && (
-        <div style={{ background: "rgba(239,68,68,.08)", color: "#ef4444", padding: "12px 16px", borderRadius: 10, fontSize: 13, border: "1px solid rgba(239,68,68,.15)" }}>⚠ {error}</div>
-      )}
-
-      {!loading && !error && ran && matches.length === 0 && (
-        <div style={{ textAlign: "center", padding: "3rem 0", color: c.subtext }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
-          <div style={{ fontSize: 16, fontWeight: 500, color: c.text, marginBottom: 8 }}>No matches found</div>
-          <div style={{ fontSize: 13, maxWidth: 320, margin: "0 auto", lineHeight: 1.6 }}>
-            {allMatches.length > 0
-              ? "No projects match the active filters. Try adjusting or resetting them."
-              : "Matches appear here once clients run AI scoring. Keep your profile and GitHub up to date."}
-          </div>
-        </div>
-      )}
-
-      {!loading && matches.length > 0 && (
-        <>
-          <div style={{ fontSize: 12, color: c.subtext, marginBottom: 12 }}>
-            Showing <strong style={{ color: c.text }}>{matches.length}</strong> of {allMatches.length} match{allMatches.length !== 1 ? "es" : ""} · <strong style={{ color: c.primary }}>{latency.toFixed(0)}ms</strong>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {matches.map((p, i) => {
-              const pal = MATCH_PALETTE[i % MATCH_PALETTE.length];
-              const pct = Math.round(p.match_score * 100);
-              return (
-                <div key={p.project_id} style={{ display: "flex", alignItems: "flex-start", padding: 16, border: `0.5px solid ${i === 0 ? c.primary + "40" : c.border}`, borderRadius: 12, background: i === 0 ? c.primarySoft + "20" : c.surface }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: pal.bg, color: pal.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0, marginRight: 14 }}>📋</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{p.title}</span>
-                      {i === 0 && <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 20, background: c.primary, color: "#fff", fontWeight: 600 }}>BEST FIT</span>}
-                    </div>
-                    <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5, display: "flex", gap: 10 }}>
-                      <span>Budget: <strong style={{ color: c.text }}>${p.budget.toLocaleString()}</strong></span>
-                      <span style={{ textTransform: "capitalize", color: c.subtext }}>{p.contract_type}</span>
-                    </div>
-                    {expandedId === p.project_id ? (
-                      <>
-                        <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 10 }}>{p.description}</div>
-                        <div style={{ marginBottom: 8 }}>
-                          <div style={{ fontSize: 10, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>Score Breakdown</div>
-                          {[
-                            { label: "Text Relevance", val: p.text_score },
-                            { label: "Skill Match",    val: p.skill_score },
-                            { label: "GitHub Quality", val: p.quality_score },
-                          ].map(({ label, val }) => (
-                            <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                              <div style={{ fontSize: 10, color: c.subtext, width: 100, flexShrink: 0 }}>{label}</div>
-                              <div style={{ flex: 1, height: 4, background: c.border, borderRadius: 4, overflow: "hidden" }}>
-                                <div style={{ width: `${Math.round(val * 100)}%`, height: "100%", background: c.primary, borderRadius: 4 }} />
-                              </div>
-                              <div style={{ fontSize: 10, color: c.primary, width: 28, textAlign: "right" }}>{Math.round(val * 100)}%</div>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, marginBottom: 6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{p.description}</div>
-                    )}
-                    {p.matched_skills.length > 0 && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
-                        {p.matched_skills.map(s => (
-                          <span key={s} style={{ fontSize: 9, padding: "2px 8px", borderRadius: 20, background: c.primarySoft, color: c.primary, fontWeight: 500 }}>{s}</span>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
-                      <button
-                        onClick={() => navigate(`/proposals?apply=${p.project_id}`)}
-                        style={{ fontSize: 11, padding: "5px 14px", borderRadius: 8, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}
-                      >Apply →</button>
-                      <button
-                        onClick={() => setExpandedId(expandedId === p.project_id ? null : p.project_id)}
-                        style={{ fontSize: 11, padding: "5px 10px", borderRadius: 8, background: "transparent", color: c.subtext, border: `0.5px solid ${c.border}`, cursor: "pointer", fontFamily: "inherit" }}
-                      >{expandedId === p.project_id ? "Show less" : "View details"}</button>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
-                    <div style={{ fontSize: 20, fontWeight: 600, color: pct >= 50 ? c.primary : c.subtext, lineHeight: 1 }}>{pct}%</div>
-                    <div style={{ fontSize: 9, color: c.subtext, marginTop: 3 }}>match</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
-
 // ─── Metric Skeletons ─────────────────────────────────────────────────────────
 
 const MetricSkeletons: React.FC<{ dark: boolean }> = ({ dark }) => (
@@ -456,7 +204,6 @@ const MetricSkeletons: React.FC<{ dark: boolean }> = ({ dark }) => (
     {[0, 1, 2, 3].map((i) => <SkeletonMetric key={i} dark={dark} />)}
   </>
 );
-
 
 // ─── Skills Section ───────────────────────────────────────────────────────────
 
@@ -483,616 +230,15 @@ const SkillsSection: React.FC<{ skills: string[]; c: ThemeColors }> = ({ skills,
   );
 };
 
-// ─── Verification View ────────────────────────────────────────────────────────
-
-type VerifStatus = "not_submitted" | "pending" | "approved" | "rejected";
-
-interface VerifState {
-  status: VerifStatus;
-  document_type: string | null;
-  rejection_note: string | null;
-  reviewed_at: string | null;
-  created_at: string | null;
-}
-
-const DOC_TYPES = [
-  { value: "national_id",       label: "🪪 National ID" },
-  { value: "passport",          label: "🛂 Passport" },
-  { value: "drivers_license",   label: "🚗 Driver's License" },
-  { value: "residence_permit",  label: "🏠 Residence Permit" },
-  { value: "other",             label: "📄 Other" },
-];
-
-const VerificationView: React.FC<{ c: ThemeColors }> = ({ c }) => {
-  const [verifState, setVerifState]   = useState<VerifState | null>(null);
-  const [loading, setLoading]         = useState(true);
-  const [submitting, setSubmitting]   = useState(false);
-  const [cancelling, setCancelling]   = useState(false);
-  const [docType, setDocType]         = useState("national_id");
-  const [file, setFile]               = useState<File | null>(null);
-  const [feedback, setFeedback]       = useState<{ ok: boolean; msg: string } | null>(null);
-  const fileRef = React.useRef<HTMLInputElement>(null);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/verification/status`, getAuthHeaders());
-      const data = await res.json();
-      setVerifState(data);
-    } catch {
-      setFeedback({ ok: false, msg: "Could not load verification status." });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const handleSubmit = async () => {
-    if (!file) { setFeedback({ ok: false, msg: "Please select a document file." }); return; }
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const form = new FormData();
-      form.append("document_type", docType);
-      form.append("file", file);
-      const headers = getAuthHeaders() as RequestInit;
-      // Remove Content-Type so browser sets multipart boundary
-      const res = await fetch(`${API_BASE_URL}/verification/submit`, {
-        method: "POST",
-        headers: { Authorization: (headers.headers as Record<string, string>)["Authorization"] },
-        body: form,
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setFeedback({ ok: true, msg: data.message });
-        setFile(null);
-        if (fileRef.current) fileRef.current.value = "";
-        load();
-      } else {
-        setFeedback({ ok: false, msg: data.detail || "Submission failed." });
-      }
-    } catch {
-      setFeedback({ ok: false, msg: "Network error. Please try again." });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!confirm("Cancel your pending verification?")) return;
-    setCancelling(true);
-    setFeedback(null);
-    try {
-      const headers = getAuthHeaders() as RequestInit;
-      const res = await fetch(`${API_BASE_URL}/verification/cancel`, {
-        method: "DELETE",
-        headers: headers.headers as Record<string, string>,
-      });
-      const data = await res.json();
-      if (res.ok) { setFeedback({ ok: true, msg: data.message }); load(); }
-      else setFeedback({ ok: false, msg: data.detail || "Could not cancel." });
-    } catch {
-      setFeedback({ ok: false, msg: "Network error." });
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  const statusInfo: Record<VerifStatus, { icon: string; label: string; color: string; bg: string }> = {
-    not_submitted: { icon: "○", label: "Not Submitted",  color: c.subtext,   bg: "transparent" },
-    pending:       { icon: "⏳", label: "Under Review",  color: "#f59e0b",   bg: "rgba(245,158,11,.1)" },
-    approved:      { icon: "✓",  label: "Verified",      color: "#22c55e",   bg: "rgba(34,197,94,.1)" },
-    rejected:      { icon: "✕",  label: "Rejected",      color: "#ef4444",   bg: "rgba(239,68,68,.1)" },
-  };
-
-  const status = verifState?.status ?? "not_submitted";
-  const si     = statusInfo[status];
-
-  return (
-    <div style={{ animation: "fadeIn 0.5s ease", maxWidth: 600 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Identity Verification</div>
-        <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Verify your identity to unlock the Verified badge and build trust with clients.</div>
-      </div>
-
-      {/* Status card */}
-      <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Current Status</div>
-        {loading ? (
-          <div style={{ height: 24, background: c.border, borderRadius: 6, width: 140, animation: "pulse 1.5s infinite" }} />
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, padding: "4px 12px", borderRadius: 100, background: si.bg, color: si.color, border: `0.5px solid ${si.color}33` }}>
-              {si.icon} {si.label}
-            </span>
-            {verifState?.document_type && (
-              <span style={{ fontSize: 11, color: c.subtext }}>
-                · {DOC_TYPES.find(d => d.value === verifState.document_type)?.label ?? verifState.document_type}
-              </span>
-            )}
-            {verifState?.created_at && (
-              <span style={{ fontSize: 11, color: c.subtext, marginLeft: "auto" }}>
-                Submitted {new Date(verifState.created_at).toLocaleDateString()}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Rejection note */}
-        {status === "rejected" && verifState?.rejection_note && (
-          <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(239,68,68,.08)", border: "0.5px solid rgba(239,68,68,.2)", borderRadius: 8, fontSize: 12, color: "#ef4444" }}>
-            <strong>Reason:</strong> {verifState.rejection_note}
-          </div>
-        )}
-
-        {/* Approved info */}
-        {status === "approved" && (
-          <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(34,197,94,.08)", border: "0.5px solid rgba(34,197,94,.2)", borderRadius: 8, fontSize: 12, color: "#22c55e" }}>
-            ✓ Your identity has been verified. The <strong>✓ AI Gate Verified</strong> badge is now active on your profile.
-          </div>
-        )}
-
-        {/* Pending cancel */}
-        {status === "pending" && (
-          <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 12, color: c.subtext }}>Your document is being reviewed by our team. This usually takes 1–2 business days.</span>
-            <button
-              onClick={handleCancel}
-              disabled={cancelling}
-              style={{ marginLeft: 16, flexShrink: 0, fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "0.5px solid rgba(239,68,68,.4)", background: "transparent", color: "#ef4444", cursor: "pointer" }}
-            >{cancelling ? "Cancelling…" : "Cancel"}</button>
-          </div>
-        )}
-      </div>
-
-      {/* Upload form — show if not submitted or rejected */}
-      {(status === "not_submitted" || status === "rejected") && (
-        <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 16 }}>
-            {status === "rejected" ? "Resubmit Document" : "Submit Document"}
-          </div>
-
-          {/* Document type picker */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 6 }}>Document Type</label>
-            <select
-              value={docType}
-              onChange={e => setDocType(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 12, fontFamily: "inherit", cursor: "pointer" }}
-            >
-              {DOC_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-            </select>
-          </div>
-
-          {/* File picker */}
-          <div style={{ marginBottom: 18 }}>
-            <label style={{ fontSize: 11, color: c.subtext, display: "block", marginBottom: 6 }}>Document File <span style={{ opacity: .6 }}>(PDF, JPEG, PNG, Word · max 10 MB)</span></label>
-            <div
-              onClick={() => fileRef.current?.click()}
-              onDragOver={(e: React.DragEvent<HTMLDivElement>) => e.preventDefault()}
-              onDrop={(e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) setFile(f); }}
-              style={{ border: `1.5px dashed ${file ? c.primary : c.border}`, borderRadius: 10, padding: "20px 16px", textAlign: "center", cursor: "pointer", transition: "border-color .2s", background: file ? c.primarySoft : "transparent" }}
-            >
-              {file ? (
-                <div>
-                  <div style={{ fontSize: 13, color: c.primary, fontWeight: 500 }}>📎 {file.name}</div>
-                  <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>{(file.size / 1024).toFixed(0)} KB · Click to change</div>
-                </div>
-              ) : (
-                <div>
-                  <div style={{ fontSize: 13, color: c.subtext }}>Click to select file</div>
-                  <div style={{ fontSize: 11, color: c.subtext, opacity: .6, marginTop: 4 }}>or drag and drop</div>
-                </div>
-              )}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-              style={{ display: "none" }}
-              onChange={e => setFile(e.target.files?.[0] ?? null)}
-            />
-          </div>
-
-          {/* Feedback */}
-          {feedback && (
-            <div style={{ marginBottom: 14, padding: "9px 14px", borderRadius: 8, fontSize: 12, background: feedback.ok ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)", border: `0.5px solid ${feedback.ok ? "rgba(34,197,94,.2)" : "rgba(239,68,68,.2)"}`, color: feedback.ok ? "#22c55e" : "#ef4444" }}>
-              {feedback.msg}
-            </div>
-          )}
-
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !file}
-            style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: "none", background: submitting || !file ? c.border : c.primary, color: submitting || !file ? c.subtext : "#fff", fontSize: 13, fontWeight: 600, cursor: submitting || !file ? "not-allowed" : "pointer", transition: "background .2s", fontFamily: "inherit" }}
-          >
-            {submitting ? "Uploading…" : status === "rejected" ? "Resubmit for Review" : "Submit for Review"}
-          </button>
-
-          <div style={{ marginTop: 12, fontSize: 11, color: c.subtext, lineHeight: 1.6, opacity: .8 }}>
-            Your document is reviewed by our team and never shared publicly. We verify identity only — no financial data is stored.
-          </div>
-        </div>
-      )}
-
-      {/* Feedback outside form (cancel feedback) */}
-      {feedback && (status === "pending" || status === "approved") && (
-        <div style={{ marginTop: 12, padding: "9px 14px", borderRadius: 8, fontSize: 12, background: feedback.ok ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)", border: `0.5px solid ${feedback.ok ? "rgba(34,197,94,.2)" : "rgba(239,68,68,.2)"}`, color: feedback.ok ? "#22c55e" : "#ef4444" }}>
-          {feedback.msg}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Workrooms View ───────────────────────────────────────────────────────────
-
-interface WorkMilestone {
-  milestone_id: number;
-  title:        string | null;
-  amount:       number;
-  status:       string;
-  due_date:     string | null;
-}
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 interface WorkContract {
-  contract_id:   number;
-  status:        string;
-  created_at:    string;
-  project?: {
-    project_id:  number;
-    title:       string;
-    description: string;
-    budget:      number;
-    status:      string;
-  };
-  milestones?: WorkMilestone[];
+  contract_id: number;
+  status: string;
+  created_at: string;
+  project?: { project_id: number; title: string; description: string; budget: number; status: string };
+  milestones?: { milestone_id: number; title: string | null; amount: number; status: string; due_date: string | null }[];
 }
-
-const contractStatusColor: Record<string, { color: string; bg: string }> = {
-  active:    { color: "#22c55e",  bg: "rgba(34,197,94,.1)" },
-  completed: { color: "#7F77DD", bg: "rgba(127,119,221,.12)" },
-  disputed:  { color: "#ef4444", bg: "rgba(239,68,68,.1)" },
-};
-
-const milestoneStatusColor: Record<string, { color: string; bg: string }> = {
-  pending:  { color: "#f59e0b",  bg: "rgba(245,158,11,.1)" },
-  approved: { color: "#22c55e",  bg: "rgba(34,197,94,.1)" },
-  paid:     { color: "#7F77DD", bg: "rgba(127,119,221,.12)" },
-};
-
-const WorkroomsView: React.FC<{ c: ThemeColors }> = ({ c }) => {
-  const [contracts, setContracts] = useState<WorkContract[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState("");
-  const [expanded, setExpanded]   = useState<number | null>(null);
-  const [filter, setFilter]       = useState<"all" | "active" | "completed">("all");
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/contracts/my`, getAuthHeaders());
-        if (res.ok) {
-          const data: WorkContract[] = await res.json();
-          setContracts(data);
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setError(err.detail || "Failed to load workrooms.");
-        }
-      } catch {
-        setError("Could not reach the server.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const toggle = (id: number) => setExpanded(prev => prev === id ? null : id);
-
-  return (
-    <div style={{ animation: "fadeIn 0.5s ease" }}>
-      {/* Header */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Workrooms</div>
-        <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Your active and completed contracts with clients.</div>
-      </div>
-
-      {/* Filter tabs */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-        {(["all", "active", "completed"] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            style={{ fontSize: 11, padding: "5px 14px", borderRadius: 20, border: `0.5px solid ${filter === f ? c.primary : c.border}`, background: filter === f ? c.primarySoft : "transparent", color: filter === f ? c.primary : c.subtext, cursor: "pointer", fontFamily: "inherit", fontWeight: filter === f ? 600 : 400 }}
-          >{f.charAt(0).toUpperCase() + f.slice(1)}{f !== "all" && ` (${contracts.filter(ct => ct.status === f).length})`}</button>
-        ))}
-      </div>
-
-      {loading && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {[1,2,3].map(i => (
-            <div key={i} style={{ height: 72, background: c.surface, borderRadius: 12, border: `0.5px solid ${c.border}`, animation: "pulse 1.5s infinite" }} />
-          ))}
-        </div>
-      )}
-
-      {!loading && error && (
-        <div style={{ padding: "20px 16px", textAlign: "center", color: "#ef4444", fontSize: 13 }}>{error}</div>
-      )}
-
-      {!loading && !error && contracts.length === 0 && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "40vh", color: c.subtext }}>
-          <div style={{ fontSize: 36, marginBottom: 14 }}>🏗️</div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>No workrooms yet</div>
-          <div style={{ fontSize: 12, color: c.subtext, maxWidth: 280, textAlign: "center", lineHeight: 1.6 }}>
-            Workrooms appear here once a client accepts your proposal and a contract is created.
-          </div>
-        </div>
-      )}
-
-      {!loading && !error && contracts.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {contracts.filter(ct => filter === "all" || ct.status === filter).map(ct => {
-            const cs   = contractStatusColor[ct.status] ?? { color: c.subtext, bg: "transparent" };
-            const isEx = expanded === ct.contract_id;
-            const msList = ct.milestones ?? [];
-            const paid = msList.filter((m: { status: string }) => m.status === "paid").length;
-            const total = msList.length;
-            const pct  = total > 0 ? Math.round((paid / total) * 100) : 0;
-
-            return (
-              <div key={ct.contract_id} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, overflow: "hidden" }}>
-                {/* Contract header row */}
-                <div
-                  onClick={() => toggle(ct.contract_id)}
-                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", cursor: "pointer" }}
-                >
-                  {/* Project title + meta */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {ct.project?.title ?? `Contract #${ct.contract_id}`}
-                    </div>
-                    <div style={{ fontSize: 11, color: c.subtext }}>
-                      Started {new Date(ct.created_at).toLocaleDateString()} · ${ct.project?.budget?.toLocaleString() ?? "—"} budget
-                    </div>
-                  </div>
-
-                  {/* Progress */}
-                  {total > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, minWidth: 80 }}>
-                      <div style={{ fontSize: 10, color: c.subtext }}>{paid}/{total} milestones paid</div>
-                      <div style={{ width: 80, height: 4, background: c.border, borderRadius: 4, overflow: "hidden" }}>
-                        <div style={{ width: `${pct}%`, height: "100%", background: pct === 100 ? "#22c55e" : c.primary, borderRadius: 4, transition: "width .4s" }} />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Status badge */}
-                  <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 100, background: cs.bg, color: cs.color, border: `0.5px solid ${cs.color}33`, flexShrink: 0 }}>
-                    {ct.status.charAt(0).toUpperCase() + ct.status.slice(1)}
-                  </span>
-
-                  {/* Chevron */}
-                  <span style={{ color: c.subtext, fontSize: 11, flexShrink: 0, transition: "transform .2s", transform: isEx ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
-                </div>
-
-                {/* Expanded milestones */}
-                {isEx && (
-                  <div style={{ borderTop: `0.5px solid ${c.border}`, padding: "12px 16px" }}>
-                    {ct.project?.description && (
-                      <p style={{ fontSize: 12, color: c.subtext, margin: "0 0 12px", lineHeight: 1.6 }}>{ct.project.description}</p>
-                    )}
-
-                    {msList.length === 0 ? (
-                      <div style={{ fontSize: 12, color: c.subtext, opacity: .7 }}>No milestones added yet.</div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>Milestones</div>
-                        {msList.map((m, i) => {
-                          const ms = milestoneStatusColor[m.status] ?? { color: c.subtext, bg: "transparent" };
-                          return (
-                            <div key={m.milestone_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: c.bg, borderRadius: 8, border: `0.5px solid ${c.border}` }}>
-                              <span style={{ fontSize: 11, color: c.subtext, minWidth: 18 }}>#{i + 1}</span>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{m.title || `Milestone #${i + 1}`}</div>
-                                {m.due_date && <div style={{ fontSize: 10, color: c.subtext, marginTop: 2 }}>Due {new Date(m.due_date).toLocaleDateString()}</div>}
-                              </div>
-                              <span style={{ fontSize: 12, fontWeight: 500, color: c.text }}>${m.amount?.toLocaleString()}</span>
-                              <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 100, background: ms.bg, color: ms.color }}>
-                                {m.status.charAt(0).toUpperCase() + m.status.slice(1)}
-                              </span>
-                            </div>
-                          );
-                        })}
-                        <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
-                          <span style={{ fontSize: 12, color: c.subtext }}>
-                            Total: <strong style={{ color: c.text }}>${msList.reduce((s, m) => s + (m.amount || 0), 0).toLocaleString()}</strong>
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Earnings Chart ───────────────────────────────────────────────────────────
-
-const EarningsChart: React.FC<{ c: ThemeColors }> = ({ c }) => {
-  const [bars, setBars] = useState<{ label: string; amount: number }[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/contracts/my`, getAuthHeaders());
-        if (res.ok) {
-          const contracts: WorkContract[] = await res.json();
-          const byMonth: Record<string, number> = {};
-          contracts.forEach(ct =>
-            (ct.milestones ?? []).filter((m: WorkMilestone) => m.status === "paid").forEach((m: WorkMilestone) => {
-              const key = new Date(m.due_date ?? ct.created_at).toLocaleDateString("en", { month: "short", year: "2-digit" });
-              byMonth[key] = (byMonth[key] || 0) + (m.amount || 0);
-            })
-          );
-          const sorted = Object.entries(byMonth).slice(-6).map(([label, amount]) => ({ label, amount }));
-          setBars(sorted);
-          setTotal(sorted.reduce((s, d) => s + d.amount, 0));
-        }
-      } catch {}
-      setLoading(false);
-    })();
-  }, []);
-
-  const max = Math.max(...bars.map(b => b.amount), 1);
-
-  return (
-    <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Earnings</span>
-        <span style={{ fontSize: 14, fontWeight: 600, color: "#22c55e" }}>${total.toLocaleString()}</span>
-      </div>
-      {loading ? (
-        <div style={{ height: 80, background: c.border, borderRadius: 6, animation: "pulse 1.5s infinite" }} />
-      ) : bars.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "20px 0", fontSize: 12, color: c.subtext, opacity: .7 }}>
-          Earnings will appear here once milestones are paid.
-        </div>
-      ) : (
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
-          {bars.map(({ label, amount }) => (
-            <div key={label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-              <div title={`$${amount}`} style={{ width: "100%", minHeight: 4, height: Math.max(4, (amount / max) * 64), background: c.primary, borderRadius: "3px 3px 0 0", opacity: 0.85 }} />
-              <div style={{ fontSize: 9, color: c.subtext }}>{label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Invitations View ─────────────────────────────────────────────────────────
-
-interface Invitation {
-  invitation_id: number;
-  project_id:    number;
-  project_title: string;
-  client_email:  string;
-  message:       string | null;
-  status:        string;
-  created_at:    string;
-}
-
-const InvitationsView: React.FC<{ c: ThemeColors; onCountChange?: (n: number) => void }> = ({ c, onCountChange }) => {
-  const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
-  const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
-
-  const [invites, setInvites] = useState<Invitation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [acting, setActing]   = useState<number | null>(null);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API}/proposals/invitations/my`, auth());
-      if (res.ok) {
-        const data: Invitation[] = await res.json();
-        setInvites(data);
-        onCountChange?.(data.filter((i: Invitation) => i.status === "pending").length);
-      }
-    } catch {} finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const respond = async (id: number, action: "accept" | "decline") => {
-    setActing(id);
-    try {
-      const res = await fetch(`${API}/proposals/invitations/${id}/respond`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (res.ok) {
-        setInvites((prev: Invitation[]) => prev.map((i: Invitation) => i.invitation_id === id ? { ...i, status: action === "accept" ? "accepted" : "declined" } : i));
-        onCountChange?.(invites.filter((i: Invitation) => i.invitation_id !== id && i.status === "pending").length);
-      }
-    } catch {} finally { setActing(null); }
-  };
-
-  const statusColor = (s: string) => s === "accepted" ? "#22c55e" : s === "declined" ? "#ef4444" : c.primary;
-  const statusLabel = (s: string) => s === "accepted" ? "Accepted" : s === "declined" ? "Declined" : "Pending";
-
-  return (
-    <div>
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Invitations</div>
-        <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>Clients who invited you to submit a proposal</div>
-      </div>
-
-      {loading ? (
-        <div style={{ fontSize: 13, color: c.subtext, padding: 24, textAlign: "center" }}>Loading…</div>
-      ) : invites.length === 0 ? (
-        <EmptyState label="No invitations yet" hint="When a client invites you to a project, it will appear here." c={c} />
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {invites.map((inv: Invitation) => (
-            <div key={inv.invitation_id} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "16px 18px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {inv.project_title}
-                  </div>
-                  <div style={{ fontSize: 11, color: c.subtext, marginBottom: inv.message ? 8 : 0 }}>
-                    From {inv.client_email} · {timeAgo(inv.created_at)}
-                  </div>
-                  {inv.message && (
-                    <div style={{ fontSize: 12, color: c.text, background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 12px", marginTop: 6, lineHeight: 1.5 }}>
-                      "{inv.message}"
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: statusColor(inv.status), background: statusColor(inv.status) + "18", border: `0.5px solid ${statusColor(inv.status)}30`, borderRadius: 100, padding: "3px 10px" }}>
-                    {statusLabel(inv.status)}
-                  </span>
-                  {inv.status === "pending" && (
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        onClick={() => respond(inv.invitation_id, "decline")}
-                        disabled={acting === inv.invitation_id}
-                        style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, cursor: "pointer", opacity: acting === inv.invitation_id ? 0.5 : 1 }}
-                      >
-                        Decline
-                      </button>
-                      <button
-                        onClick={() => respond(inv.invitation_id, "accept")}
-                        disabled={acting === inv.invitation_id}
-                        style={{ fontSize: 11, padding: "5px 14px", borderRadius: 8, background: c.primary, border: "none", color: "#fff", cursor: "pointer", fontWeight: 500, opacity: acting === inv.invitation_id ? 0.5 : 1 }}
-                      >
-                        {acting === inv.invitation_id ? "…" : "Accept"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 
 const FreelancerDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -1144,15 +290,14 @@ const FreelancerDashboard: React.FC = () => {
         body: JSON.stringify({ amount: amt }),
       });
       const d = await res.json();
-      setWalletMsg(d.message || d.detail || "Done");
-      setWalletAmount("");
+      if (res.ok) { setWalletMsg(`Withdrawn $${amt.toFixed(2)}`); setWalletAmount(""); }
+      else setWalletMsg(d.detail || "Request failed");
       const tx = await fetch(`${API_BASE_URL}/wallet/transactions`, getAuthHeaders()).then(r => r.json()).catch(() => []);
       setWalletTx(Array.isArray(tx) ? tx : []);
     } catch { setWalletMsg("Request failed"); }
     setWalletLoading(false);
   };
 
-  // Fetch unread message count
   useEffect(() => {
     const fetchUnreadCount = async () => {
       try {
@@ -1169,7 +314,6 @@ const FreelancerDashboard: React.FC = () => {
     fetchUnreadCount();
   }, []);
 
-  // Fetch proposal stats
   useEffect(() => {
     (async () => {
       try {
@@ -1179,7 +323,6 @@ const FreelancerDashboard: React.FC = () => {
     })();
   }, []);
 
-  // Fetch active contracts for dashboard
   useEffect(() => {
     (async () => {
       try {
@@ -1201,7 +344,7 @@ const FreelancerDashboard: React.FC = () => {
           <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Skill<span style={{ color: c.primary }}>Link</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <LangToggle style={{ color: c.text }} />
-            <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily }}>
+            <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily }} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
               {darkMode ? "☀️" : "🌙"}
             </button>
             <NotificationBell c={c} />
@@ -1257,14 +400,7 @@ const FreelancerDashboard: React.FC = () => {
             <div style={{ margin: "10px 12px 0" }}>
               <div
                 onClick={() => setActiveView("Upgrade")}
-                style={{
-                  background: "linear-gradient(135deg, #2a1f4a 0%, #3d2566 100%)",
-                  border: `0.5px solid rgba(127,119,221,0.4)`,
-                  borderRadius: 10,
-                  padding: "12px 12px",
-                  cursor: "pointer",
-                  transition: "all .2s",
-                }}
+                style={{ background: "linear-gradient(135deg, #2a1f4a 0%, #3d2566 100%)", border: `0.5px solid rgba(127,119,221,0.4)`, borderRadius: 10, padding: "12px 12px", cursor: "pointer", transition: "all .2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 20px rgba(127,119,221,0.25)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
               >
@@ -1284,15 +420,11 @@ const FreelancerDashboard: React.FC = () => {
           {/* ── Main Content ── */}
           <main style={{ flex: 1, overflowY: "auto", padding: 20, background: c.bg }}>
 
-            {activeView === "AI Matches" && <ProjectMatchView c={c} />}
-
-            {activeView === "Invitations" && <InvitationsView c={c} onCountChange={setInviteCount} />}
-
+            {activeView === "AI Matches"   && <ProjectMatchView c={c} />}
+            {activeView === "Invitations"  && <InvitationsView c={c} onCountChange={setInviteCount} />}
             {activeView === "Verification" && <VerificationView c={c} />}
-
-            {activeView === "Workrooms" && <WorkroomsView c={c} />}
-
-            {activeView === "Upgrade" && <UpgradeNowSection roleType="freelancer" colors={c} />}
+            {activeView === "Workrooms"    && <WorkroomsView c={c} />}
+            {activeView === "Upgrade"      && <UpgradeNowSection roleType="freelancer" colors={c} />}
 
             {activeView === "Dashboard" && <>
 
@@ -1307,11 +439,9 @@ const FreelancerDashboard: React.FC = () => {
               ) : (
                 <>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-                    {/* Avatar */}
                     <div style={{ width: 54, height: 54, borderRadius: 15, background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, flexShrink: 0, border: `0.5px solid ${c.primary}25` }}>
                       {initials}
                     </div>
-                    {/* Name + title + stats */}
                     <div style={{ flex: 1, minWidth: 200 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
                         <div style={{ fontSize: 17, fontWeight: 700, color: c.text, letterSpacing: "-0.3px" }}>{firstName}</div>
@@ -1322,7 +452,6 @@ const FreelancerDashboard: React.FC = () => {
                       <div style={{ fontSize: 12, color: c.subtext, marginBottom: 16 }}>
                         {ghProfile?.professional_title || profile?.bio?.split(".")[0] || "Freelancer on SkillLink"}
                       </div>
-                      {/* Inline stats row */}
                       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
                         {([
                           { label: t("fl.metric.ghScore"), val: ghProfile?.github_score ? `${ghProfile.github_score}/100` : "—", color: c.primary },
@@ -1342,13 +471,11 @@ const FreelancerDashboard: React.FC = () => {
                         ))}
                       </div>
                     </div>
-                    {/* Action buttons */}
                     <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                       <button onClick={openWallet} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, cursor: "pointer", fontFamily }}>{t("fl.metric.wallet")} {isRTL ? "←" : "→"}</button>
                       <button onClick={() => navigate("/settings")} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, background: c.primary, border: "none", color: "#fff", cursor: "pointer", fontFamily, fontWeight: 500 }}>{t("common.edit")} {t("common.profile")}</button>
                     </div>
                   </div>
-                  {/* Skills strip */}
                   {profile?.skills && profile.skills.length > 0 && (
                     <div style={{ marginTop: 16, paddingTop: 14, borderTop: `0.5px solid ${c.border}`, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {(profile.skills as string[]).slice(0, 14).map((s: string) => (
@@ -1469,14 +596,14 @@ const FreelancerDashboard: React.FC = () => {
           <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 18, padding: 28, width: 420, maxWidth: "92vw", maxHeight: "80vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div style={{ fontSize: 17, fontWeight: 700, color: c.text }}>{t("fl.metric.wallet")}</div>
-              <button onClick={() => setShowWallet(false)} style={{ background: "none", border: "none", color: c.subtext, fontSize: 18, cursor: "pointer" }}>✕</button>
+              <button onClick={() => setShowWallet(false)} style={{ background: "none", border: "none", color: c.subtext, fontSize: 18, cursor: "pointer" }} aria-label="Close wallet">✕</button>
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "#22c55e", marginBottom: 4 }}>${profile?.wallet_balance?.toFixed(2) ?? "0.00"}</div>
             <div style={{ fontSize: 12, color: c.subtext, marginBottom: 20 }}>Available balance</div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em" }}>Withdraw Amount (min $5)</label>
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <input type="number" min="5" value={walletAmount} onChange={e => setWalletAmount(e.target.value)} placeholder="0.00" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 14 }} />
+                <input type="number" min="5" value={walletAmount} onChange={e => setWalletAmount(e.target.value)} placeholder="0.00" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 14 }} aria-label="Withdrawal amount" />
                 <button onClick={doWithdraw} disabled={walletLoading} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#22c55e", color: "#fff", fontWeight: 700, cursor: walletLoading ? "not-allowed" : "pointer", opacity: walletLoading ? 0.6 : 1, fontSize: 13 }}>
                   {walletLoading ? "…" : "Withdraw"}
                 </button>

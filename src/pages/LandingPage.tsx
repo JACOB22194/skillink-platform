@@ -102,7 +102,7 @@ const LandingPage: React.FC = () => {
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <LangToggle style={{ color: colors.text }} />
-          <button style={{ padding: "8px 12px", borderRadius: 8, fontSize: 16, cursor: "pointer", border: `0.5px solid ${colors.border}`, background: colors.surface, color: colors.text, fontFamily }} onClick={() => setDarkMode(!darkMode)} title={darkMode ? t("land.theme.light") : t("land.theme.dark")}>
+          <button style={{ padding: "8px 12px", borderRadius: 8, fontSize: 16, cursor: "pointer", border: `0.5px solid ${colors.border}`, background: colors.surface, color: colors.text, fontFamily }} onClick={() => setDarkMode(!darkMode)} aria-label={darkMode ? t("land.theme.light") : t("land.theme.dark")}>
             {darkMode ? "☀️" : "🌙"}
           </button>
           <button style={{ padding: "8px 18px", borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 500, background: "transparent", border: `0.5px solid ${colors.border}`, color: colors.text, fontFamily }} onClick={() => navigate("/login")}>

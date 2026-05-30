@@ -3,8 +3,9 @@
  * Route: /client/proposals
  * Client reviews incoming proposals for each project and accepts/rejects them
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useLanguage } from "../shared/LanguageContext";
 
 const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
@@ -73,9 +74,10 @@ const timeAgo = (iso: string) => {
 interface ScoreBreakdown { score: number; avg_rating: number; total_reviews: number; jobs_completed: number; }
 
 const ScoreTooltip: React.FC<{ freelancerId: number; rawScore: number }> = ({ freelancerId, rawScore }) => {
-  const [visible, setVisible]     = useState(false);
-  const [data, setData]           = useState<ScoreBreakdown | null>(null);
-  const [fetched, setFetched]     = useState(false);
+  const { t } = useLanguage();
+  const [visible, setVisible] = useState(false);
+  const [data, setData]       = useState<ScoreBreakdown | null>(null);
+  const [fetched, setFetched] = useState(false);
 
   const load = async () => {
     if (fetched) return;
@@ -96,7 +98,7 @@ const ScoreTooltip: React.FC<{ freelancerId: number; rawScore: number }> = ({ fr
       onMouseLeave={() => setVisible(false)}
     >
       <span style={{ fontSize: 10, color: T.green, cursor: "default", userSelect: "none" }}>
-        {data ? `★ ${stars.toFixed(1)} (${pct}/100)` : "★ Score"}
+        {data ? `★ ${stars.toFixed(1)} (${pct}/100)` : `★ ${t("clprop.aiScore")}`}
       </span>
 
       {visible && (
@@ -107,9 +109,8 @@ const ScoreTooltip: React.FC<{ freelancerId: number; rawScore: number }> = ({ fr
           boxShadow: "0 8px 24px rgba(0,0,0,.5)",
           pointerEvents: "none",
         }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Trust Score</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>{t("flprof.trustScore")}</div>
 
-          {/* Overall bar */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.sub, marginBottom: 3 }}>
               <span>Overall</span><span style={{ color: T.green, fontWeight: 700 }}>{pct}/100</span>
@@ -119,19 +120,18 @@ const ScoreTooltip: React.FC<{ freelancerId: number; rawScore: number }> = ({ fr
             </div>
           </div>
 
-          {/* Breakdown rows */}
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.sub }}>
-              <span>Avg Rating</span>
+              <span>{t("flprof.avgRating")}</span>
               <span style={{ color: T.text }}>{"★".repeat(Math.round(stars))}{"☆".repeat(5 - Math.round(stars))} {stars.toFixed(1)}/5</span>
             </div>
             {data && (
               <>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.sub }}>
-                  <span>Jobs Completed</span><span style={{ color: T.text }}>{data.jobs_completed}</span>
+                  <span>{t("flprof.jobsDone")}</span><span style={{ color: T.text }}>{data.jobs_completed}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.sub }}>
-                  <span>Reviews</span><span style={{ color: T.text }}>{data.total_reviews}</span>
+                  <span>{t("flprof.reviews")}</span><span style={{ color: T.text }}>{data.total_reviews}</span>
                 </div>
               </>
             )}
@@ -164,27 +164,28 @@ const ConfirmModal: React.FC<{
   onConfirm: () => void;
   loading: boolean;
 }> = ({ action, proposal, onClose, onConfirm, loading }) => {
+  const { t } = useLanguage();
   const isAccept = action === "accept";
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000000d0", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
       <div style={{ background: T.cardAlt, border: `1px solid ${isAccept ? T.green + "44" : T.red + "44"}`, borderRadius: 20, padding: 32, maxWidth: 440, width: "100%" }}>
         <div style={{ fontSize: 40, textAlign: "center", marginBottom: 16 }}>{isAccept ? "🎉" : "🚫"}</div>
         <div style={{ fontSize: 20, fontWeight: 700, color: T.text, textAlign: "center", marginBottom: 8 }}>
-          {isAccept ? "Accept This Proposal?" : "Reject This Proposal?"}
+          {isAccept ? t("clprop.accept") : t("clprop.reject")}
         </div>
         <div style={{ fontSize: 13, color: T.sub, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
           {isAccept
-            ? `You're about to hire this freelancer for $${proposal.bid_amount.toLocaleString()}. A contract and escrow will be created automatically, and all other proposals will be declined.`
-            : "This proposal will be marked as rejected. The freelancer will be notified."}
+            ? `${t("clprop.acceptMsg")} $${proposal.bid_amount.toLocaleString()}.`
+            : t("clprop.rejectMsg")}
         </div>
         <div style={{ background: T.surface, borderRadius: 12, padding: "14px 18px", marginBottom: 24 }}>
-          <div style={{ fontSize: 12, color: T.sub }}>Bid Amount</div>
+          <div style={{ fontSize: 12, color: T.sub }}>{t("prop.budget")}</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: isAccept ? T.green : T.text }}>${proposal.bid_amount.toLocaleString()}</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: 12, background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ flex: 1, padding: 12, background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 13 }}>{t("prop.withdraw.no")}</button>
           <button onClick={onConfirm} disabled={loading} style={{ flex: 2, padding: 12, background: isAccept ? T.green : T.red, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, opacity: loading ? 0.7 : 1 }}>
-            {loading ? "Processing…" : isAccept ? "Accept & Create Contract" : "Reject Proposal"}
+            {loading ? t("common.loading") : isAccept ? t("clprop.confirm") : t("clprop.reject")}
           </button>
         </div>
       </div>
@@ -199,13 +200,14 @@ const ProposalCard: React.FC<{
   onAction: (id: number, action: "accept" | "reject") => void;
   rank: number;
 }> = ({ proposal, onAction, rank }) => {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const isPending = proposal.status === "pending";
 
   const statusStyle = {
-    pending:  { color: T.amber, bg: T.amberSoft, label: "Pending" },
-    accepted: { color: T.green, bg: T.greenSoft, label: "Accepted ✓" },
-    rejected: { color: T.red,   bg: T.redSoft,   label: "Rejected" },
+    pending:  { color: T.amber, bg: T.amberSoft, label: t("clprop.awaiting") },
+    accepted: { color: T.green, bg: T.greenSoft, label: `${t("clprop.accept")} ✓` },
+    rejected: { color: T.red,   bg: T.redSoft,   label: t("clprop.reject") },
   }[proposal.status];
 
   return (
@@ -253,14 +255,14 @@ const ProposalCard: React.FC<{
         {/* AI Score */}
         {proposal.ai_relevance_score != null && (
           <div style={{ marginBottom: 12 }}>
-            <ScoreBar value={proposal.ai_relevance_score} label="AI Relevance Score" color={T.accent} />
+            <ScoreBar value={proposal.ai_relevance_score} label={t("clprop.aiScore")} color={T.accent} />
           </div>
         )}
 
         {/* Cover letter preview */}
         {proposal.cover_letter && (
           <div>
-            <div style={{ fontSize: 12, color: T.sub, marginBottom: 6 }}>Cover Letter</div>
+            <div style={{ fontSize: 12, color: T.sub, marginBottom: 6 }}>{t("prop.submit.cover")}</div>
             <div style={{ fontSize: 13, lineHeight: 1.7, borderLeft: `3px solid ${T.accent}55`, paddingLeft: 12, color: T.sub }}>
               {expanded || proposal.cover_letter.length <= 180
                 ? proposal.cover_letter
@@ -268,7 +270,7 @@ const ProposalCard: React.FC<{
             </div>
             {proposal.cover_letter.length > 180 && (
               <button onClick={() => setExpanded(e => !e)} style={{ background: "none", border: "none", color: T.accent, cursor: "pointer", fontSize: 11, marginTop: 4, padding: 0 }}>
-                {expanded ? "Show less" : "Read more"}
+                {expanded ? t("common.hide") : t("common.show")}
               </button>
             )}
           </div>
@@ -278,10 +280,10 @@ const ProposalCard: React.FC<{
         {isPending && (
           <div style={{ display: "flex", gap: 10, marginTop: 16, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
             <button onClick={() => onAction(proposal.proposal_id, "reject")} style={{ flex: 1, padding: "9px 14px", background: T.redSoft, border: `1px solid ${T.red}33`, borderRadius: 9, color: T.red, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>
-              Decline
+              {t("clprop.reject")}
             </button>
             <button onClick={() => onAction(proposal.proposal_id, "accept")} style={{ flex: 2, padding: "9px 14px", background: T.green, border: "none", borderRadius: 9, color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
-              Accept & Hire →
+              {t("clprop.accept")} →
             </button>
           </div>
         )}
@@ -294,6 +296,7 @@ const ProposalCard: React.FC<{
 
 export const ClientProposalsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t, isRTL } = useLanguage();
   const [projects, setProjects]         = useState<Project[]>([]);
   const [selectedProject, setSelected] = useState<Project | null>(null);
   const [proposals, setProposals]       = useState<Proposal[]>([]);
@@ -348,7 +351,6 @@ export const ClientProposalsPage: React.FC = () => {
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
       const data = await r.json();
       showToast(data.message, true);
-      // Reload
       const r2 = await fetch(`${API}/proposals/project/${selectedProject!.project_id}`, auth());
       if (r2.ok) setProposals(await r2.json());
       if (confirm.action === "accept" && data.contract_id) {
@@ -362,7 +364,7 @@ export const ClientProposalsPage: React.FC = () => {
   const decided  = proposals.filter(p => p.status !== "pending");
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'Syne', sans-serif", display: "flex" }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'Syne', sans-serif", display: "flex" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&display=swap'); *{box-sizing:border-box} button,input{font-family:inherit}`}</style>
 
       {/* Toast */}
@@ -372,7 +374,6 @@ export const ClientProposalsPage: React.FC = () => {
           background: toast.ok ? T.green : T.red, color: "#fff",
           padding: "12px 20px", borderRadius: 12, fontSize: 13, fontWeight: 600,
           boxShadow: "0 8px 32px #0008",
-          animation: "slideIn .3s ease",
         }}>
           {toast.ok ? "✓ " : "✗ "}{toast.msg}
         </div>
@@ -381,14 +382,16 @@ export const ClientProposalsPage: React.FC = () => {
       {/* Left sidebar — project list */}
       <div style={{ width: 260, background: T.surface, borderRight: `1px solid ${T.border}`, padding: "28px 0", flexShrink: 0, overflowY: "auto" }}>
         <div style={{ padding: "0 20px 20px" }}>
-          <button onClick={() => navigate(-1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 12, padding: 0, marginBottom: 20 }}>← Back</button>
-          <div style={{ fontSize: 11, color: T.sub, textTransform: "uppercase", letterSpacing: ".1em" }}>Your Projects</div>
+          <button onClick={() => navigate(-1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 12, padding: 0, marginBottom: 20 }}>
+            {isRTL ? "→" : "←"} {t("common.back").replace("← ", "").replace(" →", "")}
+          </button>
+          <div style={{ fontSize: 11, color: T.sub, textTransform: "uppercase", letterSpacing: ".1em" }}>{t("clprop.title")}</div>
         </div>
 
         {projLoading ? (
-          <div style={{ padding: "0 20px", color: T.sub, fontSize: 13 }}>Loading…</div>
+          <div style={{ padding: "0 20px", color: T.sub, fontSize: 13 }}>{t("clprop.loading")}</div>
         ) : projects.length === 0 ? (
-          <div style={{ padding: "0 20px", color: T.sub, fontSize: 13 }}>No active projects</div>
+          <div style={{ padding: "0 20px", color: T.sub, fontSize: 13 }}>{t("clprop.noProposals")}</div>
         ) : (
           projects.map(p => {
             const isActive = selectedProject?.project_id === p.project_id;
@@ -415,26 +418,26 @@ export const ClientProposalsPage: React.FC = () => {
       {/* Main content */}
       <div style={{ flex: 1, padding: "32px 28px", overflowY: "auto" }}>
         {!selectedProject ? (
-          <div style={{ textAlign: "center", paddingTop: 80, color: T.sub }}>Select a project to view proposals</div>
+          <div style={{ textAlign: "center", paddingTop: 80, color: T.sub }}>{t("msg.select")}</div>
         ) : (
           <>
             {/* Project header */}
             <div style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>Reviewing Proposals For</div>
+              <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>{t("clprop.reviewing")}</div>
               <h1 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 4px", color: T.text }}>{selectedProject.title}</h1>
               <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, color: T.sub }}>Budget: <strong style={{ color: T.text }}>${selectedProject.budget.toLocaleString()}</strong></span>
-                <span style={{ fontSize: 12, color: T.sub }}>{proposals.length} total · {pending.length} pending</span>
+                <span style={{ fontSize: 13, color: T.sub }}>{t("prop.budget")}: <strong style={{ color: T.text }}>${selectedProject.budget.toLocaleString()}</strong></span>
+                <span style={{ fontSize: 12, color: T.sub }}>{proposals.length} total · {pending.length} {t("clprop.awaiting")}</span>
               </div>
             </div>
 
             {loading ? (
-              <div style={{ textAlign: "center", padding: 60, color: T.sub }}>Loading proposals…</div>
+              <div style={{ textAlign: "center", padding: 60, color: T.sub }}>{t("clprop.loading")}</div>
             ) : proposals.length === 0 ? (
               <div style={{ textAlign: "center", padding: 60, background: T.surface, borderRadius: 16, border: `1px solid ${T.border}` }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>No proposals yet</div>
-                <div style={{ fontSize: 13, color: T.sub }}>Freelancers haven't submitted proposals for this project yet.</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>{t("clprop.noProposals")}</div>
+                <div style={{ fontSize: 13, color: T.sub }}>{t("prop.hint")}</div>
               </div>
             ) : (
               <>
@@ -442,7 +445,7 @@ export const ClientProposalsPage: React.FC = () => {
                 {pending.length > 0 && (
                   <div style={{ marginBottom: 32 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.sub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 14 }}>
-                      ⏳ Awaiting Review ({pending.length})
+                      ⏳ {t("clprop.awaiting")} ({pending.length})
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       {pending.map((p, i) => (
@@ -456,7 +459,7 @@ export const ClientProposalsPage: React.FC = () => {
                 {decided.length > 0 && (
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.sub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 14 }}>
-                      ✓ Decided ({decided.length})
+                      ✓ {t("clprop.decided")} ({decided.length})
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 12, opacity: 0.7 }}>
                       {decided.map((p, i) => (

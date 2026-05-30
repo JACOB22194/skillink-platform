@@ -1,6 +1,7 @@
 services:
-  frontend: 
+  frontend:
     build: .
     container_name: skillink_frontend_
+    restart: unless-stopped
     ports:
       - "3000:3000"

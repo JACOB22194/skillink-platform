@@ -7,6 +7,7 @@ import {
 } from "../api/hooks";
 import type { AvailabilityStatus, PortfolioItem } from "../api/types";
 import { Skeleton } from "../components/ui/Skeleton";
+import { useLanguage } from "../shared/LanguageContext";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -24,13 +25,6 @@ const getColors = (dark: boolean): C =>
 
 type Tab = "profile" | "security" | "payment" | "notifications";
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "profile",       label: "Public Profile",        icon: "👤" },
-  { id: "security",      label: "Account Security",      icon: "🔐" },
-  { id: "payment",       label: "Payment & Withdrawal",  icon: "💳" },
-  { id: "notifications", label: "Notifications",         icon: "🔔" },
-];
-
 // ─── Alert ────────────────────────────────────────────────────────────────────
 
 const Alert: React.FC<{ type: "error" | "success"; msg: string; c: C }> = ({ type, msg, c }) => {
@@ -46,13 +40,8 @@ const Alert: React.FC<{ type: "error" | "success"; msg: string; c: C }> = ({ typ
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
-const AVAILABILITY_OPTIONS: { value: AvailabilityStatus; label: string; color: string; bg: string }[] = [
-  { value: "available",   label: "Available",   color: "#16a34a", bg: "#dcfce7" },
-  { value: "busy",        label: "Busy",        color: "#b45309", bg: "#fef3c7" },
-  { value: "unavailable", label: "Unavailable", color: "#6b7280", bg: "#f3f4f6" },
-];
-
 const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
+  const { t } = useLanguage();
   const { data: profile, isLoading, refetch } = useProfile();
   const { mutate: save, isLoading: saving, isSuccess, isError, error } = useProfileMutation();
   const { mutate: optimizeBio, isLoading: optimizing } = useOptimizeBio();
@@ -83,6 +72,12 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+  const AVAILABILITY_OPTIONS: { value: AvailabilityStatus; label: string; color: string; bg: string }[] = [
+    { value: "available",   label: t("set.profile.avail.avail"), color: "#16a34a", bg: "#dcfce7" },
+    { value: "busy",        label: t("set.profile.avail.busy"),  color: "#b45309", bg: "#fef3c7" },
+    { value: "unavailable", label: t("set.profile.avail.none"),  color: "#6b7280", bg: "#f3f4f6" },
+  ];
 
   useEffect(() => {
     if (!profile) return;
@@ -128,10 +123,10 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
       const data = await res.json();
       setAvatarUrl(data.avatar_url);
       setAvatarFile(null);
-      setAvatarMsg("Profile picture updated!");
+      setAvatarMsg(t("set.profile.uploaded"));
       if (avatarInputRef.current) avatarInputRef.current.value = "";
     } catch {
-      setAvatarMsg("Upload failed. Try again.");
+      setAvatarMsg(t("set.profile.uploadFail"));
     }
   };
 
@@ -140,9 +135,9 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
     try {
       const result = await optimizeBio({ bio, skills });
       setBio(result.optimized_bio);
-      setBioOptimizeMsg("Bio optimized — review and save when ready.");
+      setBioOptimizeMsg(t("set.profile.bioOptimized"));
     } catch {
-      setBioOptimizeMsg("Could not reach AI service. Try again.");
+      setBioOptimizeMsg(t("set.profile.bioOptErr"));
     }
   };
 
@@ -153,9 +148,9 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
       await addLink({ title: linkTitle.trim(), url: linkUrl.trim() });
       setLinkTitle(""); setLinkUrl(""); setPortfolioMode("idle");
       refetchPortfolio();
-      setPortfolioMsg({ text: "Link added.", ok: true });
+      setPortfolioMsg({ text: t("set.profile.linkAdded"), ok: true });
     } catch {
-      setPortfolioMsg({ text: "Failed to add link.", ok: false });
+      setPortfolioMsg({ text: t("set.profile.linkFail"), ok: false });
     }
   };
 
@@ -172,7 +167,7 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
 
   const handleUploadFile = async () => {
     if (!selectedPortfolioFile || !fileTitle.trim()) {
-      setPortfolioMsg({ text: !fileTitle.trim() ? "Please enter a title first." : "Please select a file.", ok: false });
+      setPortfolioMsg({ text: !fileTitle.trim() ? t("set.profile.enterTitle") : t("set.profile.selectFile"), ok: false });
       return;
     }
     setPortfolioMsg(null);
@@ -181,9 +176,9 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
       setFileTitle(""); setSelectedPortfolioFile(null); setPortfolioMode("idle");
       if (fileInputRef.current) fileInputRef.current.value = "";
       refetchPortfolio();
-      setPortfolioMsg({ text: "File uploaded.", ok: true });
+      setPortfolioMsg({ text: t("set.profile.fileUploaded"), ok: true });
     } catch {
-      setPortfolioMsg({ text: "Upload failed.", ok: false });
+      setPortfolioMsg({ text: t("set.profile.uploadFileFail"), ok: false });
     }
   };
 
@@ -202,13 +197,13 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>Public Profile</h2>
-      {isSuccess && <Alert type="success" msg="Profile saved successfully." c={c} />}
-      {isError && <Alert type="error" msg={error ?? "Failed to save."} c={c} />}
+      <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>{t("set.tab.profile")}</h2>
+      {isSuccess && <Alert type="success" msg={t("set.profile.saved.msg")} c={c} />}
+      {isError && <Alert type="error" msg={error ?? t("set.profile.save.err")} c={c} />}
 
       {/* ── Avatar ── */}
       <div style={{ marginBottom: "1.5rem" }}>
-        <label style={labelStyle}>Profile Picture</label>
+        <label style={labelStyle}>{t("set.profile.picture")}</label>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {avatarUrl ? (
             <img src={`http://localhost:8000${avatarUrl}`} alt="avatar" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: `0.5px solid ${c.border}` }} />
@@ -218,16 +213,16 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
             </div>
           )}
           <div style={{ flex: 1 }}>
-            <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: "none" }} onChange={e => setAvatarFile(e.target.files?.[0] ?? null)} />
+            <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: "none" }} onChange={e => setAvatarFile(e.target.files?.[0] ?? null)} aria-label="Upload profile picture" />
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button onClick={() => avatarInputRef.current?.click()} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: c.inputBg, color: c.text, border: `0.5px solid ${c.inputBorder}`, cursor: "pointer", fontFamily: "inherit" }}>
-                {avatarFile ? avatarFile.name : "Choose Image"}
+                {avatarFile ? avatarFile.name : t("set.profile.chooseImg")}
               </button>
               {avatarFile && (
-                <button onClick={handleAvatarUpload} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Upload</button>
+                <button onClick={handleAvatarUpload} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: c.primary, color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit" }}>{t("set.profile.uploadPic")}</button>
               )}
             </div>
-            {avatarMsg && <div style={{ fontSize: 12, marginTop: 6, color: avatarMsg.includes("failed") ? "#ef4444" : "#16a34a" }}>{avatarMsg}</div>}
+            {avatarMsg && <div style={{ fontSize: 12, marginTop: 6, color: avatarMsg === t("set.profile.uploadFail") ? "#ef4444" : "#16a34a" }}>{avatarMsg}</div>}
           </div>
         </div>
       </div>
@@ -235,18 +230,18 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
       {/* ── Name ── */}
       <div style={{ display: "flex", gap: 12, marginBottom: "1.25rem" }}>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>First Name</label>
+          <label style={labelStyle}>{t("set.profile.firstName")}</label>
           <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John" style={inputStyle} />
         </div>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Last Name</label>
+          <label style={labelStyle}>{t("set.profile.lastName")}</label>
           <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Doe" style={inputStyle} />
         </div>
       </div>
 
       {/* ── Availability Status ── */}
       <div style={{ marginBottom: "1.5rem" }}>
-        <label style={labelStyle}>Availability Status</label>
+        <label style={labelStyle}>{t("set.profile.avail")}</label>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {AVAILABILITY_OPTIONS.map(({ value, label, color, bg }) => (
             <button
@@ -269,7 +264,7 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
       {/* ── Bio + Optimize ── */}
       <div style={{ marginBottom: "1.25rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-          <label style={{ ...labelStyle, marginBottom: 0 }}>Professional Bio</label>
+          <label style={{ ...labelStyle, marginBottom: 0 }}>{t("set.profile.bio")}</label>
           <button
             onClick={handleOptimizeBio}
             disabled={optimizing}
@@ -280,12 +275,12 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
               opacity: optimizing ? 0.6 : 1,
             }}
           >
-            {optimizing ? "Optimizing…" : "✦ Optimize Bio"}
+            {optimizing ? t("set.profile.optimizing") : t("set.profile.optimizeBio")}
           </button>
         </div>
-        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={5} placeholder="Tell clients about your experience…" style={{ ...inputStyle, resize: "vertical" }} />
+        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={5} placeholder={t("set.profile.bioPlaceholder")} style={{ ...inputStyle, resize: "vertical" }} />
         {bioOptimizeMsg && (
-          <div style={{ fontSize: 12, marginTop: 6, color: bioOptimizeMsg.includes("Could not") ? "#ef4444" : "#16a34a" }}>
+          <div style={{ fontSize: 12, marginTop: 6, color: bioOptimizeMsg === t("set.profile.bioOptErr") ? "#ef4444" : "#16a34a" }}>
             {bioOptimizeMsg}
           </div>
         )}
@@ -293,7 +288,7 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
 
       {/* ── Hourly Rate ── */}
       <div style={{ marginBottom: "1.25rem" }}>
-        <label style={labelStyle}>Hourly Rate (USD)</label>
+        <label style={labelStyle}>{t("set.profile.rate")}</label>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 14, color: c.subtext }}>$</span>
           <input type="number" value={rate} min={0} onChange={(e) => setRate(e.target.value)} style={{ ...inputStyle, width: 140 }} />
@@ -303,7 +298,7 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
 
       {/* ── Skills ── */}
       <div style={{ marginBottom: "1.75rem" }}>
-        <label style={labelStyle}>Skills</label>
+        <label style={labelStyle}>{t("set.profile.skills")}</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
           {skills.map((s, i) => (
             <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, padding: "4px 10px", borderRadius: 100, background: c.primarySoft, color: c.primary, border: `0.5px solid ${c.primaryBorder}` }}>
@@ -314,7 +309,7 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
         </div>
         <input
           type="text"
-          placeholder="Type a skill and press Enter…"
+          placeholder={t("set.profile.addSkill")}
           style={inputStyle}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -330,22 +325,22 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
 
       {/* ── Save Profile ── */}
       <button onClick={handleSave} disabled={saving} style={{ padding: "11px 28px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.7 : 1, transition: "opacity .15s", marginBottom: "2rem" }}>
-        {saving ? "Saving…" : "Save Profile"}
+        {saving ? t("set.profile.saving") : t("set.profile.save")}
       </button>
 
       {/* ── Portfolio ── */}
       <div style={{ borderTop: `0.5px solid ${c.border}`, paddingTop: "1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: c.text }}>Portfolio</div>
-            <div style={{ fontSize: 12, color: c.subtext, marginTop: 2 }}>Upload files or add external links (GitHub, Behance, etc.)</div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: c.text }}>{t("set.profile.portfolio")}</div>
+            <div style={{ fontSize: 12, color: c.subtext, marginTop: 2 }}>{t("set.profile.portfolioDesc")}</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setPortfolioMode(m => m === "link" ? "idle" : "link")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: portfolioMode === "link" ? c.primarySoft : c.bg, color: portfolioMode === "link" ? c.primary : c.text, border: `0.5px solid ${portfolioMode === "link" ? c.primaryBorder : c.border}`, cursor: "pointer", fontFamily: "inherit" }}>
-              + Add Link
+              {t("set.profile.addLink")}
             </button>
             <button onClick={() => setPortfolioMode(m => m === "file" ? "idle" : "file")} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, background: portfolioMode === "file" ? c.primarySoft : c.bg, color: portfolioMode === "file" ? c.primary : c.text, border: `0.5px solid ${portfolioMode === "file" ? c.primaryBorder : c.border}`, cursor: "pointer", fontFamily: "inherit" }}>
-              + Upload File
+              {t("set.profile.uploadFile")}
             </button>
           </div>
         </div>
@@ -357,16 +352,16 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
         {/* Add link form */}
         {portfolioMode === "link" && (
           <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "1rem", marginBottom: "1rem" }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 10 }}>Add External Link</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 10 }}>{t("set.profile.addExternalLink")}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <input type="text" placeholder="Title (e.g. GitHub Profile, Behance Portfolio)" value={linkTitle} onChange={e => setLinkTitle(e.target.value)} style={inputStyle} />
               <input type="url" placeholder="https://github.com/username" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} style={inputStyle} />
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={handleAddLink} disabled={addingLink || !linkTitle.trim() || !linkUrl.trim()} style={{ padding: "8px 18px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontFamily: "inherit", opacity: addingLink ? 0.6 : 1 }}>
-                  {addingLink ? "Adding…" : "Add"}
+                  {addingLink ? t("set.profile.adding") : t("set.profile.add")}
                 </button>
                 <button onClick={() => { setPortfolioMode("idle"); setLinkTitle(""); setLinkUrl(""); }} style={{ padding: "8px 14px", background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, borderRadius: 8, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>
@@ -376,10 +371,9 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
         {/* Upload file form */}
         {portfolioMode === "file" && (
           <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 10, padding: "1rem", marginBottom: "1rem" }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 10 }}>Upload Portfolio File</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 10 }}>{t("set.profile.uploadPortfolio")}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <input type="text" placeholder="Title (e.g. UI Design Mockup)" value={fileTitle} onChange={e => setFileTitle(e.target.value)} style={inputStyle} />
-              {/* Custom drop zone */}
               <div
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={e => e.preventDefault()}
@@ -389,22 +383,22 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
                 {selectedPortfolioFile ? (
                   <div>
                     <div style={{ fontSize: 13, color: c.primary, fontWeight: 500 }}>📎 {selectedPortfolioFile.name}</div>
-                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>{(selectedPortfolioFile.size / 1024).toFixed(0)} KB · Click to change</div>
+                    <div style={{ fontSize: 11, color: c.subtext, marginTop: 3 }}>{(selectedPortfolioFile.size / 1024).toFixed(0)} {t("set.profile.clickChange")}</div>
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontSize: 13, color: c.subtext }}>Click to select file</div>
-                    <div style={{ fontSize: 11, color: c.subtext, opacity: .6, marginTop: 3 }}>or drag and drop · PDF, PNG, JPG, ZIP, Word</div>
+                    <div style={{ fontSize: 13, color: c.subtext }}>{t("set.profile.clickSelect")}</div>
+                    <div style={{ fontSize: 11, color: c.subtext, opacity: .6, marginTop: 3 }}>{t("set.profile.dragDrop")}</div>
                   </div>
                 )}
               </div>
               <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.zip,.doc,.docx" onChange={handleFileSelect} style={{ display: "none" }} />
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={handleUploadFile} disabled={uploading || !selectedPortfolioFile || !fileTitle.trim()} style={{ padding: "8px 18px", background: uploading || !selectedPortfolioFile || !fileTitle.trim() ? c.inputBorder : c.primary, color: uploading || !selectedPortfolioFile || !fileTitle.trim() ? c.subtext : "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: uploading || !selectedPortfolioFile || !fileTitle.trim() ? "not-allowed" : "pointer", fontFamily: "inherit", fontWeight: 500, transition: "background .2s" }}>
-                  {uploading ? "Uploading…" : "Upload"}
+                  {uploading ? t("set.profile.uploading") : t("set.profile.uploadPic")}
                 </button>
                 <button onClick={() => { setPortfolioMode("idle"); setFileTitle(""); setSelectedPortfolioFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ padding: "8px 14px", background: "transparent", border: `0.5px solid ${c.border}`, color: c.subtext, borderRadius: 8, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>
@@ -413,10 +407,10 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
 
         {/* Portfolio items list */}
         {portfolioLoading ? (
-          <div style={{ fontSize: 13, color: c.subtext }}>Loading portfolio…</div>
+          <div style={{ fontSize: 13, color: c.subtext }}>{t("set.profile.portfolioLoading")}</div>
         ) : !portfolioItems || portfolioItems.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", background: c.bg, border: `0.5px dashed ${c.border}`, borderRadius: 10, fontSize: 13, color: c.subtext }}>
-            No portfolio items yet. Add links or upload files above.
+            {t("set.profile.portfolioEmpty")}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -444,6 +438,7 @@ const PublicProfileTab: React.FC<{ c: C }> = ({ c }) => {
 };
 
 const SecurityTab: React.FC<{ c: C }> = ({ c }) => {
+  const { t } = useLanguage();
   const { mutate: changePassword, isLoading, isSuccess, isError, error, reset } = useChangePassword();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -456,8 +451,8 @@ const SecurityTab: React.FC<{ c: C }> = ({ c }) => {
   const handleSubmit = async () => {
     setLocalError(null);
     reset();
-    if (next !== confirm) { setLocalError("New passwords don't match."); return; }
-    if (next.length < 8) { setLocalError("Password must be at least 8 characters."); return; }
+    if (next !== confirm) { setLocalError(t("set.security.pwNoMatch")); return; }
+    if (next.length < 8) { setLocalError(t("set.security.pwTooShort")); return; }
     try {
       await changePassword({ current_password: current, new_password: next });
       setCurrent(""); setNext(""); setConfirm("");
@@ -466,28 +461,29 @@ const SecurityTab: React.FC<{ c: C }> = ({ c }) => {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>Account Security</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>{t("set.tab.security")}</h2>
 
       {/* Change Password */}
       <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem" }}>
-        <div style={{ fontSize: 15, fontWeight: 500, color: c.text, marginBottom: "1rem" }}>Change Password</div>
-        {isSuccess && <Alert type="success" msg="Password changed successfully." c={c} />}
-        {(isError || localError) && <Alert type="error" msg={localError ?? error ?? "Failed to change password."} c={c} />}
+        <div style={{ fontSize: 15, fontWeight: 500, color: c.text, marginBottom: "1rem" }}>{t("set.security.changepw")}</div>
+        {isSuccess && <Alert type="success" msg={t("set.security.pwChanged")} c={c} />}
+        {(isError || localError) && <Alert type="error" msg={localError ?? error ?? t("set.security.pwFail")} c={c} />}
 
         <div style={{ marginBottom: "1rem" }}>
-          <label style={labelStyle}>Current Password</label>
-          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} style={inputStyle} placeholder="••••••••" />
+          <label style={labelStyle}>{t("set.security.currentPw")}</label>
+          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} style={inputStyle} placeholder="••••••••" aria-required="true" />
         </div>
         <div style={{ marginBottom: "1rem" }}>
-          <label style={labelStyle}>New Password</label>
-          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} style={inputStyle} placeholder="Min. 8 characters" />
+          <label style={labelStyle}>{t("set.security.newPw")}</label>
+          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} style={inputStyle} placeholder="Min. 8 characters" aria-required="true" aria-describedby="settings-pw-hint" />
+          <span id="settings-pw-hint" style={{ fontSize: 11, color: "inherit", display: "none" }}>Password must be at least 8 characters.</span>
         </div>
         <div style={{ marginBottom: "1.25rem" }}>
-          <label style={labelStyle}>Confirm New Password</label>
-          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} style={inputStyle} placeholder="••••••••" />
+          <label style={labelStyle}>{t("set.security.confirmPw")}</label>
+          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} style={inputStyle} placeholder="••••••••" aria-required="true" />
         </div>
         <button onClick={handleSubmit} disabled={isLoading} style={{ padding: "11px 28px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: isLoading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: isLoading ? 0.7 : 1 }}>
-          {isLoading ? "Updating…" : "Update Password"}
+          {isLoading ? t("set.security.updating") : t("set.security.updatePw")}
         </button>
       </div>
 
@@ -495,11 +491,11 @@ const SecurityTab: React.FC<{ c: C }> = ({ c }) => {
       <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.25rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: c.text, marginBottom: 4 }}>Two-Factor Authentication</div>
-            <div style={{ fontSize: 13, color: c.subtext }}>Add an extra layer of security with an authenticator app.</div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: c.text, marginBottom: 4 }}>{t("set.security.mfa")}</div>
+            <div style={{ fontSize: 13, color: c.subtext }}>{t("set.security.mfaDesc")}</div>
           </div>
           <a href="/settings/mfa" style={{ padding: "9px 18px", background: c.primarySoft, color: c.primary, border: `0.5px solid ${c.primaryBorder}`, borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: "none", flexShrink: 0, marginLeft: 16 }}>
-            Manage MFA
+            {t("set.security.manageMfa")}
           </a>
         </div>
       </div>
@@ -510,6 +506,7 @@ const SecurityTab: React.FC<{ c: C }> = ({ c }) => {
 interface WalletTx { transaction_id: number; amount: number; type: string; description: string; created_at: string; }
 
 const PaymentTab: React.FC<{ c: C }> = ({ c }) => {
+  const { t } = useLanguage();
   const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
   const auth = () => ({ Authorization: `Bearer ${localStorage.getItem("access_token")}` });
 
@@ -530,7 +527,7 @@ const PaymentTab: React.FC<{ c: C }> = ({ c }) => {
 
   const withdraw = async () => {
     const amt = parseFloat(amount);
-    if (!amt || amt < 5) { setMsg({ text: "Minimum withdrawal is $5.00", ok: false }); return; }
+    if (!amt || amt < 5) { setMsg({ text: t("set.payment.minWithdraw"), ok: false }); return; }
     setWithdrawing(true); setMsg(null);
     try {
       const r = await fetch(`${API}/wallet/withdraw`, {
@@ -554,11 +551,11 @@ const PaymentTab: React.FC<{ c: C }> = ({ c }) => {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>Payment & Withdrawal</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>{t("set.tab.payment")}</h2>
 
       {/* Balance */}
       <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem" }}>
-        <div style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Wallet Balance</div>
+        <div style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>{t("set.payment.wallet")}</div>
         {isLoading
           ? <Skeleton width={100} height={32} dark />
           : <div style={{ fontSize: 32, fontWeight: 500, color: c.text }}>${profile?.wallet_balance?.toFixed(2) ?? "0.00"}</div>
@@ -567,26 +564,26 @@ const PaymentTab: React.FC<{ c: C }> = ({ c }) => {
 
       {/* Withdraw form */}
       <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem" }}>
-        <div style={{ fontSize: 15, fontWeight: 500, color: c.text, marginBottom: "1rem" }}>Withdraw Funds</div>
+        <div style={{ fontSize: 15, fontWeight: 500, color: c.text, marginBottom: "1rem" }}>{t("set.payment.withdraw")}</div>
         {msg && <Alert type={msg.ok ? "success" : "error"} msg={msg.text} c={c} />}
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: "0.75rem" }}>
           <span style={{ color: c.subtext, fontSize: 14 }}>$</span>
           <input type="number" min={5} step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
             placeholder="0.00" style={{ ...inputStyle, width: 140 }} />
-          <span style={{ fontSize: 12, color: c.subtext }}>min. $5.00</span>
+          <span style={{ fontSize: 12, color: c.subtext }}>{t("set.payment.min")}</span>
         </div>
         <button onClick={withdraw} disabled={withdrawing} style={{ padding: "10px 24px", background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: withdrawing ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: withdrawing ? 0.7 : 1 }}>
-          {withdrawing ? "Processing…" : "Withdraw"}
+          {withdrawing ? t("set.payment.processing") : t("set.payment.withdraw.btn")}
         </button>
       </div>
 
       {/* Transaction history */}
       <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "1rem 1.25rem", borderBottom: `0.5px solid ${c.border}`, fontSize: 15, fontWeight: 500, color: c.text }}>Transaction History</div>
+        <div style={{ padding: "1rem 1.25rem", borderBottom: `0.5px solid ${c.border}`, fontSize: 15, fontWeight: 500, color: c.text }}>{t("set.payment.history")}</div>
         {txLoading ? (
-          <div style={{ padding: "1.5rem", textAlign: "center", color: c.subtext, fontSize: 13 }}>Loading…</div>
+          <div style={{ padding: "1.5rem", textAlign: "center", color: c.subtext, fontSize: 13 }}>{t("common.loading")}</div>
         ) : txs.length === 0 ? (
-          <div style={{ padding: "1.5rem", textAlign: "center", color: c.subtext, fontSize: 13 }}>No transactions yet.</div>
+          <div style={{ padding: "1.5rem", textAlign: "center", color: c.subtext, fontSize: 13 }}>{t("set.payment.noHistory")}</div>
         ) : txs.map((tx, i) => (
           <div key={tx.transaction_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 1.25rem", borderBottom: i < txs.length - 1 ? `0.5px solid ${c.border}` : "none" }}>
             <div>
@@ -604,6 +601,7 @@ const PaymentTab: React.FC<{ c: C }> = ({ c }) => {
 };
 
 const NotificationsTab: React.FC<{ c: C }> = ({ c }) => {
+  const { t } = useLanguage();
   const [prefs, setPrefs] = useState({
     newMatch: true, projectUpdate: true, messageReceived: true, weeklyDigest: false, promotions: false,
   });
@@ -611,16 +609,16 @@ const NotificationsTab: React.FC<{ c: C }> = ({ c }) => {
   const toggle = (key: keyof typeof prefs) => setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
   const items: { key: keyof typeof prefs; label: string; desc: string }[] = [
-    { key: "newMatch",       label: "New AI Match",        desc: "When the engine finds a new project match." },
-    { key: "projectUpdate",  label: "Project Updates",     desc: "Status changes in your active workrooms." },
-    { key: "messageReceived",label: "New Messages",        desc: "When a client sends you a message." },
-    { key: "weeklyDigest",   label: "Weekly Digest",       desc: "A summary of your activity every Monday." },
-    { key: "promotions",     label: "Tips & Promotions",   desc: "Platform news and feature announcements." },
+    { key: "newMatch",        label: t("set.notif.aiMatch"),        desc: t("set.notif.aiMatchDesc") },
+    { key: "projectUpdate",   label: t("set.notif.projectUpdate"),  desc: t("set.notif.projectUpdateDesc") },
+    { key: "messageReceived", label: t("set.notif.newMsg"),         desc: t("set.notif.newMsgDesc") },
+    { key: "weeklyDigest",    label: t("set.notif.weekly"),         desc: t("set.notif.weeklyDesc") },
+    { key: "promotions",      label: t("set.notif.promo"),          desc: t("set.notif.promoDesc") },
   ];
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>Notifications</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 500, color: c.text, margin: "0 0 1.5rem" }}>{t("set.tab.notif")}</h2>
       <div style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 12, overflow: "hidden" }}>
         {items.map(({ key, label, desc }, i) => (
           <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: i < items.length - 1 ? `0.5px solid ${c.border}` : "none" }}>
@@ -638,7 +636,7 @@ const NotificationsTab: React.FC<{ c: C }> = ({ c }) => {
         ))}
       </div>
       <div style={{ fontSize: 12, color: c.subtext, marginTop: 12 }}>
-        Notification delivery is in development — preferences will be saved for when email/push is enabled.
+        {t("set.notif.devNote")}
       </div>
     </div>
   );
@@ -648,6 +646,7 @@ const NotificationsTab: React.FC<{ c: C }> = ({ c }) => {
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t, isRTL } = useLanguage();
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const s = localStorage.getItem("skilllink-darkMode");
     return s !== null ? JSON.parse(s) : true;
@@ -655,16 +654,23 @@ const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const c = getColors(darkMode);
 
+  const TABS: { id: Tab; label: string; icon: string }[] = [
+    { id: "profile",       label: t("set.tab.profile"),        icon: "👤" },
+    { id: "security",      label: t("set.tab.security"),       icon: "🔐" },
+    { id: "payment",       label: t("set.tab.payment"),        icon: "💳" },
+    { id: "notifications", label: t("set.tab.notif"),          icon: "🔔" },
+  ];
+
   const toggleTheme = () => {
     setDarkMode((d) => { localStorage.setItem("skilllink-darkMode", JSON.stringify(!d)); return !d; });
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif", fontSize: 13 }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "sans-serif", fontSize: 13 }}>
       {/* Top bar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", borderBottom: `0.5px solid ${c.border}`, background: c.surface }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <button onClick={() => navigate(-1)} style={{ background: "none", border: "none", color: c.subtext, cursor: "pointer", fontSize: 18, padding: 0, fontFamily: "inherit" }}>←</button>
+          <button onClick={() => navigate(-1)} style={{ background: "none", border: "none", color: c.subtext, cursor: "pointer", fontSize: 18, padding: 0, fontFamily: "inherit" }}>{isRTL ? "→" : "←"}</button>
           <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Skill<span style={{ color: c.primary }}>Link</span></div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -678,7 +684,7 @@ const SettingsPage: React.FC = () => {
       <div style={{ display: "flex", maxWidth: 1000, margin: "0 auto", padding: "2rem 1rem", gap: 24 }}>
         {/* Sidebar */}
         <aside style={{ width: 220, flexShrink: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 500, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Settings</div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>{t("set.title")}</div>
           {TABS.map(({ id, label, icon }) => (
             <div
               key={id}

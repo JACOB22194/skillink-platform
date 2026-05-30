@@ -372,6 +372,8 @@ const PostProjectPage: React.FC = () => {
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 style={{ ...inputStyle, marginBottom: "1rem" }}
+                aria-required="true"
+                aria-label={t("pp.title.placeholder")}
               />
 
               <textarea
@@ -381,6 +383,8 @@ const PostProjectPage: React.FC = () => {
                 onFocus={handleFocus as any}
                 onBlur={handleBlur as any}
                 style={{ ...inputStyle, height: 180, padding: "1.25rem", resize: "vertical", lineHeight: 1.6, marginBottom: "1.5rem" }}
+                aria-required="true"
+                aria-label={t("pp.desc.placeholder")}
               />
 
               <div style={{ marginBottom: "1.5rem" }}>
