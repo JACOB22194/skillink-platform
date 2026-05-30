@@ -20,6 +20,7 @@ PHASE 3 FIXES:
 import os
 import uuid
 import json
+import bcrypt
 import aiofiles
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
@@ -737,3 +738,41 @@ def search_companies(
         .all()
     )
     return [{"company_name": row.company_name} for row in results]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  DELETE /users/me/account — GDPR right to erasure
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.delete(
+    "/me/account",
+    status_code=200,
+    summary="Delete my account (GDPR right to erasure)",
+    description=(
+        "Anonymises all personal data (name, email, avatar, bio, GitHub). "
+        "Financial records and contracts are retained for legal compliance. "
+        "The account is deactivated and login becomes impossible after this action."
+    ),
+)
+def delete_own_account(
+    me: models.User = Depends(get_current_user),
+    db: Session     = Depends(get_db),
+):
+    me.email       = f"deleted_{me.id}@deleted.invalid"
+    me.first_name  = "Deleted"
+    me.last_name   = "User"
+    me.password    = bcrypt.hashpw(uuid.uuid4().hex.encode(), bcrypt.gensalt()).decode()
+    me.avatar_url  = None
+    me.status      = models.UserStatus.suspended
+    me.mfa_enabled = False
+    me.mfa_secret  = None
+
+    if me.freelancer:
+        me.freelancer.bio            = None
+        me.freelancer.portfolio_file = None
+        me.freelancer.github_url     = None
+        me.freelancer.github_stats   = None
+        me.freelancer.top_languages  = None
+
+    db.commit()
+    return {"message": "Account anonymised. All personal data has been erased."}

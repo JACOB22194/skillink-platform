@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 import models
 import schema
-from auth import create_access_token, create_refresh_token, decode_token, get_current_user
+from auth import create_access_token, create_refresh_token, decode_token, get_current_user, issue_ws_ticket
 from services.email_service import send_async_email
 
 router  = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -535,3 +535,16 @@ def verify_reset_otp(body: schema.VerifyResetOTPRequest, db: Session = Depends(g
     db.commit()
     _reset_otps.pop(body.email, None)   # one-time use
     return {"message": "Password has been reset successfully."}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  POST /auth/ws-ticket — WebSocket auth ticket
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post(
+    "/ws-ticket",
+    summary="Issue a one-time WebSocket ticket",
+    description="Returns a short-lived (30 s) ticket that can be used in the WebSocket URL instead of the JWT, keeping the token out of server logs.",
+)
+def get_ws_ticket(me: models.User = Depends(get_current_user)):
+    return {"ticket": issue_ws_ticket(me.id)}

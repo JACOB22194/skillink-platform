@@ -2,12 +2,18 @@
 routers/internal_router.py — ML-02: Internal endpoints for AI ↔ Backend communication.
 
 Endpoints here are NOT protected by user JWT.
-They require the X-Internal-Key header (shared secret between services).
+They use HMAC-SHA256 request signing: the caller sends X-Timestamp + X-Signature
+headers. The backend recomputes the expected signature and rejects requests older
+than 30 seconds (replay-attack window).
 Only accessible from within the Docker network — not reachable externally.
 """
 
+import hashlib
+import hmac
 import os
-from fastapi import APIRouter, Depends, Header, HTTPException
+import time
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -15,15 +21,34 @@ import models
 
 router = APIRouter(prefix="/internal", tags=["Internal"])
 
-_INTERNAL_KEY = os.environ.get("INTERNAL_SECRET", "skillink-retrain-internal-2024")
+_INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "skillink-retrain-internal-2024")
+_REPLAY_WINDOW_SECONDS = 30
 
 
-def _verify_key(x_internal_key: str = Header(...)):
-    if x_internal_key != _INTERNAL_KEY:
-        raise HTTPException(status_code=403, detail="Invalid internal key")
+def _verify_hmac(
+    request: Request,
+    x_timestamp: str = Header(...),
+    x_signature: str = Header(...),
+):
+    try:
+        ts = int(x_timestamp)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Invalid timestamp")
+
+    if abs(time.time() - ts) > _REPLAY_WINDOW_SECONDS:
+        raise HTTPException(status_code=403, detail="Request expired")
+
+    message = f"{x_timestamp}:{request.method}:{request.url.path}"
+    expected = hmac.new(
+        _INTERNAL_SECRET.encode(), message.encode(), hashlib.sha256
+    ).hexdigest()
+
+    # constant-time comparison prevents timing-based secret extraction
+    if not hmac.compare_digest(expected, x_signature):
+        raise HTTPException(status_code=403, detail="Invalid signature")
 
 
-@router.get("/ml/training-data", dependencies=[Depends(_verify_key)])
+@router.get("/ml/training-data", dependencies=[Depends(_verify_hmac)])
 def get_ml_training_data(db: Session = Depends(get_db)):
     """
     Return labeled project data for AI service retraining.

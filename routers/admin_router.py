@@ -2467,6 +2467,101 @@ def ml_ab_status(admin: models.User = Depends(require_admin)):
         raise HTTPException(502, f"AI service unreachable: {exc}")
 
 
+# ── Subscription management ──────────────────────────────────────────────────
+
+@router.get("/subscriptions/expiring", summary="List users whose subscriptions expire within N days")
+def list_expiring_subscriptions(
+    days: int      = Query(3, ge=1, le=90),
+    db:   Session  = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+):
+    cutoff = datetime.now(timezone.utc) + timedelta(days=days)
+    subs = (
+        db.query(models.Subscription)
+        .filter(
+            models.Subscription.status     == models.SubscriptionStatus.active,
+            models.Subscription.expires_at != None,  # noqa: E711
+            models.Subscription.expires_at <= cutoff,
+            models.Subscription.expires_at >  datetime.now(timezone.utc),
+        )
+        .all()
+    )
+    result = []
+    for s in subs:
+        user = db.query(models.User).filter_by(id=s.user_id).first()
+        if not user:
+            continue
+        result.append({
+            "user_id":      user.id,
+            "first_name":   user.first_name,
+            "last_name":    user.last_name,
+            "email":        user.email,
+            "plan_tier":    s.plan_tier,
+            "billing_cycle": s.billing_cycle,
+            "expires_at":   s.expires_at.isoformat() if s.expires_at else None,
+            "days_left":    max(0, (s.expires_at - datetime.now(timezone.utc)).days),
+        })
+    return {"expiring": result, "total": len(result)}
+
+
+@router.post("/subscriptions/{user_id}/cancel", summary="Admin: cancel a user's subscription immediately")
+def admin_cancel_subscription(
+    user_id: int,
+    db:      Session     = Depends(get_db),
+    admin:   models.User = Depends(require_admin),
+):
+    sub = db.query(models.Subscription).filter_by(user_id=user_id).first()
+    if not sub:
+        raise HTTPException(404, "Subscription not found for this user.")
+    if sub.status == models.SubscriptionStatus.cancelled:
+        raise HTTPException(400, "Subscription is already cancelled.")
+    if sub.plan_tier == "free":
+        raise HTTPException(400, "User is on the free plan — nothing to cancel.")
+
+    sub.status       = models.SubscriptionStatus.cancelled
+    sub.cancelled_at = datetime.now(timezone.utc)
+    sub.updated_at   = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": f"Subscription for user {user_id} has been cancelled."}
+
+
+@router.post("/subscriptions/{user_id}/notify", summary="Admin: email a subscription expiry reminder to a user")
+async def admin_notify_expiring(
+    user_id: int,
+    db:      Session     = Depends(get_db),
+    admin:   models.User = Depends(require_admin),
+):
+    import asyncio
+    from services.email_service import send_async_email
+
+    sub = db.query(models.Subscription).filter_by(user_id=user_id).first()
+    if not sub or sub.plan_tier == "free":
+        raise HTTPException(404, "No paid subscription found for this user.")
+
+    user = db.query(models.User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found.")
+
+    days_left = max(0, (sub.expires_at - datetime.now(timezone.utc)).days) if sub.expires_at else 0
+
+    try:
+        await send_async_email(
+            subject   = "Your SkillLink subscription is expiring soon",
+            email_to  = [user.email],
+            template_name = "subscription_expiry_reminder.html",
+            body      = {
+                "first_name": user.first_name or "there",
+                "plan_tier":  sub.plan_tier,
+                "days_left":  days_left,
+                "expires_at": sub.expires_at.strftime("%B %d, %Y") if sub.expires_at else "soon",
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(502, f"Email could not be sent: {exc}")
+
+    return {"message": f"Renewal reminder sent to {user.email}."}
+
+
 @router.get("/ml/ab/history", summary="All A/B experiments from the database")
 def ml_ab_history(
     db:    Session     = Depends(get_db),

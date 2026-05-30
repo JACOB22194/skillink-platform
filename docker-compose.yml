@@ -3,6 +3,7 @@ services:
   backend:
     build: .
     container_name: skillink_backend_
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
@@ -20,7 +21,7 @@ services:
   db:
     image: postgres:15
     container_name: skillink_db_
-    restart: "no"
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-skillink_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password123}

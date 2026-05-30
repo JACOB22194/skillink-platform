@@ -26,6 +26,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 
+from rate_limiter import RateLimitMiddleware
+
 from db import engine, SessionLocal
 import models
 from routers.auth_router         import router as auth_router
@@ -233,13 +235,24 @@ websocat "ws://localhost:8000/ws/chat?token=YOUR_ACCESS_TOKEN"
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
+_allowed_origins = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = ["*"],   # In production: specify your frontend URL
+    allow_origins     = _allowed_origins,
     allow_credentials = True,
     allow_methods     = ["*"],
     allow_headers     = ["*"],
 )
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+# Auth endpoints: 10 req/min per IP (brute-force protection)
+# All other endpoints: 120 req/min per IP
+app.add_middleware(RateLimitMiddleware)
 
 # ── Static uploads ────────────────────────────────────────────────────────────
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")

@@ -50,7 +50,7 @@ from sqlalchemy import or_, and_
 from db import get_db, SessionLocal
 import models
 import schema
-from auth import get_current_user, decode_token
+from auth import get_current_user, decode_token, consume_ws_ticket
 from services.notification_service import ws_manager, notify
 
 logger = logging.getLogger(__name__)
@@ -346,7 +346,7 @@ def delete_message(
 @router.websocket("/ws/chat")
 async def websocket_chat(
     websocket: WebSocket,
-    token:     str     = Query(..., description="JWT access token"),
+    ticket:    str     = Query(..., description="One-time WebSocket ticket from POST /auth/ws-ticket"),
     db:        Session = Depends(get_db),
 ):
     """
@@ -388,15 +388,10 @@ async def websocket_chat(
     even if delivery fails (client can poll REST endpoint to catch up).
     """
 
-    # ── Authenticate ──────────────────────────────────────────────
-    try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            await websocket.close(code=4001, reason="Invalid token type.")
-            return
-        user_id = int(payload["sub"])
-    except Exception:
-        await websocket.close(code=4001, reason="Authentication failed.")
+    # ── Authenticate via one-time ticket ──────────────────────────
+    user_id = consume_ws_ticket(ticket)
+    if user_id is None:
+        await websocket.close(code=4001, reason="Invalid or expired WebSocket ticket.")
         return
 
     # Load user

@@ -36,12 +36,19 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 import os
+import time as _time
+import secrets as _secrets
 
 from db import get_db
 import models
 
 # ── Read settings from .env ────────────────────────────────────────────────────
-SECRET_KEY                   = os.getenv("SECRET_KEY", "skillink-dev-fallback-secret-2026-2004")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is not set. "
+        "Add it to your .env file before starting the server."
+    )
 ALGORITHM                    = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES  = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS    = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS",   "7"))
@@ -173,3 +180,28 @@ def require_role(*allowed_roles: str):
 require_admin      = require_role("admin")
 require_client     = require_role("client", "admin")
 require_freelancer = require_role("freelancer", "admin")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  WEBSOCKET ONE-TIME TICKETS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_ws_tickets: dict = {}  # ticket_str → (user_id, expires_at)
+
+def issue_ws_ticket(user_id: int) -> str:
+    """Creates a 30-second one-time ticket for WebSocket authentication."""
+    now = _time.time()
+    stale = [k for k, (_, exp) in list(_ws_tickets.items()) if exp < now]
+    for k in stale:
+        _ws_tickets.pop(k, None)
+    ticket = _secrets.token_urlsafe(32)
+    _ws_tickets[ticket] = (user_id, now + 30)
+    return ticket
+
+def consume_ws_ticket(ticket: str):
+    """Validates and consumes a one-time ticket. Returns user_id or None."""
+    entry = _ws_tickets.pop(ticket, None)
+    if not entry:
+        return None
+    user_id, exp = entry
+    return user_id if _time.time() <= exp else None

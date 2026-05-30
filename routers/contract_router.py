@@ -224,9 +224,10 @@ def update_milestone_status(
     me:           models.User = Depends(get_current_user),
     db:           Session     = Depends(get_db),
 ):
+    # Lock the row so concurrent approval requests queue up instead of double-paying
     milestone = db.query(models.Milestone).filter(
         models.Milestone.milestone_id == milestone_id
-    ).first()
+    ).with_for_update().first()
     if not milestone:
         raise HTTPException(404, "Milestone not found.")
 
@@ -242,8 +243,10 @@ def update_milestone_status(
                 400,
                 f"Cannot approve a milestone with status '{current.value}'. Must be 'pending'."
             )
-        # Credit wallet — SINGLE place
-        freelancer = contract.freelancer
+        # Credit wallet — SINGLE place; lock row to prevent concurrent balance corruption
+        freelancer = db.query(models.Freelancer).filter(
+            models.Freelancer.freelancer_id == contract.freelancer_id
+        ).with_for_update().first()
         freelancer.wallet_balance = (freelancer.wallet_balance or 0) + milestone.amount
 
         db.add(models.WalletTransaction(
@@ -362,7 +365,7 @@ def request_revision(
 ):
     milestone = db.query(models.Milestone).filter(
         models.Milestone.milestone_id == milestone_id
-    ).first()
+    ).with_for_update().first()
     if not milestone:
         raise HTTPException(404, "Milestone not found.")
 
@@ -415,7 +418,7 @@ def complete_contract(
 ):
     contract = db.query(models.Contract).filter(
         models.Contract.contract_id == contract_id
-    ).first()
+    ).with_for_update().first()
     if not contract:
         raise HTTPException(404, "Contract not found.")
 
@@ -473,7 +476,7 @@ def open_dispute(
 ):
     contract = db.query(models.Contract).filter(
         models.Contract.contract_id == contract_id
-    ).first()
+    ).with_for_update().first()
     if not contract:
         raise HTTPException(404, "Contract not found.")
 
