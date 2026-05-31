@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL, getAuthHeaders } from "../shared/api";
 import { useLanguage, LangToggle } from "../shared/LanguageContext";
+import Tooltip from "../shared/Tooltip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -141,6 +142,7 @@ const PostProjectPage: React.FC = () => {
   // Validate budget
   const budgetNum = parseFloat(budget) || 0;
   const isBudgetValid = budgetNum >= 10;
+  const budgetBelowAiMin = !!pricingSuggestion && !pricingLoading && budgetNum > 0 && budgetNum < pricingSuggestion.min;
 
   const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     e.target.style.borderColor = colors.primary;
@@ -214,7 +216,7 @@ const PostProjectPage: React.FC = () => {
 
   // Fetch matches when entering step 2
   const goToMatching = async () => {
-    if (!description.trim() || !title.trim() || !isBudgetValid) return;
+    if (!description.trim() || !title.trim() || !isBudgetValid || budgetBelowAiMin) return;
     setStep("matching");
     setMatchLoading(true);
     setMatchError("");
@@ -419,6 +421,11 @@ const PostProjectPage: React.FC = () => {
                 {budget && !isBudgetValid && (
                   <div style={{ fontSize: 12, color: "#ef4444", marginTop: "0.5rem" }}>❌ {t("pp.budget.err")}</div>
                 )}
+                {budgetBelowAiMin && pricingSuggestion && (
+                  <div style={{ fontSize: 12, color: "#f5a623", marginTop: "0.5rem" }}>
+                    ⚠ {t("pp.budget.aiMin", { min: pricingSuggestion.min.toLocaleString() })}
+                  </div>
+                )}
               </div>
 
               {/* AI Pricing Suggestion Box */}
@@ -446,8 +453,11 @@ const PostProjectPage: React.FC = () => {
                     ) : pricingSuggestion && (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                         <div>
-                          <div style={{ fontSize: 12, color: colors.subtext, marginBottom: 4 }}>
+                          <div style={{ fontSize: 12, color: colors.subtext, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
                             💡 {isHourly ? t("pp.budget.recHourly") : t("pp.budget.rec")}
+                            <Tooltip text="AI-suggested range based on historical pricing for similar projects in this category and experience level.">
+                              <span style={{ cursor: "help", fontSize: 11, opacity: 0.6 }}>ⓘ</span>
+                            </Tooltip>
                           </div>
                           <div style={{ fontSize: 22, fontWeight: 600, color: colors.text, letterSpacing: "-0.5px" }}>
                             {isHourly ? (
@@ -501,7 +511,7 @@ const PostProjectPage: React.FC = () => {
                     {!removedPrimaryLabel && (
                       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: colors.primarySoft, padding: "8px 16px", borderRadius: 100, border: `1px solid ${colors.primary}30` }}>
                         <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>{analysisResult.label}</span>
-                        <span onClick={() => setRemovedPrimaryLabel(true)} style={{ fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2 }}>×</span>
+                        <button onClick={() => setRemovedPrimaryLabel(true)} aria-label="Remove label" style={{ background: "none", border: "none", fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2, padding: 0, fontFamily: "inherit" }}>×</button>
                       </div>
                     )}
                     <div style={{ display: "inline-flex", alignItems: "center", background: colors.primarySoft, padding: "8px 16px", borderRadius: 100, border: `1px solid ${colors.primary}30` }}>
@@ -510,7 +520,7 @@ const PostProjectPage: React.FC = () => {
                     {extraLabels.map((lbl, i) => (
                       <div key={`extra-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: colors.primarySoft, padding: "8px 16px", borderRadius: 100, border: `1px solid ${colors.primary}30` }}>
                         <span style={{ fontSize: 13, color: colors.primary, fontWeight: 500 }}>{lbl}</span>
-                        <span onClick={() => setExtraLabels(extraLabels.filter((_, j) => j !== i))} style={{ fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2 }}>×</span>
+                        <button onClick={() => setExtraLabels(extraLabels.filter((_, j) => j !== i))} aria-label="Remove label" style={{ background: "none", border: "none", fontSize: 14, color: colors.subtext, cursor: "pointer", lineHeight: 1, marginLeft: 2, padding: 0, fontFamily: "inherit" }}>×</button>
                       </div>
                     ))}
                   </div>
@@ -551,11 +561,11 @@ const PostProjectPage: React.FC = () => {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
                 <button
                   onClick={goToMatching}
-                  disabled={!description.trim() || !title.trim() || !isBudgetValid}
+                  disabled={!description.trim() || !title.trim() || !isBudgetValid || budgetBelowAiMin}
                   style={{
-                    background: (description.trim() && title.trim() && isBudgetValid) ? colors.primary : colors.border,
+                    background: (description.trim() && title.trim() && isBudgetValid && !budgetBelowAiMin) ? colors.primary : colors.border,
                     color: "#fff", border: "none", padding: "12px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500,
-                    cursor: (description.trim() && title.trim() && isBudgetValid) ? "pointer" : "not-allowed", transition: "opacity 0.2s",
+                    cursor: (description.trim() && title.trim() && isBudgetValid && !budgetBelowAiMin) ? "pointer" : "not-allowed", transition: "opacity 0.2s",
                   }}
                 >
                   {t("pp.next")}

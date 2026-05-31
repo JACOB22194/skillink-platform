@@ -33,7 +33,7 @@ const Chip: React.FC<{ label: string; c: C; onRemove?: () => void }> = ({ label,
   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, padding: "5px 12px", borderRadius: 100, background: c.primarySoft, color: c.primary, border: `0.5px solid ${c.primaryBorder}`, lineHeight: 1 }}>
     {label}
     {onRemove && (
-      <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer", color: c.primary, fontSize: 15, padding: 0, lineHeight: 1, marginLeft: 2, fontFamily: "inherit" }}>×</button>
+      <button onClick={onRemove} aria-label="Remove" style={{ background: "none", border: "none", cursor: "pointer", color: c.primary, fontSize: 15, padding: 0, lineHeight: 1, marginLeft: 2, fontFamily: "inherit" }}>×</button>
     )}
   </span>
 );

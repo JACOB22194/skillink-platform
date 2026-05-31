@@ -418,13 +418,13 @@ const MFASetupPage: React.FC = () => {
 
             {/* Error / success banners */}
             {error && (
-              <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "12px 14px", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <div role="alert" aria-live="assertive" style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "12px 14px", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
                 <span style={{ flexShrink: 0, marginTop: 2 }}>⚠️</span>
                 <span>{error}</span>
               </div>
             )}
             {successMsg && (
-              <div style={{ background: c.successBg, border: `0.5px solid ${c.successBorder}`, color: c.successText, borderRadius: 8, padding: "12px 14px", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <div role="status" aria-live="polite" style={{ background: c.successBg, border: `0.5px solid ${c.successBorder}`, color: c.successText, borderRadius: 8, padding: "12px 14px", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
                 <span style={{ flexShrink: 0, marginTop: 2 }}>✅</span>
                 <span>{successMsg}</span>
               </div>

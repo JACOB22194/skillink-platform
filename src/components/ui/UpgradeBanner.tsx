@@ -1,5 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useLanguage } from "../../shared/LanguageContext";
 
 interface UpgradeBannerProps {
   colors: {
@@ -18,17 +19,24 @@ interface UpgradeBannerProps {
 
 const UpgradeBanner: React.FC<UpgradeBannerProps> = ({ colors: c, roleType, variant = "full" }) => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
-  const freelancerPerks = ["Unlimited proposals", "Priority placement", "Advanced AI matching"];
-  const clientPerks = ["Unlimited projects", "AI-ranked candidates", "Team workrooms"];
-  const perks = roleType === "freelancer" ? freelancerPerks : clientPerks;
+  const freelancerPerkKeys = [
+    "upgrade.perk.unlimitedProp",
+    "upgrade.perk.priority",
+    "upgrade.perk.advAI",
+  ];
+  const clientPerkKeys = [
+    "upgrade.perk.unlimitedProj",
+    "upgrade.perk.aiRanked",
+    "upgrade.perk.teamWr",
+  ];
+  const perkKeys = roleType === "freelancer" ? freelancerPerkKeys : clientPerkKeys;
 
-  const planName = roleType === "freelancer" ? "Pro" : "Growth";
-  const price = roleType === "freelancer" ? "$19" : "$49";
+  const planName = roleType === "freelancer" ? t("upgrade.fl.p.name") : t("upgrade.cl.g.name");
+  const price    = roleType === "freelancer" ? "$19" : "$49";
 
-  const handleUpgrade = () => {
-    navigate("/pricing");
-  };
+  const handleUpgrade = () => navigate("/pricing");
 
   if (variant === "compact") {
     return (
@@ -45,10 +53,12 @@ const UpgradeBanner: React.FC<UpgradeBannerProps> = ({ colors: c, roleType, vari
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M7 1l1.8 3.6L13 5.5l-3 2.9.7 4.1L7 10.5l-3.7 2 .7-4.1-3-2.9 4.2-.9L7 1z" fill="#7F77DD" fillOpacity="0.9" />
           </svg>
-          <span style={{ fontSize: 11, fontWeight: 600, color: c.primary }}>Upgrade to {planName}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: c.primary }}>
+            {t("upgrade.to", { plan: planName })}
+          </span>
         </div>
         <p style={{ fontSize: 11, color: c.subtext, lineHeight: 1.5, margin: "0 0 10px" }}>
-          Unlock unlimited access starting at {price}/mo.
+          {t("upgrade.unlock", { price })}
         </p>
         <button
           onClick={handleUpgrade}
@@ -65,7 +75,7 @@ const UpgradeBanner: React.FC<UpgradeBannerProps> = ({ colors: c, roleType, vari
             fontFamily: "inherit",
           }}
         >
-          Upgrade now ✦
+          {t("upgrade.cta")}
         </button>
       </div>
     );
@@ -108,16 +118,16 @@ const UpgradeBanner: React.FC<UpgradeBannerProps> = ({ colors: c, roleType, vari
         {/* Text */}
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 3 }}>
-            You're on the free plan · Upgrade to {planName}
+            {t("upgrade.freePlan", { plan: planName })}
           </div>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-            {perks.map((perk) => (
-              <span key={perk} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: c.subtext }}>
+            {perkKeys.map((key) => (
+              <span key={key} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: c.subtext }}>
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                   <circle cx="5" cy="5" r="5" fill="rgba(127,119,221,0.2)" />
                   <path d="M3 5l1.5 1.5 2.5-2.5" stroke="#7F77DD" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                {perk}
+                {t(key)}
               </span>
             ))}
           </div>
@@ -128,7 +138,7 @@ const UpgradeBanner: React.FC<UpgradeBannerProps> = ({ colors: c, roleType, vari
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: c.primary, letterSpacing: "-0.5px" }}>{price}</div>
-          <div style={{ fontSize: 10, color: c.subtext }}>per month</div>
+          <div style={{ fontSize: 10, color: c.subtext }}>{t("upgrade.perMonth")}</div>
         </div>
         <button
           onClick={handleUpgrade}
@@ -145,7 +155,7 @@ const UpgradeBanner: React.FC<UpgradeBannerProps> = ({ colors: c, roleType, vari
             whiteSpace: "nowrap",
           }}
         >
-          Upgrade now ✦
+          {t("upgrade.cta")}
         </button>
       </div>
     </div>

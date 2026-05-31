@@ -393,7 +393,7 @@ const ProfileSettingsPage: React.FC = () => {
                 {skills.map(skill => (
                   <span key={skill} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, background: c.primarySoft, color: c.primary, fontSize: 11 }}>
                     {skill}
-                    <span onClick={() => removeSkill(skill)} style={{ cursor: "pointer", fontSize: 15, lineHeight: 1, opacity: 0.6 }}>×</span>
+                    <button onClick={() => removeSkill(skill)} aria-label={`Remove ${skill}`} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, lineHeight: 1, opacity: 0.6, padding: 0, color: "inherit", fontFamily: "inherit" }}>×</button>
                   </span>
                 ))}
               </div>
@@ -426,8 +426,8 @@ const ProfileSettingsPage: React.FC = () => {
           >
             {saving ? t("set.profile.saving") : t("pset.save")}
           </button>
-          {saveSuccess && <span style={{ fontSize: 12, color: "#22c55e" }}>{t("pset.saved")}</span>}
-          {saveError  && <span style={{ fontSize: 12, color: "#ef4444" }}>{saveError}</span>}
+          {saveSuccess && <span role="status" aria-live="polite" style={{ fontSize: 12, color: "#22c55e" }}>{t("pset.saved")}</span>}
+          {saveError  && <span role="alert" aria-live="assertive" style={{ fontSize: 12, color: "#ef4444" }}>{saveError}</span>}
         </div>
 
       </div>

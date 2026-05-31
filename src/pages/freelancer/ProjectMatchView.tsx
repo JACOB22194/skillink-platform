@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL, getAuthHeaders } from "../../shared/api";
+import Tooltip from "../../shared/Tooltip";
 
 interface ThemeColors {
   bg: string; surface: string; border: string; text: string; subtext: string;
@@ -225,7 +226,9 @@ const ProjectMatchView: React.FC<{ c: ThemeColors }> = ({ c }) => {
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
                     <div style={{ fontSize: 20, fontWeight: 600, color: pct >= 50 ? c.primary : c.subtext, lineHeight: 1 }}>{pct}%</div>
-                    <div style={{ fontSize: 9, color: c.subtext, marginTop: 3 }}>match</div>
+                    <Tooltip text="Combines description relevance, skill overlap, and GitHub work quality.">
+                      <div style={{ fontSize: 9, color: c.subtext, marginTop: 3, cursor: "help" }}>match ⓘ</div>
+                    </Tooltip>
                   </div>
                 </div>
               );

@@ -300,7 +300,7 @@ const LoginPage: React.FC = () => {
       {/* Theme + language toggles */}
       <div style={{ position: "absolute", top: "2rem", right: "2rem", display: "flex", gap: 8 }}>
         <LangToggle style={{ border: `0.5px solid ${c.border}`, background: c.surface, color: c.text }} />
-        <button onClick={toggleTheme} style={{ padding: "8px 12px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.surface, color: c.text, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }}>
+        <button onClick={toggleTheme} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ padding: "8px 12px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.surface, color: c.text, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }}>
           {darkMode ? "☀️" : "🌙"}
         </button>
       </div>
@@ -327,7 +327,7 @@ const LoginPage: React.FC = () => {
             </div>
 
             {error && (
-              <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.5rem" }}>
+              <div role="alert" aria-live="assertive" style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.5rem" }}>
                 {error}
               </div>
             )}

@@ -29,7 +29,13 @@ const getColors = (dark: boolean): ThemeColors =>
 
 const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | string; icon: React.ReactNode; colors: ThemeColors; onClick?: () => void }> =
   ({ label, active, badge, icon, colors, onClick }) => (
-    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 16px", color: active ? colors.primary : colors.subtext, borderLeft: `2px solid ${active ? colors.primary : "transparent"}`, background: active ? colors.bg : "transparent", cursor: "pointer", fontSize: 12 }}>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }}
+      style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 16px", color: active ? colors.primary : colors.subtext, borderLeft: `2px solid ${active ? colors.primary : "transparent"}`, background: active ? colors.bg : "transparent", cursor: "pointer", fontSize: 12 }}
+    >
       {icon}
       {label}
       {badge !== undefined && <span style={{ marginLeft: "auto", background: colors.primary, color: "#fff", fontSize: 9, padding: "1px 5px", borderRadius: 20 }}>{badge}</span>}
@@ -349,7 +355,7 @@ const FreelancerDashboard: React.FC = () => {
             </button>
             <NotificationBell c={c} />
             <div style={{ position: "relative" }}>
-              <div onClick={() => setDropdownOpen((v) => !v)} style={{ width: 28, height: 28, borderRadius: "50%", background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 500, border: `0.5px solid ${c.border}`, cursor: "pointer" }}>
+              <div role="button" tabIndex={0} aria-label="Open user menu" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDropdownOpen((v) => !v); } }} style={{ width: 28, height: 28, borderRadius: "50%", background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 500, border: `0.5px solid ${c.border}`, cursor: "pointer" }}>
                 {initials}
               </div>
               {dropdownOpen && (
@@ -368,7 +374,7 @@ const FreelancerDashboard: React.FC = () => {
                       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                     >{label}</a>
                   ))}
-                  <div onClick={() => { localStorage.clear(); window.location.href = "/login"; }}
+                  <div role="button" tabIndex={0} onClick={() => { localStorage.clear(); window.location.href = "/login"; }} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); localStorage.clear(); window.location.href = "/login"; } }}
                     style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: "#ef4444", cursor: "pointer" }}
                     onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}

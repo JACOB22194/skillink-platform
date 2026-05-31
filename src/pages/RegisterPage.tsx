@@ -92,14 +92,14 @@ const getColors = (dark: boolean): ThemeColors =>
 
 /** Returns null if valid, or an error string. */
 function validatePassword(password: string): string | null {
-  if (password.length < 8)              return "Password must be at least 8 characters.";
-  if (!/[A-Z]/.test(password))         return "Password must contain at least one uppercase letter.";
-  if (!/[0-9]/.test(password))         return "Password must contain at least one number.";
+  if (password.length < 8)              return "reg.err.pw8";
+  if (!/[A-Z]/.test(password))         return "reg.err.pwUpper";
+  if (!/[0-9]/.test(password))         return "reg.err.pwNum";
   return null;
 }
 
 function validateEmail(email: string): string | null {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? null : "Please enter a valid email address.";
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? null : "reg.err.email";
 }
 
 // ─── Password Strength Indicator ─────────────────────────────────────────────
@@ -472,6 +472,7 @@ const RegisterPage: React.FC = () => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const c = getColors(darkMode);
+  const { t, isRTL } = useLanguage();
 
   const toggleTheme = () => {
     setDarkMode((d) => {
@@ -501,18 +502,18 @@ const RegisterPage: React.FC = () => {
     const errs: Record<string, string> = {};
 
     const emailErr = validateEmail(form.email);
-    if (emailErr) errs.email = emailErr;
+    if (emailErr) errs.email = t(emailErr);
 
     if (form.role === "freelancer") {
-      if (!form.first_name?.trim()) errs.first_name = "First name is required.";
-      if (!form.last_name?.trim())  errs.last_name  = "Last name is required.";
+      if (!form.first_name?.trim()) errs.first_name = t("reg.err.firstName");
+      if (!form.last_name?.trim())  errs.last_name  = t("reg.err.lastName");
     }
 
     const pwErr = validatePassword(form.password);
-    if (pwErr) errs.password = pwErr;
+    if (pwErr) errs.password = t(pwErr);
 
-    if (form.password !== confirmPassword) errs.confirmPassword = "Passwords do not match.";
-    if (form.role === "client" && !form.company_name?.trim()) errs.company_name = "Company name is required for clients.";
+    if (form.password !== confirmPassword) errs.confirmPassword = t("reg.err.pwMatch");
+    if (form.role === "client" && !form.company_name?.trim()) errs.company_name = t("reg.err.company");
 
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
@@ -540,15 +541,15 @@ const RegisterPage: React.FC = () => {
 
     try {
       await axios.post(`${API_BASE_URL}/auth/register`, payload);
-      setSuccessMsg("Account created! Please check your email to activate your account.");
+      setSuccessMsg(t("reg.success"));
       setForm({ email: "", password: "", role: "freelancer", company_name: "" });
       setConfirmPassword("");
     } catch (err) {
       const e = err as AxiosError<ApiError>;
       if (e.response?.status === 409) {
-        setFieldErrors((prev) => ({ ...prev, email: "An account with this email already exists." }));
+        setFieldErrors((prev) => ({ ...prev, email: t("reg.err.duplicate") }));
       } else {
-        setError(e.response?.data?.detail ?? "Registration failed. Please try again.");
+        setError(e.response?.data?.detail ?? t("reg.err.failed"));
       }
     } finally {
       setLoading(false);
@@ -561,12 +562,15 @@ const RegisterPage: React.FC = () => {
   const errStyle: React.CSSProperties = { fontSize: 11, color: c.errorText, marginTop: 4 };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, fontFamily: "sans-serif", padding: "2rem", position: "relative" }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: c.bg, fontFamily: isRTL ? "'Cairo', sans-serif" : "sans-serif", padding: "2rem", position: "relative" }}>
 
-      {/* Theme toggle */}
-      <button onClick={toggleTheme} style={{ position: "absolute", top: "2rem", right: "2rem", padding: "8px 12px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.surface, color: c.text, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }}>
-        {darkMode ? "☀️" : "🌙"}
-      </button>
+      {/* Theme + language toggles */}
+      <div style={{ position: "absolute", top: "2rem", right: isRTL ? undefined : "2rem", left: isRTL ? "2rem" : undefined, display: "flex", gap: 8 }}>
+        <LangToggle style={{ border: `0.5px solid ${c.border}`, background: c.surface, color: c.text }} />
+        <button onClick={toggleTheme} style={{ padding: "8px 12px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.surface, color: c.text, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }}>
+          {darkMode ? "☀️" : "🌙"}
+        </button>
+      </div>
 
       <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 16, padding: "2.5rem 2rem", width: "100%", maxWidth: 460 }}>
 
@@ -575,8 +579,8 @@ const RegisterPage: React.FC = () => {
           Skill<span style={{ color: c.primary }}>Link</span>
         </div>
 
-        <h1 style={{ fontSize: 22, fontWeight: 500, color: c.text, textAlign: "center", margin: "0 0 6px" }}>Create your account</h1>
-        <p style={{ fontSize: 14, color: c.subtext, textAlign: "center", marginBottom: "2rem" }}>Join SkillLink and start today</p>
+        <h1 style={{ fontSize: 22, fontWeight: 500, color: c.text, textAlign: "center", margin: "0 0 6px" }}>{t("reg.title")}</h1>
+        <p style={{ fontSize: 14, color: c.subtext, textAlign: "center", marginBottom: "2rem" }}>{t("reg.subtitle")}</p>
 
         {/* Global error / success */}
         {error && (
@@ -592,7 +596,7 @@ const RegisterPage: React.FC = () => {
 
         {/* Role selector */}
         <div style={{ marginBottom: "1.25rem" }}>
-          <label style={labelStyle}>I am a...</label>
+          <label style={labelStyle}>{t("reg.iAm")}</label>
           <div style={{ display: "flex", gap: 10 }}>
             {ROLES.map((r) => {
               const isActive = form.role === r.value;
@@ -609,8 +613,8 @@ const RegisterPage: React.FC = () => {
                   }}
                 >
                   <span style={{ fontSize: 18 }}>{r.icon}</span>
-                  <span style={{ fontSize: 14, fontWeight: 500, color: isActive ? c.primary : c.text }}>{r.label}</span>
-                  <span style={{ fontSize: 11, color: c.subtext }}>{r.description}</span>
+                  <span style={{ fontSize: 14, fontWeight: 500, color: isActive ? c.primary : c.text }}>{r.value === "freelancer" ? t("reg.role.freelancer") : t("reg.role.client")}</span>
+                  <span style={{ fontSize: 11, color: c.subtext }}>{r.value === "freelancer" ? t("reg.role.freelancerDesc") : t("reg.role.clientDesc")}</span>
                 </button>
               );
             })}
@@ -621,12 +625,12 @@ const RegisterPage: React.FC = () => {
         {form.role === "freelancer" && (
           <div style={{ display: "flex", gap: 10, marginBottom: "1.25rem" }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>First Name</label>
+              <label style={labelStyle}>{t("common.firstName")}</label>
               <input style={{ ...inputBase, borderColor: fieldErrors.first_name ? c.errorText : c.inputBorder }} type="text" name="first_name" placeholder="John" value={form.first_name || ""} onChange={handleChange} autoComplete="given-name" aria-required="true" />
               {fieldErrors.first_name && <div style={errStyle}>{fieldErrors.first_name}</div>}
             </div>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Last Name</label>
+              <label style={labelStyle}>{t("common.lastName")}</label>
               <input style={{ ...inputBase, borderColor: fieldErrors.last_name ? c.errorText : c.inputBorder }} type="text" name="last_name" placeholder="Doe" value={form.last_name || ""} onChange={handleChange} autoComplete="family-name" aria-required="true" />
               {fieldErrors.last_name && <div style={errStyle}>{fieldErrors.last_name}</div>}
             </div>
@@ -635,7 +639,7 @@ const RegisterPage: React.FC = () => {
 
         {/* Email */}
         <div style={{ marginBottom: "1.25rem" }}>
-          <label style={labelStyle}>Email</label>
+          <label style={labelStyle}>{t("common.email")}</label>
           <input style={{ ...inputBase, borderColor: fieldErrors.email ? c.errorText : c.inputBorder }} type="email" name="email" placeholder="you@example.com" value={form.email} onChange={handleChange} autoComplete="email" aria-required="true" />
           {fieldErrors.email && <div style={errStyle}>{fieldErrors.email}</div>}
         </div>
@@ -643,7 +647,7 @@ const RegisterPage: React.FC = () => {
         {/* Company name (clients only) — searchable dropdown */}
         {form.role === "client" && (
           <div style={{ marginBottom: "1.25rem" }}>
-            <label style={labelStyle}>Company</label>
+            <label style={labelStyle}>{t("reg.company")}</label>
             <CompanyDropdown
               value={form.company_name || ""}
               onChange={handleCompanyChange}
@@ -652,19 +656,19 @@ const RegisterPage: React.FC = () => {
             />
             {fieldErrors.company_name && <div style={errStyle}>{fieldErrors.company_name}</div>}
             <div style={{ fontSize: 11, color: c.subtext, marginTop: 4 }}>
-              Search existing companies or type a new name to create one.
+              {t("reg.companyHint")}
             </div>
           </div>
         )}
 
         {/* Password */}
         <div style={{ marginBottom: "1.25rem" }}>
-          <label style={labelStyle}>Password</label>
+          <label style={labelStyle}>{t("common.password")}</label>
           <div style={{ position: "relative" }}>
             <input
               style={{ ...inputBase, paddingRight: 44, borderColor: fieldErrors.password ? c.errorText : c.inputBorder }}
               type={showPassword ? "text" : "password"} name="password"
-              placeholder="Min. 8 chars, 1 uppercase, 1 number"
+              placeholder={t("reg.passwordPlaceholder")}
               value={form.password} onChange={handleChange} autoComplete="new-password"
               aria-required="true" aria-describedby="reg-pw-hint"
             />
@@ -683,11 +687,11 @@ const RegisterPage: React.FC = () => {
 
         {/* Confirm password */}
         <div style={{ marginBottom: "1.5rem" }}>
-          <label style={labelStyle}>Confirm Password</label>
+          <label style={labelStyle}>{t("reg.confirmPassword")}</label>
           <input
             style={{ ...inputBase, borderColor: fieldErrors.confirmPassword ? c.errorText : c.inputBorder }}
             type={showPassword ? "text" : "password"} name="confirmPassword"
-            placeholder="Repeat your password"
+            placeholder={t("reg.confirmPlaceholder")}
             value={confirmPassword}
             onChange={(e) => { setConfirmPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, confirmPassword: "" })); }}
             autoComplete="new-password"
@@ -701,12 +705,12 @@ const RegisterPage: React.FC = () => {
           onClick={handleSubmit} disabled={loading}
           style={{ width: "100%", padding: 12, background: c.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1, transition: "opacity .15s" }}
         >
-          {loading ? "Creating account..." : "Create account"}
+          {loading ? t("reg.submitting") : t("reg.submit")}
         </button>
 
         <p style={{ textAlign: "center", fontSize: 13, color: c.subtext, marginTop: "1.5rem" }}>
-          Already have an account?{" "}
-          <a href="/login" style={{ color: c.primary, textDecoration: "none", fontWeight: 500 }}>Log in</a>
+          {t("reg.hasAccount")}{" "}
+          <a href="/login" style={{ color: c.primary, textDecoration: "none", fontWeight: 500 }}>{t("common.logIn")}</a>
         </p>
       </div>
     </div>

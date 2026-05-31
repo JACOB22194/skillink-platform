@@ -130,6 +130,25 @@ const STATUS_COLORS: Record<string, { bg: string; color: string; border: string 
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
+const KNOWN_PERMISSIONS = [
+  { key: "submit_proposals",    label: "Submit Proposals" },
+  { key: "view_projects",       label: "View Projects" },
+  { key: "manage_milestones",   label: "Manage Milestones" },
+  { key: "withdraw_wallet",     label: "Withdraw Wallet" },
+  { key: "view_ai_matches",     label: "View AI Matches" },
+  { key: "post_projects",       label: "Post Projects" },
+  { key: "accept_proposals",    label: "Accept Proposals" },
+  { key: "fund_escrow",         label: "Fund Escrow" },
+  { key: "open_disputes",       label: "Open Disputes" },
+  { key: "review_freelancers",  label: "Review Freelancers" },
+  { key: "manage_users",        label: "Manage Users" },
+  { key: "manage_roles",        label: "Manage Roles" },
+  { key: "resolve_disputes",    label: "Resolve Disputes" },
+  { key: "view_analytics",      label: "View Analytics" },
+  { key: "configure_ai",        label: "Configure AI" },
+  { key: "manage_verifications",label: "Manage Verifications" },
+];
+
 const getColors = (dark: boolean): ThemeColors =>
   dark
     ? { bg: "#0f0f0f", surface: "#1a1a1a", border: "#333333", text: "#ffffff", subtext: "#b0b0b0", primary: "#7F77DD", primarySoft: "#2a2640" }
@@ -146,13 +165,19 @@ const Badge: React.FC<{ bg: string; color: string; border: string; children: Rea
 
 const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | string; icon: React.ReactNode; colors: ThemeColors; onClick?: () => void }> =
   ({ label, active, badge, icon, colors, onClick }) => (
-    <div onClick={onClick} style={{
-      display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
-      color: active ? colors.primary : colors.subtext,
-      borderLeft: `2px solid ${active ? colors.primary : "transparent"}`,
-      background: active ? colors.bg : "transparent",
-      cursor: "pointer", fontSize: 12,
-    }}>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }}
+      style={{
+        display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
+        color: active ? colors.primary : colors.subtext,
+        borderLeft: `2px solid ${active ? colors.primary : "transparent"}`,
+        background: active ? colors.bg : "transparent",
+        cursor: "pointer", fontSize: 12,
+      }}
+    >
       {icon}
       {label}
       {badge !== undefined && (
@@ -773,13 +798,18 @@ const AdminDashboard: React.FC = () => {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <LangToggle style={{ color: c.text }} />
-          <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
+          <button onClick={toggleTheme} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
             {darkMode ? "☀️" : "🌙"}
           </button>
           {/* Avatar dropdown */}
           <div style={{ position: "relative" }}>
             <div
+              role="button"
+              tabIndex={0}
+              aria-label="Open user menu"
+              aria-expanded={dropdownOpen}
               onClick={() => setDropdownOpen((v) => !v)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDropdownOpen((v) => !v); } }}
               style={{ width: 28, height: 28, borderRadius: "50%", background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 500, border: `0.5px solid ${c.border}`, cursor: "pointer" }}
             >AD</div>
             {dropdownOpen && (
@@ -795,7 +825,10 @@ const AdminDashboard: React.FC = () => {
                   🔐 {t("common.mfa")}
                 </a>
                 <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => { localStorage.clear(); window.location.href = "/login"; }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); localStorage.clear(); window.location.href = "/login"; } }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: "#ef4444", cursor: "pointer" }}
                   onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -829,7 +862,7 @@ const AdminDashboard: React.FC = () => {
           <NavItem label={t("adm.nav.overrides")} active={activeTab === "Overrides"} onClick={() => setActiveTab("Overrides")} icon={<IconSwitch />} colors={c} />
           <NavItem label={t("adm.nav.alerts")} active={activeTab === "Alerts"} onClick={() => setActiveTab("Alerts")} badge={alertsData?.counts?.total || undefined} icon={<IconBell />} colors={c} />
           <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
-            <div onClick={toggleTheme} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>{t("adm.switchTheme")}</div>
+            <div role="button" tabIndex={0} onClick={toggleTheme} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleTheme(); } }} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>{t("adm.switchTheme")}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>{t("adm.contactUs")}</div>
           </div>
         </aside>
@@ -859,7 +892,7 @@ const AdminDashboard: React.FC = () => {
               { label: "Contracts",        val: stats ? stats.total_contracts.toLocaleString() : "...",sub: "Total signed contracts", badge: <Badge bg="rgba(34,197,94,.12)" color="#22c55e" border="rgba(34,197,94,.2)">Active</Badge>, tab: "Revenue" },
               { label: "Pending Vetting",  val: <span style={{ color: "#f59e0b" }}>{verifications.length}</span>, sub: "awaiting AI Gate review", badge: <Badge bg="rgba(245,158,11,.1)" color="#f59e0b" border="rgba(245,158,11,.2)">Action needed</Badge>, tab: "Vetting Gate" },
             ].map((m, i) => (
-              <div key={i} onClick={() => setActiveTab(m.tab)} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }}
+              <div key={i} role="button" tabIndex={0} aria-label={`Go to ${m.label}`} onClick={() => setActiveTab(m.tab)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveTab(m.tab); } }} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: 16, cursor: "pointer", transition: "border-color 0.15s" }}
                 onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => (e.currentTarget.style.borderColor = c.primary)}
                 onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => (e.currentTarget.style.borderColor = c.border)}
               >
@@ -1755,18 +1788,49 @@ const AdminDashboard: React.FC = () => {
                           )}
                           {d.status === "resolved" && <span style={{ fontSize: 11, color: c.subtext }}>{d.resolution_note?.substring(0, 30) || "Resolved"}</span>}
                         </div>
-                        {disputeAiSummary[d.id] && (
-                          <div style={{ marginTop: 8, padding: "8px 10px", background: c.primarySoft, borderRadius: 8, fontSize: 11, color: c.text, maxWidth: 260 }}>
-                            <div style={{ fontWeight: 600, color: c.primary, marginBottom: 4 }}>AI Recommendation</div>
-                            <div style={{ marginBottom: 2 }}><b>Action:</b> {disputeAiSummary[d.id].recommendation?.replace(/_/g, " ")}</div>
-                            <div style={{ marginBottom: 2 }}><b>Work done:</b> {disputeAiSummary[d.id].work_completion_pct}% ({disputeAiSummary[d.id].milestones_completed}/{disputeAiSummary[d.id].total_milestones} milestones)</div>
-                            <div style={{ marginBottom: 2 }}><b>Escrow:</b> ${disputeAiSummary[d.id].escrow_amount?.toLocaleString()}</div>
-                            <div style={{ color: c.subtext, fontStyle: "italic" }}>{disputeAiSummary[d.id].rationale}</div>
-                            <div style={{ marginTop: 4, color: disputeAiSummary[d.id].urgency === "high" ? "#ef4444" : disputeAiSummary[d.id].urgency === "medium" ? "#f59e0b" : "#22c55e", fontWeight: 600 }}>
-                              Urgency: {disputeAiSummary[d.id].urgency} · {disputeAiSummary[d.id].days_open}d open
+                        {disputeAiSummary[d.id] && (() => {
+                          const s = disputeAiSummary[d.id];
+                          const chat = s.chat_analysis;
+                          const sentimentColor = chat?.sentiment === "negative" ? "#ef4444" : chat?.sentiment === "positive" ? "#22c55e" : c.subtext;
+                          return (
+                            <div style={{ marginTop: 8, padding: "10px 12px", background: c.primarySoft, borderRadius: 8, fontSize: 11, color: c.text, maxWidth: 300 }}>
+                              {/* AI Recommendation */}
+                              <div style={{ fontWeight: 600, color: c.primary, marginBottom: 6 }}>AI Recommendation</div>
+                              <div style={{ marginBottom: 2 }}><b>Action:</b> {s.recommendation?.replace(/_/g, " ")}</div>
+                              <div style={{ marginBottom: 2 }}><b>Score:</b> {(s.model_score * 100).toFixed(0)}/100 · confidence {s.confidence_pct}%</div>
+                              <div style={{ marginBottom: 2 }}><b>Work done:</b> {s.work_completion_pct}% ({s.milestones_completed}/{s.total_milestones} milestones)</div>
+                              <div style={{ marginBottom: 2 }}><b>Escrow:</b> ${s.escrow_amount?.toLocaleString()}{s.split_pct ? ` · split ${s.split_pct}/${100 - s.split_pct}` : ""}</div>
+                              <div style={{ color: c.subtext, fontStyle: "italic", marginBottom: 4 }}>{s.rationale}</div>
+                              <div style={{ color: s.urgency === "high" ? "#ef4444" : s.urgency === "medium" ? "#f59e0b" : "#22c55e", fontWeight: 600, marginBottom: 8 }}>
+                                Urgency: {s.urgency} · {s.days_open}d open
+                              </div>
+                              {/* Chat Log Analysis */}
+                              {chat && (
+                                <>
+                                  <div style={{ borderTop: `0.5px solid ${c.border}`, marginBottom: 6 }} />
+                                  <div style={{ fontWeight: 600, color: c.primary, marginBottom: 5 }}>Chat Log Analysis</div>
+                                  <div style={{ marginBottom: 2 }}>
+                                    <b>Messages:</b> {chat.message_count} ({chat.client_messages} client · {chat.freelancer_messages} freelancer)
+                                  </div>
+                                  <div style={{ marginBottom: 2, display: "flex", alignItems: "center", gap: 5 }}>
+                                    <b>Sentiment:</b>
+                                    <span style={{ padding: "1px 7px", borderRadius: 20, background: sentimentColor + "20", color: sentimentColor, fontWeight: 600, fontSize: 10 }}>
+                                      {chat.sentiment}
+                                    </span>
+                                  </div>
+                                  <div style={{ color: c.subtext, fontStyle: "italic", marginBottom: chat.flagged_phrases?.length ? 4 : 0 }}>{chat.summary}</div>
+                                  {chat.flagged_phrases?.length > 0 && (
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>
+                                      {chat.flagged_phrases.map((p: string) => (
+                                        <span key={p} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 20, background: "rgba(239,68,68,.12)", color: "#ef4444", border: "0.5px solid rgba(239,68,68,.2)" }}>{p}</span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </>
+                              )}
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -2226,8 +2290,22 @@ const AdminDashboard: React.FC = () => {
                 <textarea value={createRoleForm.description} onChange={e => setCreateRoleForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ display: "block", width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 13, resize: "vertical" as const, boxSizing: "border-box" as const }} />
               </div>
               <div style={{ marginBottom: 18 }}>
-                <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase" as const, letterSpacing: ".08em" }}>Permissions (comma-separated)</label>
-                <textarea value={createRoleForm.permissions} onChange={e => setCreateRoleForm(f => ({ ...f, permissions: e.target.value }))} rows={2} placeholder="e.g. view_disputes, manage_users" style={{ display: "block", width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 13, resize: "vertical" as const, boxSizing: "border-box" as const }} />
+                <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase" as const, letterSpacing: ".08em", display: "block", marginBottom: 8 }}>Permissions</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6 }}>
+                  {KNOWN_PERMISSIONS.map(({ key, label }) => {
+                    const active = createRoleForm.permissions.split(",").map(s => s.trim()).filter(Boolean).includes(key);
+                    return (
+                      <button key={key} type="button" onClick={() => {
+                        const arr = createRoleForm.permissions.split(",").map(s => s.trim()).filter(Boolean);
+                        const next = active ? arr.filter(p => p !== key) : [...arr, key];
+                        setCreateRoleForm(f => ({ ...f, permissions: next.join(", ") }));
+                      }} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", borderRadius: 8, border: `1px solid ${active ? c.primary : c.border}`, background: active ? c.primarySoft : "transparent", color: active ? c.primary : c.subtext, cursor: "pointer", fontSize: 11, textAlign: "left" as const, fontFamily: "inherit", transition: "all .15s" }}>
+                        <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${active ? c.primary : c.border}`, background: active ? c.primary : "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff" }}>{active ? "✓" : ""}</span>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {createRoleMsg && <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 8, marginBottom: 14, background: createRoleMsg.includes("created") ? "rgba(34,197,94,.1)" : "rgba(239,68,68,.1)", color: createRoleMsg.includes("created") ? "#22c55e" : "#ef4444" }}>{createRoleMsg}</div>}
               <div style={{ display: "flex", gap: 10 }}>
@@ -2276,9 +2354,22 @@ const AdminDashboard: React.FC = () => {
                 <textarea value={editRoleForm.description} onChange={e => setEditRoleForm(f => ({ ...f, description: e.target.value }))} rows={3} style={{ display: "block", width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 13, resize: "vertical" as const, boxSizing: "border-box" as const }} />
               </div>
               <div style={{ marginBottom: 18 }}>
-                <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase" as const, letterSpacing: ".08em" }}>Permissions (comma-separated)</label>
-                <textarea value={editRoleForm.permissions} onChange={e => setEditRoleForm(f => ({ ...f, permissions: e.target.value }))} rows={2} placeholder="e.g. submit_proposals, view_projects" style={{ display: "block", width: "100%", marginTop: 6, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 13, resize: "vertical" as const, boxSizing: "border-box" as const }} />
-                <div style={{ fontSize: 10, color: c.subtext, marginTop: 4 }}>Each permission is a plain-text label (e.g. post_projects, manage_users).</div>
+                <label style={{ fontSize: 11, color: c.subtext, textTransform: "uppercase" as const, letterSpacing: ".08em", display: "block", marginBottom: 8 }}>Permissions</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6 }}>
+                  {KNOWN_PERMISSIONS.map(({ key, label }) => {
+                    const active = editRoleForm.permissions.split(",").map(s => s.trim()).filter(Boolean).includes(key);
+                    return (
+                      <button key={key} type="button" onClick={() => {
+                        const arr = editRoleForm.permissions.split(",").map(s => s.trim()).filter(Boolean);
+                        const next = active ? arr.filter(p => p !== key) : [...arr, key];
+                        setEditRoleForm(f => ({ ...f, permissions: next.join(", ") }));
+                      }} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", borderRadius: 8, border: `1px solid ${active ? c.primary : c.border}`, background: active ? c.primarySoft : "transparent", color: active ? c.primary : c.subtext, cursor: "pointer", fontSize: 11, textAlign: "left" as const, fontFamily: "inherit", transition: "all .15s" }}>
+                        <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${active ? c.primary : c.border}`, background: active ? c.primary : "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff" }}>{active ? "✓" : ""}</span>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => setEditRoleModal(null)} style={{ flex: 1, padding: "9px", borderRadius: 8, border: `1px solid ${c.border}`, background: "transparent", color: c.subtext, cursor: "pointer", fontSize: 13 }}>Cancel</button>

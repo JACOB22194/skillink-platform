@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useLanguage } from "../shared/LanguageContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,17 @@ interface Plan {
   highlight?: boolean;
 }
 
+interface PlanDef {
+  tier: PlanTier;
+  nameKey: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  descKey: string;
+  features: { textKey: string; included: boolean }[];
+  badgeKey?: string;
+  highlight?: boolean;
+}
+
 interface ThemeColors {
   bg: string;
   surface: string;
@@ -32,116 +44,116 @@ interface ThemeColors {
   primarySoft: string;
 }
 
-// ─── Plans ────────────────────────────────────────────────────────────────────
+// ─── Plan Definitions (translation keys) ─────────────────────────────────────
 
-const FREELANCER_PLANS: Plan[] = [
+const FREELANCER_PLAN_DEFS: PlanDef[] = [
   {
     tier: "free",
-    name: "Starter",
+    nameKey: "upgrade.fl.s.name",
     monthlyPrice: 0,
     yearlyPrice: 0,
-    description: "Get started and explore the platform.",
+    descKey: "upgrade.fl.s.desc",
     features: [
-      { text: "5 proposals per month", included: true },
-      { text: "Basic AI job matching", included: true },
-      { text: "Public profile", included: true },
-      { text: "GitHub profile connect", included: true },
-      { text: "Priority proposal placement", included: false },
-      { text: "Unlimited proposals", included: false },
-      { text: "Advanced AI match scoring", included: false },
-      { text: "Dedicated success manager", included: false },
+      { textKey: "upgrade.fl.s.f1", included: true },
+      { textKey: "upgrade.fl.s.f2", included: true },
+      { textKey: "upgrade.fl.s.f3", included: true },
+      { textKey: "upgrade.fl.s.f4", included: true },
+      { textKey: "upgrade.fl.s.f5", included: false },
+      { textKey: "upgrade.fl.s.f6", included: false },
+      { textKey: "upgrade.fl.s.f7", included: false },
+      { textKey: "upgrade.fl.s.f8", included: false },
     ],
   },
   {
     tier: "pro",
-    name: "Pro",
+    nameKey: "upgrade.fl.p.name",
     monthlyPrice: 19,
     yearlyPrice: 15,
-    description: "For active freelancers who want to win more.",
-    badge: "Most Popular",
+    descKey: "upgrade.fl.p.desc",
+    badgeKey: "upgrade.badge.popular",
     highlight: true,
     features: [
-      { text: "Unlimited proposals", included: true },
-      { text: "Priority proposal placement", included: true },
-      { text: "Advanced AI match scoring", included: true },
-      { text: "Smart proposal generator", included: true },
-      { text: "GitHub quality badge", included: true },
-      { text: "Analytics & earnings tracker", included: true },
-      { text: "Dedicated success manager", included: false },
-      { text: "Custom profile domain", included: false },
+      { textKey: "upgrade.fl.p.f1", included: true },
+      { textKey: "upgrade.fl.p.f2", included: true },
+      { textKey: "upgrade.fl.p.f3", included: true },
+      { textKey: "upgrade.fl.p.f4", included: true },
+      { textKey: "upgrade.fl.p.f5", included: true },
+      { textKey: "upgrade.fl.p.f6", included: true },
+      { textKey: "upgrade.fl.p.f7", included: false },
+      { textKey: "upgrade.fl.p.f8", included: false },
     ],
   },
   {
     tier: "business",
-    name: "Elite",
+    nameKey: "upgrade.fl.e.name",
     monthlyPrice: 49,
     yearlyPrice: 39,
-    description: "For top earners who need every edge.",
+    descKey: "upgrade.fl.e.desc",
     features: [
-      { text: "Everything in Pro", included: true },
-      { text: "Dedicated success manager", included: true },
-      { text: "Custom profile domain", included: true },
-      { text: "Featured freelancer badge", included: true },
-      { text: "Early access to premium projects", included: true },
-      { text: "White-glove profile review", included: true },
-      { text: "Priority dispute resolution", included: true },
-      { text: "API access", included: true },
+      { textKey: "upgrade.fl.e.f1", included: true },
+      { textKey: "upgrade.fl.e.f2", included: true },
+      { textKey: "upgrade.fl.e.f3", included: true },
+      { textKey: "upgrade.fl.e.f4", included: true },
+      { textKey: "upgrade.fl.e.f5", included: true },
+      { textKey: "upgrade.fl.e.f6", included: true },
+      { textKey: "upgrade.fl.e.f7", included: true },
+      { textKey: "upgrade.fl.e.f8", included: true },
     ],
   },
 ];
 
-const CLIENT_PLANS: Plan[] = [
+const CLIENT_PLAN_DEFS: PlanDef[] = [
   {
     tier: "free",
-    name: "Starter",
+    nameKey: "upgrade.cl.s.name",
     monthlyPrice: 0,
     yearlyPrice: 0,
-    description: "Post projects and find your first hire.",
+    descKey: "upgrade.cl.s.desc",
     features: [
-      { text: "2 active projects", included: true },
-      { text: "Basic AI talent matching", included: true },
-      { text: "Standard escrow", included: true },
-      { text: "Community support", included: true },
-      { text: "Unlimited projects", included: false },
-      { text: "AI-ranked candidates", included: false },
-      { text: "Team workrooms", included: false },
-      { text: "Dedicated account manager", included: false },
+      { textKey: "upgrade.cl.s.f1", included: true },
+      { textKey: "upgrade.cl.s.f2", included: true },
+      { textKey: "upgrade.cl.s.f3", included: true },
+      { textKey: "upgrade.cl.s.f4", included: true },
+      { textKey: "upgrade.cl.s.f5", included: false },
+      { textKey: "upgrade.cl.s.f6", included: false },
+      { textKey: "upgrade.cl.s.f7", included: false },
+      { textKey: "upgrade.cl.s.f8", included: false },
     ],
   },
   {
     tier: "pro",
-    name: "Growth",
+    nameKey: "upgrade.cl.g.name",
     monthlyPrice: 49,
     yearlyPrice: 39,
-    description: "For growing teams hiring regularly.",
-    badge: "Most Popular",
+    descKey: "upgrade.cl.g.desc",
+    badgeKey: "upgrade.badge.popular",
     highlight: true,
     features: [
-      { text: "Unlimited active projects", included: true },
-      { text: "AI-ranked candidates", included: true },
-      { text: "Advanced talent filters", included: true },
-      { text: "Team workrooms (up to 5)", included: true },
-      { text: "Invoice management", included: true },
-      { text: "Priority support", included: true },
-      { text: "Dedicated account manager", included: false },
-      { text: "Custom contract templates", included: false },
+      { textKey: "upgrade.cl.g.f1", included: true },
+      { textKey: "upgrade.cl.g.f2", included: true },
+      { textKey: "upgrade.cl.g.f3", included: true },
+      { textKey: "upgrade.cl.g.f4", included: true },
+      { textKey: "upgrade.cl.g.f5", included: true },
+      { textKey: "upgrade.cl.g.f6", included: true },
+      { textKey: "upgrade.cl.g.f7", included: false },
+      { textKey: "upgrade.cl.g.f8", included: false },
     ],
   },
   {
     tier: "business",
-    name: "Enterprise",
+    nameKey: "upgrade.cl.e.name",
     monthlyPrice: 149,
     yearlyPrice: 119,
-    description: "For companies that hire at scale.",
+    descKey: "upgrade.cl.e.desc",
     features: [
-      { text: "Everything in Growth", included: true },
-      { text: "Dedicated account manager", included: true },
-      { text: "Custom contract templates", included: true },
-      { text: "Unlimited workrooms & seats", included: true },
-      { text: "Analytics & spend reporting", included: true },
-      { text: "SSO / SAML integration", included: true },
-      { text: "SLA guarantee", included: true },
-      { text: "Custom AI training on your data", included: true },
+      { textKey: "upgrade.cl.e.f1", included: true },
+      { textKey: "upgrade.cl.e.f2", included: true },
+      { textKey: "upgrade.cl.e.f3", included: true },
+      { textKey: "upgrade.cl.e.f4", included: true },
+      { textKey: "upgrade.cl.e.f5", included: true },
+      { textKey: "upgrade.cl.e.f6", included: true },
+      { textKey: "upgrade.cl.e.f7", included: true },
+      { textKey: "upgrade.cl.e.f8", included: true },
     ],
   },
 ];
@@ -170,6 +182,7 @@ const PlanCard: React.FC<{
   colors: ThemeColors;
   onSelect: (plan: Plan) => void;
 }> = ({ plan, billing, colors: c, onSelect }) => {
+  const { t } = useLanguage();
   const price = billing === "monthly" ? plan.monthlyPrice : plan.yearlyPrice;
   const saving = plan.monthlyPrice > 0
     ? Math.round(((plan.monthlyPrice - plan.yearlyPrice) / plan.monthlyPrice) * 100)
@@ -210,14 +223,16 @@ const PlanCard: React.FC<{
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 6 }}>
           <span style={{ fontSize: 36, fontWeight: 600, color: c.text, letterSpacing: "-1px" }}>
-            {price === 0 ? "Free" : `$${price}`}
+            {price === 0 ? t("upgrade.plan.free.label") : `$${price}`}
           </span>
           {price > 0 && (
-            <span style={{ fontSize: 13, color: c.subtext }}>/mo</span>
+            <span style={{ fontSize: 13, color: c.subtext }}>{t("upgrade.plan.perMo")}</span>
           )}
         </div>
         {billing === "yearly" && saving > 0 && (
-          <div style={{ fontSize: 11, color: "#22c55e", marginBottom: 4 }}>Save {saving}% with yearly billing</div>
+          <div style={{ fontSize: 11, color: "#22c55e", marginBottom: 4 }}>
+            {t("upgrade.plan.saveYearly", { saving: String(saving) })}
+          </div>
         )}
         <p style={{ fontSize: 12, color: c.subtext, lineHeight: 1.5, margin: 0 }}>{plan.description}</p>
       </div>
@@ -242,7 +257,7 @@ const PlanCard: React.FC<{
         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.85"; }}
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
       >
-        {plan.tier === "free" ? "You're on this plan" : "Upgrade now"}
+        {plan.tier === "free" ? t("upgrade.plan.onThis") : t("upgrade.plan.upgNow")}
       </button>
 
       {/* Divider */}
@@ -272,17 +287,25 @@ interface UpgradeNowSectionProps {
 
 const UpgradeNowSection: React.FC<UpgradeNowSectionProps> = ({ roleType, colors: c }) => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
 
-  const plans = roleType === "freelancer" ? FREELANCER_PLANS : CLIENT_PLANS;
+  const defs = roleType === "freelancer" ? FREELANCER_PLAN_DEFS : CLIENT_PLAN_DEFS;
+  const plans: Plan[] = defs.map(def => ({
+    tier: def.tier,
+    name: t(def.nameKey),
+    monthlyPrice: def.monthlyPrice,
+    yearlyPrice: def.yearlyPrice,
+    description: t(def.descKey),
+    features: def.features.map(f => ({ text: t(f.textKey), included: f.included })),
+    badge: def.badgeKey ? t(def.badgeKey) : undefined,
+    highlight: def.highlight,
+  }));
 
   const handleSelect = (plan: Plan) => {
-    if (plan.tier === "free") {
-      return; // Already on free plan
-    }
+    if (plan.tier === "free") return;
     if (plan.tier === "business") {
-      // Enterprise / Elite → contact sales
-      alert("Contact sales for enterprise plans. This feature is coming soon.");
+      alert(t("upgrade.enterprise.msg"));
       return;
     }
     navigate("/payment", { state: { plan, billing, roleType } });
@@ -293,18 +316,20 @@ const UpgradeNowSection: React.FC<UpgradeNowSectionProps> = ({ roleType, colors:
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>
-          Upgrade Now
+          {t("upgrade.section.title")}
         </div>
         <div style={{ fontSize: 12, color: c.subtext, marginTop: 3 }}>
           {roleType === "freelancer"
-            ? "Unlock advanced features to win more projects and grow your freelance business."
-            : "Unlock advanced features to hire the best talent and scale your team."}
+            ? t("upgrade.section.fl.desc")
+            : t("upgrade.section.cl.desc")}
         </div>
       </div>
 
       {/* Billing Toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "2.5rem" }}>
-        <span style={{ fontSize: 13, color: billing === "monthly" ? c.text : c.subtext }}>Monthly</span>
+        <span style={{ fontSize: 13, color: billing === "monthly" ? c.text : c.subtext }}>
+          {t("upgrade.billing.monthly")}
+        </span>
         <div
           onClick={() => setBilling(billing === "monthly" ? "yearly" : "monthly")}
           style={{
@@ -320,7 +345,10 @@ const UpgradeNowSection: React.FC<UpgradeNowSectionProps> = ({ roleType, colors:
           }} />
         </div>
         <span style={{ fontSize: 13, color: billing === "yearly" ? c.text : c.subtext }}>
-          Yearly <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>Save up to 22%</span>
+          {t("upgrade.billing.yearly")}{" "}
+          <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>
+            {t("upgrade.billing.save22")}
+          </span>
         </span>
       </div>
 

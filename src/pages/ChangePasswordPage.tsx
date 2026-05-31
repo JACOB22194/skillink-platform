@@ -135,7 +135,7 @@ const ChangePasswordPage: React.FC = () => {
         </a>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <a href="/settings" style={{ fontSize: 13, color: c.subtext, textDecoration: "none" }}>← {t("common.settings")}</a>
-          <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
+          <button onClick={toggleTheme} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>
             {darkMode ? "☀️" : "🌙"}
           </button>
         </div>
@@ -162,7 +162,7 @@ const ChangePasswordPage: React.FC = () => {
         ) : (
           <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "1.5rem" }}>
             {error && (
-              <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.25rem" }}>
+              <div role="alert" aria-live="assertive" style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.25rem" }}>
                 {error}
               </div>
             )}

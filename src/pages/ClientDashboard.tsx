@@ -127,13 +127,19 @@ const NavItem: React.FC<{
   label: string; active?: boolean; badge?: number | string;
   icon: React.ReactNode; colors: ThemeColors; onClick?: () => void;
 }> = ({ label, active, badge, icon, colors, onClick }) => (
-  <div onClick={onClick} style={{
-    display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
-    color: active ? colors.primary : colors.subtext,
-    borderLeft: `2px solid ${active ? colors.primary : "transparent"}`,
-    background: active ? colors.bg : "transparent",
-    cursor: "pointer", fontSize: 12,
-  }}>
+  <div
+    role="button"
+    tabIndex={0}
+    onClick={onClick}
+    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }}
+    style={{
+      display: "flex", alignItems: "center", gap: 9, padding: "8px 16px",
+      color: active ? colors.primary : colors.subtext,
+      borderLeft: `2px solid ${active ? colors.primary : "transparent"}`,
+      background: active ? colors.bg : "transparent",
+      cursor: "pointer", fontSize: 12,
+    }}
+  >
     {icon}
     {label}
     {badge !== undefined && (
@@ -295,7 +301,12 @@ const ClientDashboard: React.FC = () => {
           <NotificationBell c={c} />
           <div style={{ position: "relative" }}>
             <div
+              role="button"
+              tabIndex={0}
+              aria-label="Open user menu"
+              aria-expanded={dropdownOpen}
               onClick={() => setDropdownOpen(v => !v)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDropdownOpen(v => !v); } }}
               style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(127,119,221,.2)", color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 500, border: `0.5px solid ${c.border}`, cursor: "pointer" }}
             >
               {loadingProfile ? "…" : initials}
@@ -317,7 +328,10 @@ const ClientDashboard: React.FC = () => {
                   🔐 {t("common.mfa")}
                 </a>
                 <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => { localStorage.clear(); window.location.href = "/login"; }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); localStorage.clear(); window.location.href = "/login"; } }}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", fontSize: 12, color: "#ef4444", cursor: "pointer" }}
                   onMouseEnter={e => (e.currentTarget.style.background = c.bg)}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
@@ -347,7 +361,11 @@ const ClientDashboard: React.FC = () => {
 
           <div style={{ margin: "10px 12px 0" }}>
             <div
+              role="button"
+              tabIndex={0}
+              aria-label="Upgrade to Premium"
               onClick={() => setActiveView("Upgrade")}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveView("Upgrade"); } }}
               style={{ background: "linear-gradient(135deg,#1a2640,#1e3560)", border: "0.5px solid rgba(59,130,246,0.35)", borderRadius: 10, padding: 12, cursor: "pointer" }}
               onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
@@ -362,7 +380,7 @@ const ClientDashboard: React.FC = () => {
           </div>
 
           <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `0.5px solid ${c.border}` }}>
-            <div onClick={toggleTheme} style={{ fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>{t("cl.switchTheme")}</div>
+            <div role="button" tabIndex={0} onClick={toggleTheme} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleTheme(); } }} style={{ fontSize: 11, color: c.subtext, padding: "5px 0", cursor: "pointer" }}>{t("cl.switchTheme")}</div>
           </div>
         </aside>
 

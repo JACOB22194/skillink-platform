@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import Tooltip from "../shared/Tooltip";
 
 const API = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
 const auth = () => ({
@@ -142,7 +143,12 @@ const MatchBar: React.FC<{ score: number }> = ({ score }) => {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <span style={{ fontSize: 11, color: T.sub }}>Match Score</span>
+        <span style={{ fontSize: 11, color: T.sub }}>
+          Match Score{" "}
+          <Tooltip text="How well your skills and experience match this project's requirements.">
+            <span style={{ cursor: "help", fontSize: 10, opacity: 0.5 }}>ⓘ</span>
+          </Tooltip>
+        </span>
         <span style={{ fontSize: 12, fontWeight: 600, color }}>{pct}% · {scoreLabel(score)}</span>
       </div>
       <div style={{ height: 4, background: T.border, borderRadius: 100, overflow: "hidden" }}>

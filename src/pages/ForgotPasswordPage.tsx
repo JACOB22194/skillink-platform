@@ -289,7 +289,7 @@ const ForgotPasswordPage: React.FC = () => {
 
         {/* Error banner */}
         {error && (
-          <div style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.25rem", display: "flex", gap: 8 }}>
+          <div role="alert" aria-live="assertive" style={{ background: c.errorBg, border: `0.5px solid ${c.errorBorder}`, color: c.errorText, borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: "1.25rem", display: "flex", gap: 8 }}>
             <span>⚠️</span><span>{error}</span>
           </div>
         )}

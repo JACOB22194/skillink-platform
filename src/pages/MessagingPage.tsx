@@ -412,7 +412,7 @@ const MessagingPage: React.FC = () => {
             <>
               <div style={{ padding: "13px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface, flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
                 {activeConvo?.avatar_url && (
-                  <img src={`${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"}${activeConvo.avatar_url}`} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
+                  <img src={`${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"}${activeConvo.avatar_url}`} alt={activeConvo?.display_name || activeConvo?.other_user_email || "User avatar"} style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
                 )}
                 <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>
                   {activeConvo?.display_name || activeConvo?.other_user_email || `User #${activeUserId}`}
@@ -421,7 +421,7 @@ const MessagingPage: React.FC = () => {
 
               <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
                 {errorMsg && (
-                  <div style={{ background: "#ffebee", color: "#c62828", padding: "8px 12px", borderRadius: 8, fontSize: 12, textAlign: "center", marginBottom: 8 }}>{errorMsg}</div>
+                  <div role="alert" aria-live="assertive" style={{ background: "#ffebee", color: "#c62828", padding: "8px 12px", borderRadius: 8, fontSize: 12, textAlign: "center", marginBottom: 8 }}>{errorMsg}</div>
                 )}
                 {loadingThread && <div style={{ color: c.subtext, textAlign: "center" }}>{t("common.loading")}</div>}
                 {!loadingThread && messages.length === 0 && !errorMsg && (
