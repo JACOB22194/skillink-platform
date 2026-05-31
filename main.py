@@ -11,6 +11,11 @@ from routers.skill_growth_router import router as skill_growth_router
 from routers.retrain_router import router as retrain_router, set_registry as _set_retrain_registry
 from routers.pricing_router import router as pricing_router
 
+# Configure structured JSON logging before model artefact loading
+from logging_config import setup_logging as _sl
+_sl(os.getenv("LOG_LEVEL", "INFO"), "skilllink-ai")
+del _sl
+
 # ML-02: hot-swap registry for retrained models
 _MODELS: dict = {}
 
@@ -304,7 +309,7 @@ _GEMINI_MODELS = [
 ]
 
 @app.post("/optimize-bio", response_model=OptimizeBioResponse)
-def optimize_bio(req: OptimizeBioRequest):
+async def optimize_bio(req: OptimizeBioRequest):
     import logging
     api_key = os.environ.get("GEMINI_API_KEY")
     if api_key:
@@ -321,10 +326,19 @@ def optimize_bio(req: OptimizeBioRequest):
         client = genai.Client(api_key=api_key)
         for model in _GEMINI_MODELS:
             try:
-                response = client.models.generate_content(model=model, contents=prompt)
+                response = await asyncio.wait_for(
+                    client.aio.models.generate_content(model=model, contents=prompt),
+                    timeout=20.0
+                )
                 return {"optimized_bio": response.text.strip()}
+            except asyncio.TimeoutError:
+                logging.warning("optimize-bio: model %s timed out after 20.0s", model)
             except Exception as e:
-                logging.warning("optimize-bio: model %s failed: %s", model, e)
+                err_str = str(e)
+                if "429" in err_str and "limit: 0" in err_str:
+                    logging.warning("optimize-bio: model %s daily quota exhausted, skipping", model)
+                else:
+                    logging.warning("optimize-bio: model %s failed: %s", model, e)
     # Graceful fallback: return the original bio unchanged
     return {"optimized_bio": req.bio or ""}
 
@@ -368,14 +382,13 @@ async def score_proposal_endpoint(req: ScoreRequest):
         t_start = time.perf_counter()
         client = genai.Client(api_key=api_key)
         for model in _GEMINI_MODELS:
-            if time.perf_counter() - t_start > 5.5:
+            if time.perf_counter() - t_start > 25.0:
                 logging.warning("score-proposal: spent too much time on Gemini calls, skipping to local fallback.")
                 break
             try:
-                # Wrap the async generate_content call with a 4.0 second timeout!
                 response = await asyncio.wait_for(
                     client.aio.models.generate_content(model=model, contents=prompt),
-                    timeout=4.0
+                    timeout=20.0
                 )
                 raw = re.sub(r'^```json\s*|^```\s*|```$', '', response.text.strip(), flags=re.MULTILINE).strip()
                 res_data = json.loads(raw)
@@ -383,9 +396,14 @@ async def score_proposal_endpoint(req: ScoreRequest):
                 reasoning_val = str(res_data['reasoning'])
                 return {'score': score_val, 'reasoning': reasoning_val}
             except asyncio.TimeoutError:
-                logging.warning("score-proposal: model %s call timed out after 4.0s", model)
+                logging.warning("score-proposal: model %s call timed out after 20.0s", model)
             except Exception as e:
-                logging.warning("score-proposal: model %s failed: %s", model, e)
+                err_str = str(e)
+                # Daily quota exhausted — no point retrying this model
+                if "429" in err_str and "limit: 0" in err_str:
+                    logging.warning("score-proposal: model %s daily quota exhausted, skipping", model)
+                else:
+                    logging.warning("score-proposal: model %s failed: %s", model, e)
 
     # ── Local Fallback ──────────────────────────────────────────────────────────
     from recommender import _ENCODER, _SEMANTIC
@@ -435,6 +453,10 @@ app.include_router(launchpad_router)     # POST /launchpad/recommend
 app.include_router(skill_growth_router)  # POST /skill-growth/analyze
 app.include_router(retrain_router)       # ML-02: POST /retrain/trigger, GET /retrain/status|history
 app.include_router(pricing_router)
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 # Wire shared registry so retrain_router can hot-swap _MODELS
 _set_retrain_registry(_MODELS)

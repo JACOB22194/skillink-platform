@@ -11,3 +11,4 @@ apscheduler>=3.10.0
 sentence-transformers==3.3.1
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.2.2+cpu
+prometheus-fastapi-instrumentator>=6.0.0
