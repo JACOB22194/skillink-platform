@@ -53,6 +53,9 @@ from routers.pricing_router import router as pricing_router
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+from logging_config import setup_logging
+setup_logging(os.getenv("LOG_LEVEL", "INFO"), "skilllink-backend")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -277,6 +280,10 @@ app.include_router(launchpad_router)        # Phase 4: GET /launchpad, POST /lau
 app.include_router(skill_growth_router)  # GET /skill-growth/my, POST /skill-growth/analyze
 app.include_router(internal_router)      # ML-02: /internal/* (AI service internal calls)
 app.include_router(pricing_router)
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])

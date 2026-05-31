@@ -21,7 +21,7 @@ import time
 import bcrypt as _bcrypt
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 from typing import Any, Optional
 from datetime import datetime, timezone, timedelta
@@ -1728,6 +1728,61 @@ def dispute_ai_summary(
 
     urgency = "high" if days_open > 7 else ("medium" if days_open > 3 else "low")
 
+    # ── Chat log sentiment analysis ───────────────────────────────────────────
+    chat_analysis = {
+        "message_count": 0, "client_messages": 0, "freelancer_messages": 0,
+        "negative_flag_count": 0, "flagged_phrases": [],
+        "sentiment": "neutral", "summary": "No messages found between parties.",
+    }
+    if contract and contract.freelancer and contract.project and contract.project.client:
+        fl_uid = contract.freelancer.user_id
+        cl_uid = contract.project.client.user_id
+        msgs = (
+            db.query(models.Message)
+            .filter(or_(
+                and_(models.Message.sender_id == fl_uid, models.Message.receiver_id == cl_uid),
+                and_(models.Message.sender_id == cl_uid, models.Message.receiver_id == fl_uid),
+            ))
+            .order_by(models.Message.sent_at)
+            .all()
+        )
+        neg_kw = ["scam", "fraud", "cheat", "lie", "terrible", "refuse", "lawsuit",
+                  "demand", "worst", "angry", "fake", "stolen", "threat", "blackmail"]
+        pos_kw = ["great", "perfect", "excellent", "done", "delivered", "complete",
+                  "satisfied", "agree", "resolved", "good work", "thank"]
+        neg_count = 0
+        pos_count = 0
+        flagged   = []
+        c_msgs    = sum(1 for m in msgs if m.sender_id == cl_uid)
+        f_msgs    = sum(1 for m in msgs if m.sender_id == fl_uid)
+        for msg in msgs:
+            text = (msg.content or "").lower()
+            for kw in neg_kw:
+                if kw in text:
+                    neg_count += 1
+                    flagged.append(kw)
+            for kw in pos_kw:
+                if kw in text:
+                    pos_count += 1
+        sentiment = "negative" if neg_count > pos_count else ("positive" if pos_count > neg_count else "neutral")
+        if not msgs:
+            summary = "No messages exchanged between parties."
+        elif sentiment == "negative":
+            summary = f"{len(msgs)} messages analyzed. Confrontational tone ({neg_count} negative signal{'s' if neg_count != 1 else ''} detected)."
+        elif sentiment == "positive":
+            summary = f"{len(msgs)} messages analyzed. Cooperative tone ({pos_count} positive signal{'s' if pos_count != 1 else ''} detected)."
+        else:
+            summary = f"{len(msgs)} messages analyzed. Neutral tone detected."
+        chat_analysis = {
+            "message_count":       len(msgs),
+            "client_messages":     c_msgs,
+            "freelancer_messages": f_msgs,
+            "negative_flag_count": neg_count,
+            "flagged_phrases":     list(set(flagged))[:5],
+            "sentiment":           sentiment,
+            "summary":             summary,
+        }
+
     return {
         "dispute_id":           dispute_id,
         "days_open":            days_open,
@@ -1744,6 +1799,7 @@ def dispute_ai_summary(
         "split_pct":            split_pct,
         "recommendation":       recommendation,
         "rationale":            rationale,
+        "chat_analysis":        chat_analysis,
     }
 
 
