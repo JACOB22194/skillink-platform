@@ -24,7 +24,7 @@ Phase 5 additions:
 
 from sqlalchemy import (
     Column, Integer, SmallInteger, String, Text,
-    Float, DateTime, Enum, ForeignKey, Boolean, Index
+    Float, Numeric, DateTime, Enum, ForeignKey, Boolean, Index
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
@@ -66,10 +66,26 @@ class ContractType(str, enum.Enum):
     hourly = "hourly"
 
 class MilestoneStatus(str, enum.Enum):
+    # Legacy values — kept for backward compat with existing rows and old endpoints
     pending             = "pending"
     revision_requested  = "revision_requested"
     approved            = "approved"
     paid                = "paid"
+    # New escrow state machine values
+    awaiting_funds      = "awaiting_funds"
+    funded              = "funded"
+    in_review           = "in_review"
+    in_revision         = "in_revision"
+    in_dispute          = "in_dispute"
+    closed_success      = "closed_success"
+    closed_refunded     = "closed_refunded"
+    closed_auto_approve = "closed_auto_approve"
+    closed_auto_refund  = "closed_auto_refund"
+
+class EscrowTransactionType(str, enum.Enum):
+    fund    = "fund"
+    release = "release"
+    refund  = "refund"
 
 class EscrowStatus(str, enum.Enum):
     held     = "held"
@@ -332,8 +348,15 @@ class Milestone(Base):
     ai_verification_status   = Column(String(20), nullable=True)   # passed | flagged | insufficient_evidence
     ai_verification_report   = Column(Text, nullable=True)
     revision_feedback        = Column(Text, nullable=True)          # set when client requests revision
+    # New escrow state machine columns
+    revision_count           = Column(Integer, default=0, nullable=False, server_default="0")
+    funded_at                = Column(DateTime(timezone=True), nullable=True)
+    submitted_at             = Column(DateTime(timezone=True), nullable=True)
+    deadline                 = Column(DateTime(timezone=True), nullable=True)
+    escrow_transaction_id    = Column(Integer, ForeignKey("escrow_transactions.escrow_transaction_id"), nullable=True)
 
-    contract = relationship("Contract", back_populates="milestones")
+    contract           = relationship("Contract", back_populates="milestones")
+    escrow_transaction = relationship("EscrowTransaction", foreign_keys=[escrow_transaction_id])
 
 
 # ─────────────────────────────────────────
@@ -351,8 +374,27 @@ class Escrow(Base):
     funded_at         = Column(DateTime(timezone=True), nullable=True)
     created_at        = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-    contract = relationship("Contract", back_populates="escrow")
-    payments = relationship("Payment",  back_populates="escrow", cascade="all, delete")
+    contract     = relationship("Contract",          back_populates="escrow")
+    payments     = relationship("Payment",           back_populates="escrow", cascade="all, delete")
+    transactions = relationship("EscrowTransaction", back_populates="escrow", cascade="all, delete")
+
+
+# ─────────────────────────────────────────
+#  TABLE: escrow_transactions  (per-milestone audit trail)
+# ─────────────────────────────────────────
+
+class EscrowTransaction(Base):
+    __tablename__ = "escrow_transactions"
+
+    escrow_transaction_id = Column(Integer, primary_key=True, index=True)
+    escrow_id             = Column(Integer, ForeignKey("escrow.escrow_id"),             nullable=False, index=True)
+    milestone_id          = Column(Integer, ForeignKey("milestones.milestone_id"),       nullable=True,  index=True)
+    type                  = Column(Enum(EscrowTransactionType), nullable=False, index=True)
+    amount                = Column(Numeric(precision=10, scale=2), nullable=False)
+    note                  = Column(String(255), nullable=True)
+    created_at            = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    escrow = relationship("Escrow", back_populates="transactions")
 
 
 # ─────────────────────────────────────────
@@ -833,3 +875,15 @@ class ABExperiment(Base):
     treatment_total   = Column(Integer, default=0)
     started_at        = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     stopped_at        = Column(DateTime(timezone=True), nullable=True)
+
+
+# ─────────────────────────────────────────
+#  TABLE: idempotency_logs  (prevent double-charging on network retries)
+# ─────────────────────────────────────────
+
+class IdempotencyLog(Base):
+    __tablename__ = "idempotency_logs"
+
+    key        = Column(String(36), primary_key=True)   # UUID from frontend
+    action     = Column(String(50), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

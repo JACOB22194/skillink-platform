@@ -59,10 +59,21 @@ class ContractStatus(str, Enum):
     disputed  = "disputed"
 
 class MilestoneStatus(str, Enum):
+    # Legacy values
     pending             = "pending"
     revision_requested  = "revision_requested"
     approved            = "approved"
     paid                = "paid"
+    # New escrow state machine values
+    awaiting_funds      = "awaiting_funds"
+    funded              = "funded"
+    in_review           = "in_review"
+    in_revision         = "in_revision"
+    in_dispute          = "in_dispute"
+    closed_success      = "closed_success"
+    closed_refunded     = "closed_refunded"
+    closed_auto_approve = "closed_auto_approve"
+    closed_auto_refund  = "closed_auto_refund"
 
 class EscrowStatus(str, Enum):
     held     = "held"
@@ -490,6 +501,51 @@ class RevisionRequestCreate(BaseModel):
 
 class MilestoneStatusUpdate(BaseModel):
     status: MilestoneStatus
+
+# ── New escrow state machine schemas ──────────────────────────────────────────
+
+class MilestoneFundRequest(BaseModel):
+    payment_reference: Optional[str] = None
+
+class MilestoneSubmitRequest(BaseModel):
+    submission_note: Optional[str] = None
+
+class MilestoneRejectRequest(BaseModel):
+    feedback: str = Field(..., min_length=10, max_length=1000)
+
+class AdminResolveRequest(BaseModel):
+    resolution: str                      # "force_pay" | "force_refund" | "split"
+    split_percentage: Optional[float] = None   # 0-100, only for "split"
+    note: Optional[str] = None
+
+    @field_validator("resolution")
+    @classmethod
+    def resolution_valid(cls, v: str) -> str:
+        if v not in ("force_pay", "force_refund", "split"):
+            raise ValueError("resolution must be force_pay, force_refund, or split")
+        return v
+
+class MilestoneDetailResponse(BaseModel):
+    milestone_id:            int
+    contract_id:             int
+    title:                   Optional[str]
+    description:             Optional[str]
+    amount:                  Optional[float]
+    status:                  str
+    revision_count:          int = 0
+    funded_at:               Optional[datetime] = None
+    submitted_at:            Optional[datetime] = None
+    deadline:                Optional[datetime] = None
+    due_date:                Optional[datetime] = None
+    created_at:              Optional[datetime] = None
+    ai_verification_status:  Optional[str] = None
+    revision_feedback:       Optional[str] = None
+    model_config = {"from_attributes": True}
+
+class MilestoneAutoSplitResponse(BaseModel):
+    milestones:   list[dict]
+    total_amount: float
+    count:        int
 
 class DeliverableVerificationResponse(BaseModel):
     milestone_id:           int

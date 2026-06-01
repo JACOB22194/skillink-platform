@@ -49,6 +49,7 @@ from routers.launchpad_router    import router as launchpad_router
 from routers.skill_growth_router import router as skill_growth_router
 from routers.internal_router    import router as internal_router
 from routers.pricing_router import router as pricing_router
+from routers.milestone_escrow_router import router as milestone_escrow_router
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -280,6 +281,7 @@ app.include_router(launchpad_router)        # Phase 4: GET /launchpad, POST /lau
 app.include_router(skill_growth_router)  # GET /skill-growth/my, POST /skill-growth/analyze
 app.include_router(internal_router)      # ML-02: /internal/* (AI service internal calls)
 app.include_router(pricing_router)
+app.include_router(milestone_escrow_router)
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 from prometheus_fastapi_instrumentator import Instrumentator

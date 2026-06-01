@@ -231,6 +231,21 @@ def update_milestone_status(
     if not milestone:
         raise HTTPException(404, "Milestone not found.")
 
+    # Guard: new-style escrow milestones must use the dedicated endpoints
+    _NEW_STYLE = {
+        models.MilestoneStatus.awaiting_funds, models.MilestoneStatus.funded,
+        models.MilestoneStatus.in_review,      models.MilestoneStatus.in_revision,
+        models.MilestoneStatus.in_dispute,     models.MilestoneStatus.closed_success,
+        models.MilestoneStatus.closed_refunded, models.MilestoneStatus.closed_auto_approve,
+        models.MilestoneStatus.closed_auto_refund,
+    }
+    if milestone.status in _NEW_STYLE:
+        raise HTTPException(
+            400,
+            "This milestone uses the new escrow state machine. "
+            "Use /milestones/{id}/approve, /reject, /submit, or /escalate instead.",
+        )
+
     contract = milestone.contract
     _assert_contract_access(contract, me, db)
 
@@ -430,11 +445,16 @@ def complete_contract(
         if not client or contract.project.client_id != client.client_id:
             raise HTTPException(403, "You do not own this contract.")
 
-    unpaid = [m for m in contract.milestones if m.status != models.MilestoneStatus.paid]
+    _DONE_STATES = {
+        models.MilestoneStatus.paid,
+        models.MilestoneStatus.closed_success,
+        models.MilestoneStatus.closed_auto_approve,
+    }
+    unpaid = [m for m in contract.milestones if m.status not in _DONE_STATES]
     if unpaid:
         raise HTTPException(
             400,
-            f"Cannot complete contract: {len(unpaid)} milestone(s) are not yet paid."
+            f"Cannot complete contract: {len(unpaid)} milestone(s) are not yet paid/approved."
         )
 
     contract.status         = models.ContractStatus.completed
