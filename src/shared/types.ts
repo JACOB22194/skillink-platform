@@ -8,6 +8,9 @@ export interface User {
   role: UserRole;
   status: string;
   mfa_enabled: boolean;
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface FreelancerProfile {

@@ -270,9 +270,15 @@ const FreelancerDashboard: React.FC = () => {
   const { t, isRTL } = useLanguage();
   const fontFamily = isRTL ? "'Cairo', sans-serif" : "sans-serif";
 
-  const initials = user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…";
-  const displayName = user?.email ?? "…";
-  const firstName = user?.email ? user.email.split("@")[0] : "…";
+  const displayName = (user?.first_name || user?.last_name)
+    ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim()
+    : (user?.email ?? "…");
+
+  const initials = (user?.first_name || user?.last_name)
+    ? `${user.first_name?.charAt(0) ?? ""}${user.last_name?.charAt(0) ?? ""}`.toUpperCase()
+    : (user?.email ? user.email.split("@")[0].slice(0, 2).toUpperCase() : "…");
+
+  const firstName = user?.first_name || (user?.email ? user.email.split("@")[0] : "…");
 
   const toggleTheme = () => {
     setDarkMode((d) => { localStorage.setItem("skilllink-darkMode", JSON.stringify(!d)); return !d; });
@@ -566,9 +572,9 @@ const FreelancerDashboard: React.FC = () => {
                 {ghProfile && (
                   <div style={{ display: "flex", gap: 20, paddingTop: 12, borderTop: `0.5px solid ${c.border}` }}>
                     {([
-                      { label: "Stars",     val: ghProfile.stars_count ?? 0 },
-                      { label: "Repos",     val: ghProfile.public_repos ?? 0 },
-                      { label: "Followers", val: ghProfile.followers ?? 0 },
+                      { label: "Stars",     val: ghProfile.github_stats?.total_stars ?? 0 },
+                      { label: "Repos",     val: ghProfile.github_stats?.public_repos ?? 0 },
+                      { label: "Followers", val: ghProfile.github_stats?.followers ?? 0 },
                     ] as { label: string; val: number }[]).map(s => (
                       <div key={s.label} style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{s.val}</div>

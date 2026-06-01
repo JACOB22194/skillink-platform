@@ -8,6 +8,9 @@ export interface User {
   role: UserRole;
   status: string;
   mfa_enabled: boolean;
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
 }
 
 // ─── Profiles ─────────────────────────────────────────────────────────────────
@@ -23,6 +26,9 @@ export interface FreelancerProfile {
   wallet_balance: number;
   portfolio_file: string | null;
   skills: string[];
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface PortfolioItem {

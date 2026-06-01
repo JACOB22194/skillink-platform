@@ -218,7 +218,7 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
       {viewProfile && (() => {
         const m = viewProfile;
         const pal = MATCH_PALETTE[matches.indexOf(m) % MATCH_PALETTE.length] ?? MATCH_PALETTE[0];
-        const displayName = m.email ? m.email.split("@")[0] : `Freelancer #${m.freelancer_id}`;
+        const displayName = (m.first_name || m.last_name) ? `${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() : (m.email ? m.email.split("@")[0] : `Freelancer #${m.freelancer_id}`);
         const inits = getInitials(displayName);
         const scoreDisplay = m.ai_match_score != null ? Math.round(m.ai_match_score) : Math.round(m.success_score * 20);
         return (
@@ -278,7 +278,7 @@ const FindTalentView: React.FC<{ colors: ThemeColors; projects: Project[]; projL
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                   <button
-                    onClick={() => navigate(`/messages?user=${m.user_id}&email=${encodeURIComponent(m.email)}`)}
+                    onClick={() => navigate(`/messages?user=${m.user_id}&email=${encodeURIComponent(m.email)}&name=${encodeURIComponent(displayName)}`)}
                     style={{ flex: 1, padding: "10px 0", borderRadius: 10, background: colors.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
                   >
                     Message

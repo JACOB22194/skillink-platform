@@ -28,6 +28,9 @@ interface UserSearchResult {
   user_id: number;
   email: string;
   role: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
 }
 
 interface C {
@@ -95,13 +98,14 @@ const MessagingPage: React.FC = () => {
   useEffect(() => {
     const uid = searchParams.get("user");
     const email = searchParams.get("email");
+    const name = searchParams.get("name");
     if (!uid) return;
     const id = parseInt(uid, 10);
     if (isNaN(id)) return;
     setConversations(prev => {
       if (prev.some(c => c.other_user_id === id)) return prev;
-      const label = email ?? `user #${id}`;
-      return [{ other_user_id: id, other_user_email: label, display_name: label, avatar_url: null, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 }, ...prev];
+      const label = name || email || `user #${id}`;
+      return [{ other_user_id: id, other_user_email: email ?? `user #${id}`, display_name: label, avatar_url: null, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 }, ...prev];
     });
     setActiveUserId(id);
   }, [searchParams]);
@@ -194,13 +198,12 @@ const MessagingPage: React.FC = () => {
     setComposing(false);
     setSearchQuery("");
     setSearchResults([]);
-    const r = result as any;
-    const displayName = (r.first_name || r.last_name)
-      ? `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim()
+    const displayName = (result.first_name || result.last_name)
+      ? `${result.first_name ?? ""} ${result.last_name ?? ""}`.trim()
       : result.email;
     setConversations((prev) => {
       if (prev.some((c) => c.other_user_id === result.user_id)) return prev;
-      return [{ other_user_id: result.user_id, other_user_email: result.email, display_name: displayName, avatar_url: r.avatar_url ?? null, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 }, ...prev];
+      return [{ other_user_id: result.user_id, other_user_email: result.email, display_name: displayName, avatar_url: result.avatar_url ?? null, last_message: "", last_message_at: new Date().toISOString(), unread_count: 0 }, ...prev];
     });
     setActiveUserId(result.user_id);
   };
@@ -341,7 +344,7 @@ const MessagingPage: React.FC = () => {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {(result as any).first_name ? `${(result as any).first_name} ${(result as any).last_name ?? ""}`.trim() : result.email}
+                      {(result.first_name || result.last_name) ? `${result.first_name ?? ""} ${result.last_name ?? ""}`.trim() : result.email}
                     </div>
                     <div style={{ fontSize: 10, color: c.subtext, textTransform: "capitalize" }}>{result.role}</div>
                   </div>

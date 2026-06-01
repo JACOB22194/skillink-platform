@@ -33,6 +33,8 @@ interface FreelancerProfile {
   hourly_rate: number | null;
   success_score: number;
   skills: string[];
+  first_name?: string | null;
+  last_name?: string | null;
 }
 
 interface GitHubProject {
@@ -129,11 +131,13 @@ export const FreelancerProfilePage: React.FC = () => {
     }
   };
 
-  const initials = profile?.email
-    ? profile.email.split("@")[0].slice(0, 2).toUpperCase()
-    : "?";
+  const displayName = (profile?.first_name || profile?.last_name)
+    ? `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim()
+    : (profile?.email ? profile.email.split("@")[0] : `Freelancer #${userId}`);
 
-  const displayName = profile?.email ? profile.email.split("@")[0] : `Freelancer #${userId}`;
+  const initials = (profile?.first_name || profile?.last_name)
+    ? `${profile.first_name?.charAt(0) ?? ""}${profile.last_name?.charAt(0) ?? ""}`.toUpperCase()
+    : (profile?.email ? profile.email.split("@")[0].slice(0, 2).toUpperCase() : "?");
   const trustScore  = breakdown?.score ?? Math.round((profile?.success_score ?? 0) * 20);
   const avgRating   = breakdown?.avg_rating ?? profile?.success_score ?? 0;
 
@@ -177,7 +181,7 @@ export const FreelancerProfilePage: React.FC = () => {
             {t("flprof.review")}
           </button>
           <button
-            onClick={() => navigate(`/messages?user=${profile.user_id}&email=${encodeURIComponent(profile.email)}`)}
+            onClick={() => navigate(`/messages?user=${profile.user_id}&email=${encodeURIComponent(profile.email)}&name=${encodeURIComponent(displayName)}`)}
             style={{ background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 13, padding: "9px 22px", display: "flex", alignItems: "center", gap: 7 }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
@@ -283,7 +287,7 @@ export const FreelancerProfilePage: React.FC = () => {
         {/* ── CTA footer ── */}
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
           <button
-            onClick={() => navigate(`/messages?user=${profile.user_id}&email=${encodeURIComponent(profile.email)}`)}
+            onClick={() => navigate(`/messages?user=${profile.user_id}&email=${encodeURIComponent(profile.email)}&name=${encodeURIComponent(displayName)}`)}
             style={{ flex: 1, maxWidth: 260, padding: "13px 0", borderRadius: 12, background: T.accent, color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
