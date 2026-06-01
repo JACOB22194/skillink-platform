@@ -54,6 +54,17 @@ def parse_github_profile(
 
     github_stats: dict = parsed.get("github_stats", {})
 
+    # Dynamically extract and store first and last names if not already set
+    github_name = github_stats.get("name")
+    if github_name and (not me.first_name or not me.last_name):
+        parts = github_name.strip().split(None, 1)
+        if len(parts) == 1:
+            me.first_name = parts[0]
+            me.last_name = ""
+        elif len(parts) > 1:
+            me.first_name = parts[0]
+            me.last_name = parts[1]
+
     # ── 3. Store basic profile fields ────────────────────────────────────────
     if parsed.get("summary"):
         freelancer.bio = parsed["summary"]

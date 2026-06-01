@@ -434,12 +434,17 @@ def search_users(
     me: models.User = Depends(get_current_user),
     db: Session     = Depends(get_db),
 ):
+    from sqlalchemy import or_
     users = (
         db.query(models.User)
         .filter(
             models.User.id     != me.id,
             models.User.status == models.UserStatus.active,
-            models.User.email.ilike(f"%{q}%"),
+            or_(
+                models.User.email.ilike(f"%{q}%"),
+                models.User.first_name.ilike(f"%{q}%"),
+                models.User.last_name.ilike(f"%{q}%"),
+            )
         )
         .limit(10)
         .all()
