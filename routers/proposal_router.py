@@ -151,12 +151,13 @@ def submit_proposal(
     ).filter(models.Client.client_id == project.client_id).first()
 
     if client_user:
+        sender_name = (f"{me.first_name or ''} {me.last_name or ''}".strip()) or me.email.split("@")[0]
         notify(
             db        = db,
             user_id   = client_user.id,
             type      = models.NotificationType.proposal,
             title     = f"New proposal on '{project.title}'",
-            body      = f"{me.email} bid ${body.bid_amount:.2f}",
+            body      = f"{sender_name} bid ${body.bid_amount:.2f}",
             entity_id = body.project_id,
         )
 
@@ -529,12 +530,13 @@ def invite_freelancer(
     db.add(invitation)
     db.flush()
 
+    inviter_name = (f"{me.first_name or ''} {me.last_name or ''}".strip()) or me.email.split("@")[0]
     notify(
         db        = db,
         user_id   = freelancer.user_id,
         type      = models.NotificationType.proposal,
         title     = f"You've been invited to '{project.title}'",
-        body      = body.message or f"{me.email} has invited you to submit a proposal.",
+        body      = body.message or f"{inviter_name} has invited you to submit a proposal.",
         entity_id = body.project_id,
     )
 
@@ -608,6 +610,7 @@ def sent_invitations(
             project_title    = proj.title,
             freelancer_id    = inv.freelancer_id,
             freelancer_email = usr.email,
+            freelancer_name  = (f"{usr.first_name or ''} {usr.last_name or ''}".strip()) or usr.email.split("@")[0],
             message          = inv.message,
             status           = inv.status.value,
             created_at       = inv.created_at,
@@ -647,6 +650,7 @@ def my_invitations(
             project_id    = inv.project_id,
             project_title = proj.title,
             client_email  = usr.email,
+            client_name   = (f"{usr.first_name or ''} {usr.last_name or ''}".strip()) or usr.email.split("@")[0],
             message       = inv.message,
             status        = inv.status.value,
             created_at    = inv.created_at,

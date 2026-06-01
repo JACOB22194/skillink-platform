@@ -398,6 +398,8 @@ class ProposalResponse(BaseModel):
     proposal_id:        int
     project_id:         int
     freelancer_id:      int
+    freelancer_name:    Optional[str] = None
+    freelancer_user_id: Optional[int] = None
     bid_amount:         float
     cover_letter:       Optional[str]
     ai_relevance_score: Optional[float]
@@ -448,12 +450,14 @@ class MilestoneBrief(BaseModel):
     model_config = {"from_attributes": True}
 
 class ContractResponse(BaseModel):
-    contract_id:   int
-    project_id:    int
-    freelancer_id: int
-    status:        ContractStatus
-    created_at:    datetime
-    project:       Optional[ProjectBrief] = None
+    contract_id:    int
+    project_id:     int
+    freelancer_id:  int
+    freelancer_name: Optional[str] = None
+    client_name:    Optional[str] = None
+    status:         ContractStatus
+    created_at:     datetime
+    project:        Optional[ProjectBrief] = None
     milestones:    list[MilestoneBrief] = []
     model_config = {"from_attributes": True}
 
@@ -885,6 +889,7 @@ class InvitationDetailResponse(BaseModel):
     project_id:    int
     project_title: str
     client_email:  str
+    client_name:   Optional[str] = None
     message:       Optional[str]
     status:        str
     created_at:    datetime
@@ -897,6 +902,7 @@ class InvitationSentResponse(BaseModel):
     project_title:    str
     freelancer_id:    int
     freelancer_email: str
+    freelancer_name:  Optional[str] = None
     message:          Optional[str]
     status:           str
     created_at:       datetime

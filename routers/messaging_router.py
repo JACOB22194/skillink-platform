@@ -189,7 +189,12 @@ def get_inbox(
         if other_user:
             fn = other_user.first_name or ""
             ln = other_user.last_name  or ""
-            display = (fn + " " + ln).strip() or other_user.email
+            display = (fn + " " + ln).strip()
+            if not display and other_user.role == models.UserRole.client:
+                client_profile = db.query(models.Client).filter(models.Client.user_id == other_user.id).first()
+                if client_profile and client_profile.company_name:
+                    display = client_profile.company_name
+            display = display or other_user.email
             avatar  = other_user.avatar_url
         else:
             display = "Unknown"
@@ -536,12 +541,21 @@ async def _ws_handle_chat(ws: WebSocket, sender_id: int, payload: dict) -> None:
 
         # Notification for receiver
         preview = content[:60] + ("..." if len(content) > 60 else "")
-        sender_email = sender.email if sender else f"User #{sender_id}"
+        sender_display = ""
+        if sender:
+            sender_display = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
+            if not sender_display and sender.role == models.UserRole.client:
+                sp = db.query(models.Client).filter(models.Client.user_id == sender.id).first()
+                if sp and sp.company_name:
+                    sender_display = sp.company_name
+            sender_display = sender_display or sender.email
+        else:
+            sender_display = f"User #{sender_id}"
         notify(
             db        = db,
             user_id   = receiver_id,
             type      = models.NotificationType.message,
-            title     = f"New message from {sender_email}",
+            title     = f"New message from {sender_display}",
             body      = preview,
             entity_id = sender_id,
         )

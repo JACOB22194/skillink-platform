@@ -309,6 +309,18 @@ class Proposal(Base):
     project    = relationship("Project",    back_populates="proposals")
     freelancer = relationship("Freelancer", back_populates="proposals")
 
+    @property
+    def freelancer_name(self) -> str | None:
+        if self.freelancer and self.freelancer.user:
+            u = self.freelancer.user
+            name = f"{u.first_name or ''} {u.last_name or ''}".strip()
+            return name or u.email.split("@")[0]
+        return None
+
+    @property
+    def freelancer_user_id(self) -> int | None:
+        return self.freelancer.user_id if self.freelancer else None
+
 
 # ─────────────────────────────────────────
 #  TABLE: contracts
@@ -328,6 +340,26 @@ class Contract(Base):
     milestones      = relationship("Milestone",  back_populates="contract", cascade="all, delete")
     escrow          = relationship("Escrow",     back_populates="contract", uselist=False, cascade="all, delete")
     dispute         = relationship("Dispute",    back_populates="contract", uselist=False, cascade="all, delete")
+
+    @property
+    def freelancer_name(self) -> str | None:
+        if self.freelancer and self.freelancer.user:
+            u = self.freelancer.user
+            name = f"{u.first_name or ''} {u.last_name or ''}".strip()
+            return name or u.email.split("@")[0]
+        return None
+
+    @property
+    def client_name(self) -> str | None:
+        if self.project and self.project.client:
+            c = self.project.client
+            if c.company_name:
+                return c.company_name
+            if c.user:
+                u = c.user
+                name = f"{u.first_name or ''} {u.last_name or ''}".strip()
+                return name or u.email.split("@")[0]
+        return None
 
 
 # ─────────────────────────────────────────

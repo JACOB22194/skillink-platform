@@ -185,10 +185,18 @@ def ai_match_freelancers(
             " ".join(top_languages),
         ]))
 
+        full_name = ""
+        if user:
+            full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+            if not full_name:
+                full_name = user.email.split("@")[0]
+
         freelancer_payloads.append({
             "freelancer_id":      f.freelancer_id,
             "user_id":            f.user_id,
-            "name":               user.email.split("@")[0] if user else f"freelancer_{f.freelancer_id}",
+            "name":               full_name or f"freelancer_{f.freelancer_id}",
+            "first_name":         user.first_name if user else None,
+            "last_name":          user.last_name  if user else None,
             "email":              user.email if user else "",
             "bio":                f.bio or "",
             "professional_title": f.professional_title or "",
@@ -213,6 +221,7 @@ def ai_match_freelancers(
                 "category":         project.category or "",
                 "budget_min":       float(project.budget or 0),
                 "budget_max":       float(project.budget or 0),
+                "required_skills":  required_skills,
                 "candidates":       freelancer_payloads,
                 "top_k":            10,
             },
@@ -229,6 +238,8 @@ def ai_match_freelancers(
                 freelancer_id  = m["freelancer_id"],
                 user_id        = payload_map.get(m["freelancer_id"], {}).get("user_id", 0),
                 email          = payload_map.get(m["freelancer_id"], {}).get("email", ""),
+                first_name     = payload_map.get(m["freelancer_id"], {}).get("first_name"),
+                last_name      = payload_map.get(m["freelancer_id"], {}).get("last_name"),
                 bio            = payload_map.get(m["freelancer_id"], {}).get("bio"),
                 hourly_rate    = m.get("hourly_rate"),
                 success_score  = payload_map.get(m["freelancer_id"], {}).get("success_score", 0),
@@ -268,6 +279,8 @@ def ai_match_freelancers(
             freelancer_id  = fp["freelancer_id"],
             user_id        = fp["user_id"],
             email          = fp["email"],
+            first_name     = fp.get("first_name"),
+            last_name      = fp.get("last_name"),
             bio            = fp.get("bio"),
             hourly_rate    = fp.get("hourly_rate"),
             success_score  = fp.get("success_score", 0),
