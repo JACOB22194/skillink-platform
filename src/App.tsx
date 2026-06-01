@@ -26,6 +26,7 @@ import { FreelancerProfilePage } from "./pages/FreelancerProfilePage";
 import LaunchpadPage from "./pages/LaunchpadPage";
 import SkillGrowthPage from "./pages/SkillGrowthPage";
 import ClientSettingsPage from "./pages/ClientSettingsPage";
+import MilestoneEscrowPage from "./pages/MilestoneEscrowPage";
 
 const App = () => {
   return (
@@ -80,6 +81,14 @@ const App = () => {
           element={
             <RequireRole role={["freelancer", "client"]}>
               <ContractPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/contract/:contractId/escrow"
+          element={
+            <RequireRole role={["freelancer", "client", "admin"]}>
+              <MilestoneEscrowPage />
             </RequireRole>
           }
         />

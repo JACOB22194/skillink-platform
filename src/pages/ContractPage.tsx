@@ -22,11 +22,22 @@ const TC = {
   orange: "#f97316", orangeSoft: "#f9731610",
 };
 
-const msColors = {
+const msColors: Record<string, { c: string; bg: string }> = {
+  // Legacy statuses
   pending:             { c: TC.amber,  bg: TC.amberSoft  },
   revision_requested:  { c: TC.orange, bg: TC.orangeSoft },
   approved:            { c: TC.blue,   bg: TC.blueSoft   },
   paid:                { c: TC.green,  bg: TC.greenSoft  },
+  // New escrow state machine statuses
+  awaiting_funds:      { c: TC.sub,    bg: TC.surface    },
+  funded:              { c: TC.accent, bg: TC.accentSoft },
+  in_review:           { c: TC.blue,   bg: TC.blueSoft   },
+  in_revision:         { c: TC.orange, bg: TC.orangeSoft },
+  in_dispute:          { c: TC.red,    bg: TC.redSoft    },
+  closed_success:      { c: TC.green,  bg: TC.greenSoft  },
+  closed_refunded:     { c: TC.sub,    bg: TC.surface    },
+  closed_auto_approve: { c: TC.green,  bg: TC.greenSoft  },
+  closed_auto_refund:  { c: TC.sub,    bg: TC.surface    },
 };
 const contractColors = {
   active:    { c: TC.green, bg: TC.greenSoft },
@@ -708,6 +719,12 @@ export const ContractPage: React.FC = () => {
                   />
                 )}
 
+                <button
+                  onClick={() => navigate(`/contract/${contract.contract_id}/escrow`)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: TC.accentSoft, border: `1px solid ${TC.accent}55`, borderRadius: 12, color: TC.accent, cursor: "pointer", fontSize: 13, fontWeight: 600, width: "100%", textAlign: "left" }}
+                >
+                  <span>🛡️</span> Manage Escrow Milestones →
+                </button>
                 <ActionBtn onClick={() => setShowDispute(true)} icon="⚠" label={t("contract.openDisp")} color={TC.red} bg={TC.redSoft} />
               </div>
 
