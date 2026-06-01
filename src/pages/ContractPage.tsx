@@ -501,7 +501,7 @@ export const ContractPage: React.FC = () => {
         const c: Contract = await cr.json(); setContract(c);
         const [pr, er] = await Promise.all([
           fetch(`${API}/projects/${c.project_id}`, auth()),
-          fetch(`${API}/escrow/contract/${contractId}`, auth()),
+          fetch(`${API}/escrow/${contractId}`, auth()),
         ]);
         if (pr.ok) setProject(await pr.json());
         if (er.ok) setEscrow(await er.json());

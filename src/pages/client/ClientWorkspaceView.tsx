@@ -133,6 +133,58 @@ const WsAddMilestoneModal: React.FC<{
   );
 };
 
+const WsFundEscrowModal: React.FC<{
+  colors: ThemeColors; contractId: number; currentAmount: number;
+  onClose: () => void; onDone: () => void;
+}> = ({ colors: c, contractId, currentAmount, onClose, onDone }) => {
+  const [amount, setAmount]   = useState(String(currentAmount > 0 ? "" : ""));
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]         = useState("");
+
+  const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 13, background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 8, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
+
+  const submit = async () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) { setErr("Amount must be greater than $0"); return; }
+    setLoading(true); setErr("");
+    try {
+      const ref = `SANDBOX-${Date.now()}`;
+      const r = await fetch(`${API_WS}/escrow/fund/${contractId}`, {
+        method: "POST",
+        headers: { ...wsAuth(), "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amt, payment_reference: ref }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "Fund failed"); }
+      onDone();
+    } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
+  };
+
+  return (
+    <WsModal colors={c}>
+      <div style={{ fontSize: 11, color: "#22c55e", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 4 }}>Fund Escrow</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: c.text, marginBottom: 4 }}>Add Funds to Escrow</div>
+      <div style={{ fontSize: 12, color: c.subtext, marginBottom: 18, lineHeight: 1.6 }}>
+        Funds are held securely in escrow. They are only released when you approve a milestone.
+        {currentAmount > 0 && <span> Current balance: <strong style={{ color: "#f59e0b" }}>{fmt(currentAmount)}</strong></span>}
+      </div>
+      <div>
+        <div style={{ fontSize: 11, color: c.subtext, marginBottom: 5, textTransform: "uppercase", letterSpacing: ".05em" }}>Amount (USD) *</div>
+        <div style={{ position: "relative" }}>
+          <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: c.subtext }}>$</span>
+          <input type="number" min="1" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" style={{ ...inp, paddingLeft: 24 }} />
+        </div>
+      </div>
+      {err && <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(239,68,68,.1)", color: "#ef4444", borderRadius: 7, fontSize: 12 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+        <button onClick={onClose} style={{ flex: 1, padding: "10px 0", background: "transparent", border: `1px solid ${c.border}`, borderRadius: 8, color: c.subtext, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>Cancel</button>
+        <button onClick={submit} disabled={loading} style={{ flex: 2, padding: "10px 0", background: "#22c55e", border: "none", borderRadius: 8, color: "#000", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 13, opacity: loading ? 0.7 : 1, fontFamily: "inherit" }}>
+          {loading ? "Processing…" : "Add Funds"}
+        </button>
+      </div>
+    </WsModal>
+  );
+};
+
 const WsRevisionModal: React.FC<{
   colors: ThemeColors; milestoneId: number; milestoneTitle: string | null;
   onClose: () => void; onDone: () => void;
@@ -196,6 +248,7 @@ const ClientWorkspaceView: React.FC<{
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [toast, setToast]               = useState<{ msg: string; ok: boolean } | null>(null);
   const [showAddMs, setShowAddMs]       = useState<number | null>(null);
+  const [showFundEscrow, setShowFundEscrow] = useState<number | null>(null);
   const [revisionTarget, setRevisionTarget] = useState<{ milestoneId: number; milestoneTitle: string | null } | null>(null);
 
   const showToast = (msg: string, ok: boolean) => {
@@ -212,7 +265,7 @@ const ClientWorkspaceView: React.FC<{
       const [mr, pr, er] = await Promise.all([
         fetch(`${API_WS}/contracts/${contractId}/milestones`, { headers: wsAuth() }),
         fetch(`${API_WS}/projects/${ct.project_id}`, { headers: wsAuth() }),
-        fetch(`${API_WS}/escrow/contract/${contractId}`, { headers: wsAuth() }),
+        fetch(`${API_WS}/escrow/${contractId}`, { headers: wsAuth() }),
       ]);
       const [milestones, project, escrow] = await Promise.all([
         mr.ok ? mr.json() : Promise.resolve([]),
@@ -365,22 +418,41 @@ const ClientWorkspaceView: React.FC<{
                     ) : (
                       <>
                         {det?.escrow && (
-                          <div style={{ display: "flex", marginBottom: 14, background: c.surface, borderRadius: 10, border: `0.5px solid ${c.border}`, overflow: "hidden" }}>
-                            {[
-                              { label: "Escrow Total", val: fmt(det.escrow.amount),                               color: c.text },
-                              { label: "Released",     val: fmt(det.escrow.released_amount),                      color: "#22c55e" },
-                              { label: "Remaining",    val: fmt(det.escrow.amount - det.escrow.released_amount),  color: "#f59e0b" },
-                            ].map((item, idx) => (
-                              <div key={item.label} style={{ flex: 1, padding: "10px 14px", borderRight: idx < 2 ? `0.5px solid ${c.border}` : "none" }}>
-                                <div style={{ fontSize: 10, color: c.subtext, marginBottom: 3, textTransform: "uppercase", letterSpacing: ".05em" }}>{item.label}</div>
-                                <div style={{ fontSize: 15, fontWeight: 700, color: item.color }}>{item.val}</div>
-                              </div>
-                            ))}
-                            <div style={{ flex: 2, padding: "10px 14px", display: "flex", alignItems: "center" }}>
-                              <div style={{ width: "100%", height: 5, background: c.border, borderRadius: 100, overflow: "hidden" }}>
-                                <div style={{ width: `${Math.min(100, (det.escrow.released_amount / det.escrow.amount) * 100)}%`, height: "100%", background: "#22c55e", borderRadius: 100, transition: "width .6s" }} />
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ display: "flex", background: c.surface, borderRadius: 10, border: `0.5px solid ${c.border}`, overflow: "hidden" }}>
+                              {[
+                                { label: "Escrow Total", val: fmt(det.escrow.amount),                               color: c.text },
+                                { label: "Released",     val: fmt(det.escrow.released_amount),                      color: "#22c55e" },
+                                { label: "Remaining",    val: fmt(det.escrow.amount - det.escrow.released_amount),  color: "#f59e0b" },
+                              ].map((item, idx) => (
+                                <div key={item.label} style={{ flex: 1, padding: "10px 14px", borderRight: idx < 2 ? `0.5px solid ${c.border}` : "none" }}>
+                                  <div style={{ fontSize: 10, color: c.subtext, marginBottom: 3, textTransform: "uppercase", letterSpacing: ".05em" }}>{item.label}</div>
+                                  <div style={{ fontSize: 15, fontWeight: 700, color: item.color }}>{item.val}</div>
+                                </div>
+                              ))}
+                              <div style={{ flex: 2, padding: "10px 14px", display: "flex", alignItems: "center" }}>
+                                <div style={{ width: "100%", height: 5, background: c.border, borderRadius: 100, overflow: "hidden" }}>
+                                  <div style={{ width: `${det.escrow.amount > 0 ? Math.min(100, (det.escrow.released_amount / det.escrow.amount) * 100) : 0}%`, height: "100%", background: "#22c55e", borderRadius: 100, transition: "width .6s" }} />
+                                </div>
                               </div>
                             </div>
+                            <button
+                              onClick={() => setShowFundEscrow(ct.contract_id)}
+                              style={{ marginTop: 8, width: "100%", padding: "8px 0", borderRadius: 8, background: "rgba(34,197,94,.1)", border: "0.5px solid rgba(34,197,94,.3)", color: "#22c55e", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}
+                            >
+                              + Add Funds to Escrow
+                            </button>
+                          </div>
+                        )}
+                        {!det?.escrow && ct.status === "active" && (
+                          <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(245,158,11,.08)", border: "0.5px solid rgba(245,158,11,.25)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                            <div style={{ fontSize: 12, color: "#f59e0b" }}>No escrow funded yet — milestones cannot be added until escrow is funded.</div>
+                            <button
+                              onClick={() => setShowFundEscrow(ct.contract_id)}
+                              style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 8, background: "#22c55e", border: "none", color: "#000", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}
+                            >
+                              Fund Escrow
+                            </button>
                           </div>
                         )}
 
@@ -540,6 +612,20 @@ const ClientWorkspaceView: React.FC<{
           onDone={() => { setRevisionTarget(null); if (selected) loadDetail(selected, true); showToast("Revision request sent.", true); }}
         />
       )}
+
+      {showFundEscrow !== null && (() => {
+        const det = details[showFundEscrow];
+        const currentAmount = det?.escrow?.amount ?? 0;
+        return (
+          <WsFundEscrowModal
+            colors={c}
+            contractId={showFundEscrow}
+            currentAmount={currentAmount}
+            onClose={() => setShowFundEscrow(null)}
+            onDone={() => { const id = showFundEscrow; setShowFundEscrow(null); loadDetail(id, true); showToast("Escrow funded! 💰", true); }}
+          />
+        );
+      })()}
     </div>
   );
 };

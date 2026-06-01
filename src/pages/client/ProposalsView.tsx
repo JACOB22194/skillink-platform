@@ -11,6 +11,8 @@ interface Proposal {
   proposal_id: number;
   project_id: number;
   freelancer_id: number;
+  freelancer_name?: string | null;
+  freelancer_user_id?: number | null;
   bid_amount: number;
   status: "pending" | "accepted" | "rejected";
   created_at: string;
@@ -75,7 +77,7 @@ const ProposalsView: React.FC<{
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{proj?.title ?? `Project #${pr.project_id}`}</div>
                       <div style={{ fontSize: 11, color: c.subtext, marginTop: 2, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span>Freelancer #{pr.freelancer_id} · {new Date(pr.created_at).toLocaleDateString()}</span>
+                        <span>{pr.freelancer_name || `Freelancer #${pr.freelancer_id}`} · {new Date(pr.created_at).toLocaleDateString()}</span>
                         <ScoreTooltip freelancerId={pr.freelancer_id} rawScore={0} colors={c} displayScore={0} label="Score" color="#22c55e" compact={true} />
                       </div>
                     </div>

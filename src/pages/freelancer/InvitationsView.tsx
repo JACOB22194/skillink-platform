@@ -26,6 +26,7 @@ interface Invitation {
   project_id:    number;
   project_title: string;
   client_email:  string;
+  client_name?:  string | null;
   message:       string | null;
   status:        string;
   created_at:    string;
@@ -38,6 +39,10 @@ const InvitationsView: React.FC<{ c: ThemeColors; onCountChange?: (n: number) =>
   const [invites, setInvites] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing]   = useState<number | null>(null);
+  const [expandedInvites, setExpandedInvites] = useState<Set<number>>(new Set());
+
+  const toggleInviteMsg = (id: number) =>
+    setExpandedInvites((prev: Set<number>) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const load = async () => {
     setLoading(true);
@@ -92,13 +97,25 @@ const InvitationsView: React.FC<{ c: ThemeColors; onCountChange?: (n: number) =>
                     {inv.project_title}
                   </div>
                   <div style={{ fontSize: 11, color: c.subtext, marginBottom: inv.message ? 8 : 0 }}>
-                    From {inv.client_email} · {timeAgo(inv.created_at)}
+                    From {inv.client_name || inv.client_email} · {timeAgo(inv.created_at)}
                   </div>
-                  {inv.message && (
-                    <div style={{ fontSize: 12, color: c.text, background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 12px", marginTop: 6, lineHeight: 1.5 }}>
-                      "{inv.message}"
-                    </div>
-                  )}
+                  {inv.message && (() => {
+                    const isLong = inv.message!.length > 120;
+                    const expanded = expandedInvites.has(inv.invitation_id);
+                    return (
+                      <div style={{ fontSize: 12, color: c.text, background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 8, padding: "8px 12px", marginTop: 6, lineHeight: 1.5 }}>
+                        "{isLong && !expanded ? inv.message!.slice(0, 120) + "…" : inv.message}"
+                        {isLong && (
+                          <button
+                            onClick={() => toggleInviteMsg(inv.invitation_id)}
+                            style={{ display: "block", marginTop: 4, background: "none", border: "none", color: c.primary, cursor: "pointer", fontSize: 11, padding: 0, fontWeight: 600, fontFamily: "inherit" }}
+                          >
+                            {expanded ? "Show less" : "More info"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
                   <span style={{ fontSize: 10, fontWeight: 600, color: statusColor(inv.status), background: statusColor(inv.status) + "18", border: `0.5px solid ${statusColor(inv.status)}30`, borderRadius: 100, padding: "3px 10px" }}>

@@ -379,6 +379,10 @@ export const ProposalsPage: React.FC = () => {
   const [loading, setLoading]           = useState(true);
   const [projLoading, setProjLoading]   = useState(false);
   const [toast, setToast]               = useState<{ msg: string; ok: boolean } | null>(null);
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
+
+  const toggleProjectDesc = (id: number) =>
+    setExpandedProjects((prev: Set<number>) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const applyProjectId = searchParams.get("apply") ? Number(searchParams.get("apply")) : null;
 
   const showToast = (msg: string, ok = true) => {
@@ -586,11 +590,23 @@ export const ProposalsPage: React.FC = () => {
                         <div style={{ fontSize: 10, color: T.sub }}>{t("prop.budget")}</div>
                       </div>
                     </div>
-                    {proj.description && (
-                      <div style={{ fontSize: 13, color: T.sub, marginBottom: 14, lineHeight: 1.6 }}>
-                        {proj.description.length > 160 ? proj.description.slice(0, 160) + "…" : proj.description}
-                      </div>
-                    )}
+                    {proj.description && (() => {
+                      const isLong = proj.description.length > 160;
+                      const expanded = expandedProjects.has(proj.project_id);
+                      return (
+                        <div style={{ fontSize: 13, color: T.sub, marginBottom: 14, lineHeight: 1.6 }}>
+                          {isLong && !expanded ? proj.description.slice(0, 160) + "…" : proj.description}
+                          {isLong && (
+                            <button
+                              onClick={() => toggleProjectDesc(proj.project_id)}
+                              style={{ marginLeft: 6, background: "none", border: "none", color: T.accent, cursor: "pointer", fontSize: 12, padding: 0, fontWeight: 600, fontFamily: "inherit" }}
+                            >
+                              {expanded ? "Show less" : "More info"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <button onClick={() => setSubmitFor(proj)} style={{ padding: "10px 22px", background: T.accent, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                       {t("prop.apply")}
                     </button>

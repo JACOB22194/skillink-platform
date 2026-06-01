@@ -332,15 +332,18 @@ const LoginPage: React.FC = () => {
               </div>
             )}
 
+            <form onSubmit={handleMFA} noValidate>
             <div style={{ marginBottom: "1.5rem" }}>
               <MFACodeInput value={mfaCode} onChange={setMfaCode} colors={c} />
             </div>
 
-            <button onClick={handleMFA} disabled={loading} style={btnPrimary}>
+            <button type="submit" disabled={loading} style={btnPrimary}>
               {loading ? t("login.mfa.verifying") : t("login.mfa.verify")}
             </button>
+            </form>
 
             <button
+              type="button"
               onClick={() => { setMfaMode(false); setMfaCode(""); setError(null); }}
               style={{ width: "100%", padding: 10, background: "transparent", border: `0.5px solid ${c.border}`, borderRadius: 8, fontSize: 13, color: c.subtext, cursor: "pointer", fontFamily: "inherit", marginTop: 10 }}
             >
@@ -363,6 +366,7 @@ const LoginPage: React.FC = () => {
               </div>
             )}
 
+            <form onSubmit={handleLogin} noValidate>
             <div style={{ marginBottom: "1.25rem" }}>
               <label style={labelStyle}>{t("common.email")}</label>
               <input
@@ -383,6 +387,7 @@ const LoginPage: React.FC = () => {
                   aria-required="true"
                 />
                 <button
+                  type="button"
                   onClick={() => setShowPassword((s) => !s)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: c.subtext, fontSize: 14, padding: 0 }}
@@ -395,9 +400,10 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            <button onClick={handleLogin} disabled={loading} style={btnPrimary}>
+            <button type="submit" disabled={loading} style={btnPrimary}>
               {loading ? t("login.submitting") : t("login.submit")}
             </button>
+            </form>
 
             <p style={{ textAlign: "center", fontSize: 13, color: c.subtext, marginTop: "1.5rem" }}>
               {t("login.noAccount")}{" "}

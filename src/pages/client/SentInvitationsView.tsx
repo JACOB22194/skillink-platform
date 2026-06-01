@@ -7,6 +7,7 @@ interface SentInvitation {
   project_title:    string;
   freelancer_id:    number;
   freelancer_email: string;
+  freelancer_name?: string | null;
   message:          string | null;
   status:           string;
   created_at:       string;
@@ -73,7 +74,7 @@ const SentInvitationsView: React.FC<{ colors: ThemeColors }> = ({ colors: c }) =
             <div key={inv.invitation_id} style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{inv.freelancer_email}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{inv.freelancer_name || inv.freelancer_email}</span>
                   <span style={{ fontSize: 10, color: c.subtext }}>→</span>
                   <span style={{ fontSize: 12, color: c.subtext, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>{inv.project_title}</span>
                 </div>
