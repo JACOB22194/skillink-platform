@@ -54,6 +54,7 @@ class MatchRequest(BaseModel):
     category:          str
     budget_min:        float = 0.0
     budget_max:        float = 0.0
+    required_skills:   list[str] = []
     candidates:        list[CandidateIn]
     top_k:             int   = 10
     # Top-3 classifier predictions: [[sub_cat, prob], ...]
@@ -99,6 +100,7 @@ def _run_match(req: MatchRequest) -> list:
         category          = req.category,
         budget_min        = req.budget_min,
         budget_max        = req.budget_max,
+        required_skills   = req.required_skills,
         top3_predictions  = top3,
     )
 
