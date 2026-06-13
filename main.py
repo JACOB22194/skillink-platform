@@ -22,7 +22,7 @@ _MODELS: dict = {}
 # ── Load model artefacts once at startup ─────────────────────────────────────
 import logging as _startup_log
 
-MODEL_DIR     = Path("./skillink_model")
+MODEL_DIR     = Path(os.getenv("MODEL_DIR", "./skillink_model"))
 _MODELS_READY = False
 _STARTUP_ERROR: str | None = None
 
