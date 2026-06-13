@@ -19,9 +19,6 @@ const getColors = (dark: boolean): C =>
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
-const Divider: React.FC<{ c: C }> = ({ c }) => (
-  <div style={{ height: "0.5px", background: c.border, margin: "1.5rem 0" }} />
-);
 
 const SectionLabel: React.FC<{ children: React.ReactNode; c: C }> = ({ children, c }) => (
   <div style={{ fontSize: 11, fontWeight: 600, color: c.subtext, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>
@@ -38,7 +35,7 @@ const Chip: React.FC<{ label: string; c: C; onRemove?: () => void }> = ({ label,
   </span>
 );
 
-const ScorePill: React.FC<{ score: number; c: C }> = ({ score, c }) => {
+const ScorePill: React.FC<{ score: number }> = ({ score }) => {
   const color = score >= 70 ? "#22c55e" : score >= 40 ? "#f59e0b" : "#ef4444";
   const bg    = score >= 70 ? "rgba(34,197,94,.12)" : score >= 40 ? "rgba(245,158,11,.1)" : "rgba(239,68,68,.1)";
   const label = score >= 70 ? "Strong" : score >= 40 ? "Good" : "Needs work";
@@ -290,7 +287,7 @@ const StepTwo: React.FC<{
           <div style={{ height: 100, background: `linear-gradient(135deg, ${c.primary}30 0%, ${c.primary}10 50%, transparent 100%)`, borderBottom: `0.5px solid ${c.border}`, position: "relative" }}>
             {/* Score pill top-right */}
             <div style={{ position: "absolute", top: 12, right: 16 }}>
-              <ScorePill score={parsed.score} c={c} />
+              <ScorePill score={parsed.score} />
             </div>
           </div>
 

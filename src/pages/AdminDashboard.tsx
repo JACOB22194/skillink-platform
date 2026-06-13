@@ -14,47 +14,6 @@ interface ThemeColors {
   primarySoft: string;
 }
 
-type UserStatus = "Vetting" | "Active" | "Suspended";
-type UserRole = "Freelancer" | "Client";
-type WorkroomStatus = "Active" | "Review" | "Suspended";
-
-interface RecentUser {
-  initials: string;
-  name: string;
-  role: UserRole;
-  status: UserStatus;
-  bg: string;
-  color: string;
-}
-
-interface AISystem {
-  label: string;
-  pct: number;
-  color: string;
-}
-
-interface FlaggedItem {
-  title: string;
-  meta: string;
-  color: string;
-}
-
-interface Workroom {
-  id: string;
-  client: string;
-  freelancer: string;
-  category: string;
-  budget: string;
-  status: WorkroomStatus;
-  score: number;
-}
-
-interface PlatformStat {
-  label: string;
-  value: string | number;
-  color?: string;
-}
-
 interface AdminStats {
   total_users: number;
   total_freelancers: number;
@@ -62,12 +21,6 @@ interface AdminStats {
   total_projects: number;
   total_proposals: number;
   total_contracts: number;
-}
-
-interface RecentAction {
-  title: string;
-  meta: string;
-  color: string;
 }
 
 interface AdminUserItem {

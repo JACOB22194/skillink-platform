@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/useAuth";
 import { useProfile, useGitHubProfile } from "../api/hooks";
 import type { FreelancerProfile } from "../api/types";
-import { Skeleton, SkeletonCard, SkeletonMetric } from "../components/ui/Skeleton";
+import { Skeleton, SkeletonMetric } from "../components/ui/Skeleton";
 import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { API_BASE_URL, getAuthHeaders, logout } from "../shared/api";
 import UpgradeNowSection from "../components/UpgradeNowSection";
@@ -42,15 +42,7 @@ const NavItem: React.FC<{ label: string; active?: boolean; badge?: number | stri
     </div>
   );
 
-const MetricCard: React.FC<{ label: string; value: React.ReactNode; sub: string; badge?: React.ReactNode; colors: ThemeColors }> =
-  ({ label, value, sub, badge, colors }) => (
-    <div style={{ background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 12, padding: 16 }}>
-      <div style={{ fontSize: 10, color: colors.subtext, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 500, color: colors.text, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 11, color: colors.subtext, marginTop: 5 }}>{sub}</div>
-      {badge}
-    </div>
-  );
+
 
 const EmptyState: React.FC<{ label: string; hint: string; c: ThemeColors }> = ({ label, hint, c }) => (
   <div style={{ padding: "28px 16px", textAlign: "center" }}>
@@ -211,30 +203,7 @@ const MetricSkeletons: React.FC<{ dark: boolean }> = ({ dark }) => (
   </>
 );
 
-// ─── Skills Section ───────────────────────────────────────────────────────────
 
-const SkillsSection: React.FC<{ skills: string[]; c: ThemeColors }> = ({ skills, c }) => {
-  if (skills.length === 0) return (
-    <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 6 }}>Skills</div>
-      <div style={{ fontSize: 11, color: c.subtext, lineHeight: 1.6 }}>
-        No skills yet.{" "}
-        <a href="/settings" style={{ color: c.primary, textDecoration: "none" }}>Add skills to get matched →</a>
-      </div>
-    </div>
-  );
-  return (
-    <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 8 }}>Skills</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        {skills.slice(0, 10).map((s) => (
-          <span key={s} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 100, background: c.primarySoft, color: c.primary, border: `0.5px solid rgba(127,119,221,.3)` }}>{s}</span>
-        ))}
-        {skills.length > 10 && <span style={{ fontSize: 10, color: c.subtext }}>+{skills.length - 10} more</span>}
-      </div>
-    </div>
-  );
-};
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 

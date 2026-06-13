@@ -212,7 +212,6 @@ const ProjectCard: React.FC<{
   reserving:     number | null;
 }> = ({ project: p, slotsLeft, onReserve, reserving }) => {
   const [hover, setHover] = useState(false);
-  const canReserve = !p.is_reserved && slotsLeft > 0;
   const isLoading  = reserving === p.project_id;
 
   return (

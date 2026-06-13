@@ -33,12 +33,7 @@ interface RegisterRequest {
   company_name?: string;
 }
 
-interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  role: UserRole;
-  user_id: number;
-}
+
 
 interface ApiError {
   detail: string;
@@ -63,10 +58,7 @@ interface ThemeColors {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-const REDIRECT_MAP: Record<UserRole, string> = {
-  freelancer: "/dashboard/freelancer",
-  client:     "/dashboard/client",
-};
+
 
 const ROLES: { label: string; value: UserRole; description: string; icon: string }[] = [
   { label: "Freelancer", value: "freelancer", description: "I want to find work and projects", icon: "💼" },

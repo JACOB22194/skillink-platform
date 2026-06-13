@@ -2,7 +2,7 @@ import React, { useId } from "react";
 
 interface TooltipProps {
   text: string;
-  children: React.ReactElement;
+  children: React.ReactElement<any>;
 }
 
 /**

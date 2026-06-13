@@ -85,8 +85,6 @@ const StatusBadge: React.FC<{ s: Proposal["status"] }> = ({ s }) => {
 
 // ── Submit Proposal Modal ─────────────────────────────────────────────────────
 
-const SCORE_THRESHOLD = 0.40;
-
 interface ScoreResult { score: number; reasoning: string; passes: boolean; }
 
 const SubmitModal: React.FC<{
