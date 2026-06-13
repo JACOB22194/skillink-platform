@@ -5,7 +5,7 @@ import os
 
 load_dotenv()
 
-DATABASE_URL = os.getenv(
+DATABASE_URL = os.getenv("TEST_DATABASE_URL") or os.getenv(
     "DATABASE_URL",
     "postgresql://skillink_user:password123@db:5432/skillink_db"
 )

@@ -40,11 +40,18 @@ def test_register_weak_password(client):
 
 def test_login_success(client):
     email = _unique_email()
-    client.post(f"{BASE}/register", json={
+    register_res = client.post(f"{BASE}/register", json={
         "email": email,
         "password": "TestPass1",
         "role": "client",
     })
+    assert register_res.status_code == 201
+    user_id = register_res.json()["user_id"]
+    from auth import create_access_token
+    token = create_access_token(user_id, "client")
+    activate_res = client.get(f"{BASE}/activate/{token}")
+    assert activate_res.status_code == 200
+
     r = client.post(f"{BASE}/login", json={"email": email, "password": "TestPass1"})
     assert r.status_code == 200
     data = r.json()

@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    from notification_service import ws_manager
+    from services.notification_service import ws_manager
     await ws_manager.disconnect_all()
     logging.info("SkillLink API shutdown complete — all WebSocket connections closed.")
 
@@ -308,7 +308,7 @@ def health():
 def health_detailed():
     """Checks DB connection and reports online WebSocket users."""
     try:
-        from notification_service import ws_manager
+        from services.notification_service import ws_manager
         ws_online = len(ws_manager.online_user_ids)
     except Exception:
         ws_online = 0

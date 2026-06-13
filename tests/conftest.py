@@ -11,11 +11,18 @@ TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_database():
+    from db import Base
+    engine = create_engine(TEST_DATABASE_URL)
+    Base.metadata.create_all(bind=engine)
+    
     alembic_cfg = Config("alembic.ini")
     alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
-    command.upgrade(alembic_cfg, "head")
+    command.stamp(alembic_cfg, "head")
     yield
-    command.downgrade(alembic_cfg, "base")
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("DROP SCHEMA public CASCADE;"))
+        conn.execute(text("CREATE SCHEMA public;"))
 
 
 @pytest.fixture(scope="function")

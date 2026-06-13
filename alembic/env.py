@@ -8,11 +8,17 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Override sqlalchemy.url with DATABASE_URL env var
-database_url = os.getenv("DATABASE_URL")
+# Prioritize TEST_DATABASE_URL, then programmatic config, and fallback to DATABASE_URL
+database_url = os.getenv("TEST_DATABASE_URL")
 if not database_url:
-    raise RuntimeError("DATABASE_URL environment variable is required for Alembic migrations.")
-config.set_main_option("sqlalchemy.url", database_url)
+    database_url = config.get_main_option("sqlalchemy.url")
+if not database_url:
+    database_url = os.getenv("DATABASE_URL")
+
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
+else:
+    raise RuntimeError("DATABASE_URL environment variable or sqlalchemy.url config option is required for Alembic migrations.")
 
 # Import models so autogenerate can see the metadata
 import sys
