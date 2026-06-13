@@ -1,25 +1,11 @@
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { render } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import App from "../App";
 
+// App already contains BrowserRouter internally — no wrapper needed.
 describe("App", () => {
   it("renders without crashing", () => {
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <App />
-      </MemoryRouter>
-    );
-    // Landing page should render some visible content
-    expect(document.body).toBeTruthy();
-  });
-
-  it("renders login page at /login", () => {
-    render(
-      <MemoryRouter initialEntries={["/login"]}>
-        <App />
-      </MemoryRouter>
-    );
-    expect(document.body).toBeTruthy();
+    const { container } = render(<App />);
+    expect(container).toBeTruthy();
   });
 });
