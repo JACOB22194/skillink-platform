@@ -31,3 +31,6 @@ reportlab
 prometheus-fastapi-instrumentator>=6.0.0
 APScheduler==3.10.4
 alembic==1.13.1
+pytest
+pytest-asyncio
+httpx

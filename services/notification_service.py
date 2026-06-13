@@ -102,6 +102,24 @@ class ConnectionManager:
         for ws in dead:
             self.disconnect(user_id, ws)
 
+    async def disconnect_all(self) -> None:
+        """Close every open WebSocket concurrently using asyncio.gather.
+
+        Sequential await would be O(n) wall-clock time; gather keeps shutdown
+        within the container orchestrator's SIGTERM grace period regardless of
+        connection count. Errors are logged as warnings, not silently swallowed.
+        """
+        tasks = [
+            ws.close(code=1001)
+            for connections in self._connections.values()
+            for ws in connections
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for exc in results:
+            if isinstance(exc, Exception):
+                logger.warning("Failed to close WS during shutdown: %s", exc)
+        self._connections.clear()
+
     def is_connected(self, user_id: int) -> bool:
         return bool(self._connections.get(user_id))
 

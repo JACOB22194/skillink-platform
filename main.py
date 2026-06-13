@@ -109,7 +109,10 @@ async def lifespan(app: FastAPI):
         _db.close()
 
     yield
-    logging.info("SkillLink API shutting down.")
+
+    from notification_service import ws_manager
+    await ws_manager.disconnect_all()
+    logging.info("SkillLink API shutdown complete — all WebSocket connections closed.")
 
 
 app = FastAPI(
