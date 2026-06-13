@@ -1,4 +1,5 @@
 import os
+os.environ.setdefault("SECRET_KEY", "temporary_ci_secret_key_12345")
 import pytest
 from alembic.config import Config
 from alembic import command

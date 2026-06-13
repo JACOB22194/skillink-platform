@@ -25,6 +25,7 @@ jobs:
           --health-retries 5
     env:
       TEST_DATABASE_URL: postgresql://skillink_user:password123@localhost:5432/skillink_test
+      SECRET_KEY: temporary_ci_secret_key_12345
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
