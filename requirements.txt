@@ -1,11 +1,11 @@
-fastapi==0.104.1
-uvicorn==0.24.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
 scikit-learn==1.6.1
 scipy==1.11.4
 pydantic>=2.0.0
 numpy>=1.24.0
 pandas>=2.0.0
-httpx
+httpx>=0.28.1
 google-genai
 apscheduler>=3.10.0
 sentence-transformers==3.3.1
@@ -13,4 +13,4 @@ sentence-transformers==3.3.1
 torch==2.2.2+cpu
 prometheus-fastapi-instrumentator>=6.0.0
 pytest
-httpx
+httpx>=0.28.1
