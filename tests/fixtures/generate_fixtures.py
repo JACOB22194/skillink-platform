@@ -18,6 +18,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.svm import LinearSVC
+from sklearn.calibration import CalibratedClassifierCV
 
 OUT = Path(__file__).parent / "skillink_model"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -79,7 +80,7 @@ X_full = sp.hstack([X_text, X_ohe])
 # ── Classifiers ───────────────────────────────────────────────────────────────
 lr_cat = LogisticRegression(max_iter=200).fit(X_text, y_cat)
 lr_sub = LogisticRegression(max_iter=200).fit(X_full, y_sub)
-svc_sub = LinearSVC(max_iter=200).fit(X_full, y_sub)
+svc_sub = CalibratedClassifierCV(estimator=LinearSVC(max_iter=200)).fit(X_full, y_sub)
 
 # ── Save artifacts ────────────────────────────────────────────────────────────
 joblib.dump(tfidf,     OUT / "tfidf.joblib")
@@ -100,11 +101,10 @@ cat_to_subs = SUBCATEGORIES
 (OUT / "sub_labels.json").write_text(json.dumps(list(le_sub.classes_)))
 (OUT / "filler_pattern.txt").write_text(r"\b(the|a|an|and|or|for|to|in|of|on|with)\b")
 (OUT / "metadata.json").write_text(json.dumps({
-    "version": "fixture-1.0",
-    "architecture": "TF-IDF + LR + LinearSVC (miniature fixture)",
-    "categories": len(CATEGORIES),
-    "subcategories": sum(len(v) for v in SUBCATEGORIES.values()),
-    "accuracy": {"lr_sub": 1.0, "svc_sub": 1.0, "lr_cat": 1.0},
+    "num_sub": sum(len(v) for v in SUBCATEGORIES.values()),
+    "num_cat": len(CATEGORIES),
+    "sub_test_acc": 1.0,
+    "sub_f1_macro": 1.0,
+    "cat_test_acc": 1.0,
 }))
-
 print(f"Fixtures written to {OUT.resolve()}")
