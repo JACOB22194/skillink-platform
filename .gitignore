@@ -1,0 +1,36 @@
+# Local environment and secret files
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.staging
+
+# OS and Editor files
+.DS_Store
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Node dependencies and build folders
+**/node_modules/
+**/dist/
+**/dist-ssr/
+
+# Python caches and virtual environments
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.*venv/
+**/.venv/
+**/venv/
+
+# Local cache volumes / data
+.hf_cache/
+.cache/

@@ -1,0 +1,169 @@
+services:
+  nginx:
+    build: ./nginx
+    container_name: skillink_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8443:8443"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - skillink_network
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    build: ./Skilllink-Frontend
+    container_name: skillink_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000}
+    networks:
+      - skillink_network
+    depends_on:
+      - backend
+
+  backend:
+    build: ./Skilllink-backend
+    container_name: skillink_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://skillink_user:password123@db:5432/skillink_db}
+      - DATABASE_REPLICA_URL=${DATABASE_REPLICA_URL:-postgresql://skillink_user:password123@db_replica:5432/skillink_db}
+      - AI_SERVICE_URL=${AI_SERVICE_URL:-http://ai:8000}
+      - SECRET_KEY=${SECRET_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,https://localhost}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - MAIL_FROM=${MAIL_USERNAME}
+      - MAIL_PORT=${MAIL_PORT:-465}
+      - MAIL_SERVER=${MAIL_SERVER:-smtp.gmail.com}
+      - MAIL_STARTTLS=${MAIL_STARTTLS:-False}
+      - MAIL_SSL_TLS=${MAIL_SSL_TLS:-True}
+    networks:
+      - skillink_network
+    depends_on:
+      db:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+
+  ai:
+    build:
+      context: ./Skillink-AI
+      dockerfile: dockerfile
+    container_name: skillink_ai
+    ports:
+      - "8001:8000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - HF_HOME=/app/.hf_cache
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,https://localhost}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - skillink_network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    volumes:
+      - hf_cache:/app/.hf_cache
+
+  db:
+    image: postgres:15
+    container_name: skillink_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-skillink_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password123}
+      POSTGRES_DB: ${POSTGRES_DB:-skillink_db}
+    ports:
+      - "15432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - skillink_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-skillink_user} -d ${POSTGRES_DB:-skillink_db}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  db_replica:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-skillink_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password123}
+      POSTGRES_DB: ${POSTGRES_DB:-skillink_db}
+    volumes:
+      - db_replica_data:/var/lib/postgresql/data
+    networks:
+      - skillink_network
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER:-skillink_user} -d ${POSTGRES_DB:-skillink_db}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backup:
+    build: ./backup
+    container_name: skillink_backup
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://skillink_user:password123@db:5432/skillink_db}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+    volumes:
+      - db_backups:/backups
+    networks:
+      - skillink_network
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  skillink_network:
+    driver: bridge
+
+volumes:
+  db_data:
+  db_replica_data:
+  hf_cache:
+  db_backups:

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git config *)",
+      "Bash(curl -v --max-time 10 https://github.com)",
+      "Bash(git version *)",
+      "Bash(docker exec skillink_backend sh -c 'python -c \" *)",
+      "Bash(docker compose *)",
+      "Bash(docker exec *)",
+      "Bash(curl -s -X POST http://localhost:8001/classify -H \"Content-Type: application/json\" -d \"{\\\\\"title\\\\\":\\\\\"Build a Python Django REST API with PostgreSQL\\\\\",\\\\\"description\\\\\":\\\\\"Need a backend developer experienced in Python, Django, FastAPI, Docker, and PostgreSQL to build a scalable REST API.\\\\\"}\")",
+      "Bash(python -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:8001/classify -H \"Content-Type: application/json\" -d \"{\\\\\"title\\\\\":\\\\\"Build a Python Django REST API with PostgreSQL\\\\\",\\\\\"description\\\\\":\\\\\"Need a backend developer experienced in Python Django FastAPI Docker and PostgreSQL to build a scalable REST API.\\\\\"}\")",
+      "Bash(npx tsc *)",
+      "Bash(pip install *)",
+      "Bash(python export_lut.py)",
+      "Read(//mnt/d/orbit-wars/**)",
+      "mcp__Claude_Preview__preview_start",
+      "mcp__Claude_in_Chrome__tabs_context_mcp"
+    ]
+  }
+}
