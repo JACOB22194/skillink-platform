@@ -456,6 +456,10 @@ app.include_router(pricing_router)
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 from prometheus_fastapi_instrumentator import Instrumentator
+# FastAPI >= 0.137.0 compatibility monkey patch for prometheus-fastapi-instrumentator
+for route in app.routes:
+    if not hasattr(route, "path"):
+        route.path = ""
 Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 # Wire shared registry so retrain_router can hot-swap _MODELS
