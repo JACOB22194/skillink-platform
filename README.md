@@ -56,14 +56,9 @@ Ensure you have the following installed on your machine:
 * [Python 3.10+](https://www.python.org/downloads/) (for running tests/services locally)
 * [Node.js 18+](https://nodejs.org/) (for running the frontend locally)
 
-### Configuration
-Create a `.env` file at the root of the project by copying the [.env.example](file:///d:/Skilllink/.env.example) template:
-```bash
-cp .env.example .env
-```
-Open `.env` and fill in your custom API keys, secrets, and SMTP email credentials.
 
 ---
+
 
 ## 5. How to Run the Code
 
