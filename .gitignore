@@ -34,3 +34,13 @@
 # Local cache volumes / data
 .hf_cache/
 .cache/
+
+# Local utility, test, and migration files
+migration_users_profile_columns.sql
+migration.sql
+populate_test_users.py
+seed_mock.sql
+test_ipv4_v2.py
+test_ipv4.py
+ESCROW_SYSTEM.md
+
