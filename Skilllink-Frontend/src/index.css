@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* ── Keyboard focus indicator ─────────────────────────────────────────────────
+   Many elements in this codebase carry `style={{ outline: "none" }}` to remove
+   the default browser ring. !important here wins over inline styles but ONLY
+   fires on keyboard navigation, so mouse users are unaffected.
+   ─────────────────────────────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid #6366f1 !important;
+  outline-offset: 2px !important;
+  border-radius: 4px;
+}
