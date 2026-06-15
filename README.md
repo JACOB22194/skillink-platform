@@ -36,16 +36,10 @@ To align with the project criteria, the table below maps the required **Software
 The AI recommendation service utilizes the following datasets to train models and serve predictions:
 
 * **Project Description Classification Dataset**:
-  * **Description**: Used to train the classification models that map freelancer and project descriptions to canonical skill categories.
-  * **Sources and Merge Details**:
-
-| Source | Rows | Sub-Category Labels | Notes |
-| :--- | :--- | :--- | :--- |
-| **Freelance Platform Projects (original)** | 12,222 | 107 unique | Real Upwork-style job postings |
-| **Synthetic Jobs (uploaded)** | 1,000 | 28 job titles mapped | 7 broad categories, different schema |
-| **Synthetic Boost (generated)** | 300 | 5 new classes &times; 60 | Template-based augmentation |
-| **Total after cleaning** | **12,487** | **43 final classes** | **After all merges, MIN_SAMPLES=50** |
-
+  * **Freelance Platform Projects (Original)**: Real Upwork-style job postings containing 12,222 rows and 107 unique sub-category labels.
+  * **Synthetic Jobs (Uploaded)**: Uploaded synthetic job postings containing 1,000 rows across 28 mapped job titles and 7 broad categories with a different schema.
+  * **Synthetic Boost (Generated)**: Template-based data augmentation containing 300 rows (5 new classes with 60 samples each) used to boost minority classes.
+  * **Cleaned Dataset**: The final processed dataset containing 12,487 rows across 43 final classes after applying a minimum sample threshold of 50.
 
 * **Coursera Courses Dataset (`courses_clean.csv`)**:
   * **Path**: [Skillink-AI/skillink_model/courses_clean.csv](file:///d:/Skilllink/Skillink-AI/skillink_model/courses_clean.csv)
