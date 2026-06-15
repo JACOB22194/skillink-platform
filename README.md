@@ -57,24 +57,11 @@ Ensure you have the following installed on your machine:
 * [Node.js 18+](https://nodejs.org/) (for running the frontend locally)
 
 ### Configuration
-Create a `.env` file at the root of the project with the following configuration:
-```env
-# Database Credentials
-POSTGRES_USER=skillink_user
-POSTGRES_PASSWORD=password123
-POSTGRES_DB=skillink_db
-DATABASE_URL=postgresql://skillink_user:password123@db:5432/skillink_db
-DATABASE_REPLICA_URL=postgresql://skillink_user:password123@db_replica:5432/skillink_db
-
-# Security & Secrets
-SECRET_KEY=generate_a_secure_random_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-HF_TOKEN=your_huggingface_token_here
-
-# Network Settings
-VITE_API_BASE_URL=http://localhost:8000
-ALLOWED_ORIGINS=http://localhost:3000,https://localhost
+Create a `.env` file at the root of the project by copying the [.env.example](file:///d:/Skilllink/.env.example) template:
+```bash
+cp .env.example .env
 ```
+Open `.env` and fill in your custom API keys, secrets, and SMTP email credentials.
 
 ---
 
