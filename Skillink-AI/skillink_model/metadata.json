@@ -1,0 +1,9 @@
+{
+  "num_sub": 43,
+  "num_cat": 8,
+  "sub_test_acc": 0.774,
+  "sub_f1_macro": 0.7578,
+  "cat_test_acc": 0.9056,
+  "joint_acc": 0.7161,
+  "inference_ms": 0.45
+}

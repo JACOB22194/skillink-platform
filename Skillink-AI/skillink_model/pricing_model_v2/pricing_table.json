@@ -1,0 +1,170 @@
+[
+  {
+    "category":"App Development",
+    "experience":"Beginner",
+    "min_pred":3726,
+    "max_pred":9065,
+    "avg_pred":6405
+  },
+  {
+    "category":"App Development",
+    "experience":"Expert",
+    "min_pred":4919,
+    "max_pred":11883,
+    "avg_pred":8390
+  },
+  {
+    "category":"App Development",
+    "experience":"Intermediate",
+    "min_pred":4752,
+    "max_pred":11464,
+    "avg_pred":8109
+  },
+  {
+    "category":"Content Writing",
+    "experience":"Beginner",
+    "min_pred":5096,
+    "max_pred":12421,
+    "avg_pred":8752
+  },
+  {
+    "category":"Content Writing",
+    "experience":"Expert",
+    "min_pred":4341,
+    "max_pred":10637,
+    "avg_pred":7493
+  },
+  {
+    "category":"Content Writing",
+    "experience":"Intermediate",
+    "min_pred":4753,
+    "max_pred":11612,
+    "avg_pred":8185
+  },
+  {
+    "category":"Customer Support",
+    "experience":"Beginner",
+    "min_pred":12327,
+    "max_pred":28749,
+    "avg_pred":20527
+  },
+  {
+    "category":"Customer Support",
+    "experience":"Expert",
+    "min_pred":11223,
+    "max_pred":26174,
+    "avg_pred":18716
+  },
+  {
+    "category":"Customer Support",
+    "experience":"Intermediate",
+    "min_pred":10829,
+    "max_pred":25298,
+    "avg_pred":18055
+  },
+  {
+    "category":"Data Entry",
+    "experience":"Beginner",
+    "min_pred":4283,
+    "max_pred":10398,
+    "avg_pred":7352
+  },
+  {
+    "category":"Data Entry",
+    "experience":"Expert",
+    "min_pred":3697,
+    "max_pred":9059,
+    "avg_pred":6362
+  },
+  {
+    "category":"Data Entry",
+    "experience":"Intermediate",
+    "min_pred":5428,
+    "max_pred":13022,
+    "avg_pred":9224
+  },
+  {
+    "category":"Digital Marketing",
+    "experience":"Beginner",
+    "min_pred":4492,
+    "max_pred":10755,
+    "avg_pred":7631
+  },
+  {
+    "category":"Digital Marketing",
+    "experience":"Expert",
+    "min_pred":4431,
+    "max_pred":10578,
+    "avg_pred":7505
+  },
+  {
+    "category":"Digital Marketing",
+    "experience":"Intermediate",
+    "min_pred":5437,
+    "max_pred":12944,
+    "avg_pred":9191
+  },
+  {
+    "category":"Graphic Design",
+    "experience":"Beginner",
+    "min_pred":4539,
+    "max_pred":11105,
+    "avg_pred":7804
+  },
+  {
+    "category":"Graphic Design",
+    "experience":"Expert",
+    "min_pred":4429,
+    "max_pred":10880,
+    "avg_pred":7661
+  },
+  {
+    "category":"Graphic Design",
+    "experience":"Intermediate",
+    "min_pred":4162,
+    "max_pred":10246,
+    "avg_pred":7214
+  },
+  {
+    "category":"SEO",
+    "experience":"Beginner",
+    "min_pred":4266,
+    "max_pred":10330,
+    "avg_pred":7307
+  },
+  {
+    "category":"SEO",
+    "experience":"Expert",
+    "min_pred":4009,
+    "max_pred":9745,
+    "avg_pred":6866
+  },
+  {
+    "category":"SEO",
+    "experience":"Intermediate",
+    "min_pred":5340,
+    "max_pred":12811,
+    "avg_pred":9080
+  },
+  {
+    "category":"Web Development",
+    "experience":"Beginner",
+    "min_pred":4369,
+    "max_pred":10635,
+    "avg_pred":7504
+  },
+  {
+    "category":"Web Development",
+    "experience":"Expert",
+    "min_pred":4260,
+    "max_pred":10349,
+    "avg_pred":7310
+  },
+  {
+    "category":"Web Development",
+    "experience":"Intermediate",
+    "min_pred":5757,
+    "max_pred":13912,
+    "avg_pred":9829
+  }
+]

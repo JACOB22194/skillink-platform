@@ -1,0 +1,61 @@
+{
+  "Design": [
+    "3D Design",
+    "Branding",
+    "Computer-Aided Design (CAD)",
+    "Fashion & Clothing",
+    "Graphic Design",
+    "Illustration & Drawing",
+    "Interior/Exterior Design",
+    "Logo Design",
+    "Print Design",
+    "Web Design"
+  ],
+  "Video, Photo & Image": [
+    "Animation",
+    "Image Editing",
+    "Professional Photography",
+    "Video Production"
+  ],
+  "Business": [
+    "Administration Assistance",
+    "Business Strategy & Consulting",
+    "Finance & Accounting",
+    "Legal Services"
+  ],
+  "Writing & Translation": [
+    "Business Writing",
+    "Content Writing",
+    "Copywriting",
+    "Creative Writing",
+    "Ghost Writing",
+    "Proofreading",
+    "Research Writing",
+    "SEO",
+    "Technical Writing",
+    "Transcription",
+    "Translation"
+  ],
+  "Technology & Programming": [
+    "Data Science & Analysis",
+    "Databases",
+    "Game Development",
+    "Mobile App Development",
+    "Programming & Coding",
+    "Software Testing",
+    "Website Development"
+  ],
+  "Music & Audio": [
+    "Voice-Over"
+  ],
+  "Digital Marketing": [
+    "Email Marketing",
+    "SEM, Adwords & PPC",
+    "Social Media Marketing",
+    "Video Marketing"
+  ],
+  "Marketing, Branding & Sales": [
+    "Public Relations",
+    "Sales & Calls"
+  ]
+}

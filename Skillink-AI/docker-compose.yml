@@ -1,0 +1,11 @@
+services:
+  ai:
+    build: .
+    container_name: skillink_ai_
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
