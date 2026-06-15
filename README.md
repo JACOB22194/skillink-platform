@@ -83,29 +83,15 @@ The simplest way to run the entire stack is via **Docker Compose**:
 
 Each service has its own dedicated test suite. You can run them locally as follows:
 
-### Running Frontend Tests (Vitest)
+You can run the entire test suite across all services (Frontend, Backend, and AI) sequentially using the provided scripts:
+
+### On Linux / macOS (Bash)
 ```bash
-cd Skilllink-Frontend
-npm install
-npm run test
+chmod +x run_tests.sh
+./run_tests.sh
 ```
 
-### Running Backend Tests (Pytest)
-```bash
-cd Skilllink-backend
-python -m venv venv
-# Activate virtual environment:
-# Windows: venv\Scripts\activate | macOS/Linux: source venv/bin/activate
-pip install -r requirements.txt
-pytest
-```
-
-### Running AI Service Tests (Pytest)
-```bash
-cd Skillink-AI
-python -m venv venv
-# Activate virtual environment:
-# Windows: venv\Scripts\activate | macOS/Linux: source venv/bin/activate
-pip install -r requirements.txt
-pytest
+### On Windows (PowerShell)
+```powershell
+./run_tests.ps1
 ```
