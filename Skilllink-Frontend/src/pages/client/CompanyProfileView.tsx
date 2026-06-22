@@ -129,7 +129,7 @@ const CompanyProfileView: React.FC<{ colors: ThemeColors; onSave: (name: string)
 
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Company Profile</h2>
-        <p style={{ fontSize: 13, color: c.subtext, margin: "4px 0 0" }}>Manage your corporate identity and visibility on Skillink.</p>
+        <p style={{ fontSize: 13, color: c.subtext, margin: "4px 0 0" }}>Manage your corporate identity and visibility on SkilLink.</p>
       </div>
 
       {/* Hero card */}

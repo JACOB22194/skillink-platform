@@ -2374,7 +2374,7 @@ const AdminDashboard: React.FC = () => {
           <div style={{ textAlign: "center", paddingBottom: 12, borderBottom: `0.5px solid ${c.border}`, marginBottom: 16 }}>
             <div style={{ width: 40, height: 40, borderRadius: "50%", background: c.primarySoft, color: c.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 500, margin: "0 auto 8px" }}>AD</div>
             <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>Admin Panel</div>
-            <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>Skillink Platform</div>
+            <div style={{ fontSize: 11, color: c.subtext, marginTop: 2 }}>SkilLink Platform</div>
             <Badge bg={c.primarySoft} color={c.primary} border="rgba(127,119,221,.2)" style={{ marginTop: 8 }}>Super Admin</Badge>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6, marginTop: 12 }}>
               {[{ val: stats ? stats.total_users.toLocaleString() : "...", label: "USERS", color: c.text, tab: "Users" }, { val: stats ? stats.total_projects.toLocaleString() : "...", label: "PROJECTS", color: "#22c55e", tab: "Projects" }].map((s) => (

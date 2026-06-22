@@ -288,7 +288,7 @@ const ClientDashboard: React.FC = () => {
       {/* Top Bar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface }}>
         <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>
-          Skill<span style={{ color: c.primary }}>ink</span>
+          Skil<span style={{ color: c.primary }}>Link</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <LangToggle style={{ color: c.text }} />

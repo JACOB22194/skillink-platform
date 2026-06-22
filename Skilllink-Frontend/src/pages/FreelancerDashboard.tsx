@@ -322,7 +322,7 @@ const FreelancerDashboard: React.FC = () => {
 
         {/* ── Top Bar ── */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `0.5px solid ${c.border}`, background: c.surface }}>
-          <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Skill<span style={{ color: c.primary }}>ink</span></div>
+          <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Skil<span style={{ color: c.primary }}>Link</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <LangToggle style={{ color: c.text }} />
             <button onClick={toggleTheme} style={{ padding: "6px 10px", borderRadius: 8, border: `0.5px solid ${c.border}`, background: c.bg, color: c.text, cursor: "pointer", fontSize: 14, fontFamily }} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
@@ -431,7 +431,7 @@ const FreelancerDashboard: React.FC = () => {
                         )}
                       </div>
                       <div style={{ fontSize: 12, color: c.subtext, marginBottom: 16 }}>
-                        {ghProfile?.professional_title || profile?.bio?.split(".")[0] || "Freelancer on Skillink"}
+                        {ghProfile?.professional_title || profile?.bio?.split(".")[0] || "Freelancer on SkilLink"}
                       </div>
                       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
                         {([

@@ -435,7 +435,7 @@ const PricingPage: React.FC = () => {
 
       {/* ── Footer ── */}
       <footer style={{ textAlign: "center", padding: "2rem", borderTop: `0.5px solid ${c.border}`, fontSize: 13, color: c.subtext }}>
-        © 2025 Skillink. {t("land.footer.rights")}
+        © 2025 SkilLink. {t("land.footer.rights")}
       </footer>
     </div>
   );
