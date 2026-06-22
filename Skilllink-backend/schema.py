@@ -101,6 +101,7 @@ class NotificationType(str, Enum):
     verification = "verification"
     review       = "review"
     payment      = "payment"
+    match        = "match"
     system       = "system"
 
 

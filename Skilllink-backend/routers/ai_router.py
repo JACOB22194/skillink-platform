@@ -53,6 +53,7 @@ import models
 import schema
 from auth import get_current_user, require_admin
 from services.notification_service import notify
+from services.matching_service import run_ai_match
 
 logger = logging.getLogger(__name__)
 
@@ -150,144 +151,8 @@ def ai_match_freelancers(
     if not project:
         raise HTTPException(404, "Project not found.")
 
-    freelancers = (
-        db.query(models.Freelancer)
-        .join(models.User, models.User.id == models.Freelancer.user_id)
-        .filter(models.User.status == models.UserStatus.active)
-        .all()
-    )
-
-    required_skills = [ps.skill.name for ps in project.skills if ps.skill]
-
-    freelancer_payloads = []
-    for f in freelancers:
-        user        = db.query(models.User).filter(models.User.id == f.user_id).first()
-        skill_names = [fs.skill.name for fs in f.skills if fs.skill]
-
-        # Parse JSON-stored list fields safely
-        import json as _json
-        def _parse_json_list(val):
-            if not val:
-                return []
-            try:
-                return _json.loads(val)
-            except Exception:
-                return []
-
-        top_languages     = _parse_json_list(f.top_languages)
-        sub_category_tags = _parse_json_list(f.sub_category_tags)
-
-        # Build profile_text for TF-IDF scoring
-        profile_text = " ".join(filter(None, [
-            f.professional_title or "",
-            f.bio or "",
-            " ".join(skill_names),
-            " ".join(top_languages),
-        ]))
-
-        full_name = ""
-        if user:
-            full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
-            if not full_name:
-                full_name = user.email.split("@")[0]
-
-        freelancer_payloads.append({
-            "freelancer_id":      f.freelancer_id,
-            "user_id":            f.user_id,
-            "name":               full_name or f"freelancer_{f.freelancer_id}",
-            "first_name":         user.first_name if user else None,
-            "last_name":          user.last_name  if user else None,
-            "email":              user.email if user else "",
-            "bio":                f.bio or "",
-            "professional_title": f.professional_title or "",
-            "hourly_rate":        f.hourly_rate or 0,
-            "success_score":      f.success_score or 0,
-            "github_score":       f.github_score or 0,
-            "github_url":         f.github_url or "",
-            "skills":             skill_names,
-            "top_languages":      top_languages,
-            "sub_category_tags":  sub_category_tags,
-            "profile_text":       profile_text,
-            "github_stats":       {},
-        })
-
-    try:
-        response = httpx.post(
-            f"{AI_SERVICE_URL}/match",
-            json={
-                "title":            project.title,
-                "description":      project.description or "",
-                "sub_category":     project.sub_category or "",
-                "category":         project.category or "",
-                "budget_min":       float(project.budget or 0),
-                "budget_max":       float(project.budget or 0),
-                "required_skills":  required_skills,
-                "candidates":       freelancer_payloads,
-                "top_k":            10,
-            },
-            timeout=AI_TIMEOUT,
-        )
-        response.raise_for_status()
-        ai_data = response.json()
-
-        # Build a lookup for email (not returned by AI service)
-        payload_map = {fp["freelancer_id"]: fp for fp in freelancer_payloads}
-
-        matches = [
-            schema.FreelancerSearchResult(
-                freelancer_id  = m["freelancer_id"],
-                user_id        = payload_map.get(m["freelancer_id"], {}).get("user_id", 0),
-                email          = payload_map.get(m["freelancer_id"], {}).get("email", ""),
-                first_name     = payload_map.get(m["freelancer_id"], {}).get("first_name"),
-                last_name      = payload_map.get(m["freelancer_id"], {}).get("last_name"),
-                bio            = payload_map.get(m["freelancer_id"], {}).get("bio"),
-                hourly_rate    = m.get("hourly_rate"),
-                success_score  = payload_map.get(m["freelancer_id"], {}).get("success_score", 0),
-                skills         = payload_map.get(m["freelancer_id"], {}).get("skills", []),
-                ai_match_score = round(m.get("match_score", 0) * 100, 1),
-            )
-            for m in ai_data.get("matches", [])
-        ]
-        # Cache results so freelancers can see their matches in /recommend/my-matches
-        try:
-            db.query(models.Recommendation).filter(
-                models.Recommendation.project_id == project_id
-            ).delete()
-            for m in ai_data.get("matches", []):
-                db.add(models.Recommendation(
-                    project_id    = project_id,
-                    freelancer_id = m["freelancer_id"],
-                    match_score   = m.get("match_score", 0),
-                    text_score    = m.get("text_score", 0),
-                    skill_score   = m.get("skill_score", 0),
-                    quality_score = m.get("quality_score", 0),
-                    matched_skills= json.dumps(m.get("matched_skills", [])),
-                ))
-            db.commit()
-        except Exception as cache_exc:
-            logger.warning("Failed to cache recommendations: %s", cache_exc)
-            db.rollback()
-
-        return schema.AIMatchResponse(project_id=project_id, matches=matches, source="ai")
-
-    except Exception as exc:
-        logger.warning("AI service unavailable for /match, using fallback. Error: %s", exc)
-
-    fallback_matches = []
-    for fp in sorted(freelancer_payloads, key=lambda x: x["success_score"], reverse=True)[:10]:
-        fallback_matches.append(schema.FreelancerSearchResult(
-            freelancer_id  = fp["freelancer_id"],
-            user_id        = fp["user_id"],
-            email          = fp["email"],
-            first_name     = fp.get("first_name"),
-            last_name      = fp.get("last_name"),
-            bio            = fp.get("bio"),
-            hourly_rate    = fp.get("hourly_rate"),
-            success_score  = fp.get("success_score", 0),
-            skills         = fp.get("skills", []),
-            ai_match_score = None,
-        ))
-    return schema.AIMatchResponse(project_id=project_id, matches=fallback_matches, source="fallback")
+    matches, source = run_ai_match(project, db)
+    return schema.AIMatchResponse(project_id=project_id, matches=matches, source=source)
 
 
 @router.post(

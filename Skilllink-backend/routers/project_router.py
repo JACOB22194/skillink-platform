@@ -17,7 +17,7 @@ Business rules enforced here:
   - Projects in_progress or completed cannot be edited
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -25,6 +25,7 @@ from db import get_db
 import models
 import schema
 from auth import get_current_user, require_client, require_admin
+from services.matching_service import run_ai_match_and_notify
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -49,9 +50,10 @@ Post a new project that freelancers can find and submit proposals to.
 """,
 )
 def create_project(
-    body: schema.ProjectCreate,
-    me:   models.User = Depends(require_client),
-    db:   Session     = Depends(get_db),
+    body:             schema.ProjectCreate,
+    background_tasks: BackgroundTasks,
+    me:               models.User = Depends(require_client),
+    db:               Session     = Depends(get_db),
 ):
     # Get the client profile
     client = db.query(models.Client).filter(models.Client.user_id == me.id).first()
@@ -89,6 +91,11 @@ def create_project(
 
     db.commit()
     db.refresh(project)
+
+    # Run AI matching + notify top matches in the background — must never
+    # delay or break the client's "project created" response.
+    background_tasks.add_task(run_ai_match_and_notify, project.project_id)
+
     return _project_to_response(project)
 
 

@@ -120,6 +120,7 @@ class NotificationType(str, enum.Enum):
     verification     = "verification"      # Your verification was approved/rejected
     review           = "review"            # You received a new review
     payment          = "payment"           # Wallet credited
+    match            = "match"             # You were AI-matched with a new project
     system           = "system"            # Generic platform announcements
 
 
