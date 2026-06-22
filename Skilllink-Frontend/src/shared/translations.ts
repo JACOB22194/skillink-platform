@@ -22,7 +22,7 @@ const T: Record<string, Record<Lang, string>> = {
 
   // ── Login ────────────────────────────────────────────────────────────────────
   "login.title":           { en: "Welcome back",                             ar: "مرحباً بعودتك" },
-  "login.subtitle":        { en: "Log in to your SkillLink account",         ar: "سجّل الدخول إلى حساب SkillLink" },
+  "login.subtitle":        { en: "Log in to your Skillink account",         ar: "سجّل الدخول إلى حساب Skillink" },
   "login.forgotPassword":  { en: "Forgot password?",                         ar: "نسيت كلمة المرور؟" },
   "login.submit":          { en: "Log in",                                   ar: "تسجيل الدخول" },
   "login.submitting":      { en: "Logging in...",                            ar: "جارٍ تسجيل الدخول..." },
@@ -40,7 +40,7 @@ const T: Record<string, Record<Lang, string>> = {
 
   // ── Register ─────────────────────────────────────────────────────────────────
   "reg.title":             { en: "Create your account",                      ar: "إنشاء حسابك" },
-  "reg.subtitle":          { en: "Join SkillLink and start today",           ar: "انضم إلى SkillLink وابدأ اليوم" },
+  "reg.subtitle":          { en: "Join Skillink and start today",           ar: "انضم إلى Skillink وابدأ اليوم" },
   "reg.iAm":               { en: "I am a...",                                ar: "أنا..." },
   "reg.role.freelancer":   { en: "Freelancer",                               ar: "مستقل" },
   "reg.role.freelancerDesc": { en: "I want to find work and projects",       ar: "أريد إيجاد عمل ومشاريع" },
@@ -135,7 +135,7 @@ const T: Record<string, Record<Lang, string>> = {
   "land.hero.title1":      { en: "Work smarter,",       ar: "اعمل بذكاء،" },
   "land.hero.title2":      { en: "hire",                ar: "وظّف" },
   "land.hero.title3":      { en: "better",              ar: "بشكل أفضل" },
-  "land.hero.subtitle":    { en: "SkillLink connects talented freelancers with clients using AI matching, smart proposals, and real-time collaboration — all in one place.", ar: "تربط SkillLink المستقلين الموهوبين بالعملاء باستخدام التطابق الذكي والعروض الذكية والتعاون الفوري — كل شيء في مكان واحد." },
+  "land.hero.subtitle":    { en: "Skillink connects talented freelancers with clients using AI matching, smart proposals, and real-time collaboration — all in one place.", ar: "تربط Skillink المستقلين الموهوبين بالعملاء باستخدام التطابق الذكي والعروض الذكية والتعاون الفوري — كل شيء في مكان واحد." },
   "land.hero.getStarted":  { en: "Get started free",   ar: "ابدأ مجاناً" },
   "land.hero.findTalent":  { en: "Find talent",         ar: "ابحث عن مواهب" },
   "land.roles.label":      { en: "Designed for three roles", ar: "مصمّم لثلاثة أدوار" },
@@ -154,7 +154,7 @@ const T: Record<string, Record<Lang, string>> = {
   // ── Landing Page — How It Works ───────────────────────────────────────────────
   "land.hiw.label":        { en: "How it works",        ar: "كيف يعمل" },
   "land.hiw.title":        { en: "Up and running in minutes", ar: "جاهز في دقائق" },
-  "land.hiw.subtitle":     { en: "Whether you're here to find work or hire talent, SkillLink gets you there fast.", ar: "سواء كنت هنا للبحث عن عمل أو توظيف مواهب، SkillLink يوصلك بسرعة." },
+  "land.hiw.subtitle":     { en: "Whether you're here to find work or hire talent, Skillink gets you there fast.", ar: "سواء كنت هنا للبحث عن عمل أو توظيف مواهب، Skillink يوصلك بسرعة." },
   "land.hiw.step":         { en: "STEP",                ar: "خطوة" },
   "land.hiw.cta":          { en: "Get started free →",  ar: "← ابدأ مجاناً" },
   "land.hiw.fl.1.title":   { en: "Create your profile", ar: "أنشئ ملفك الشخصي" },
@@ -168,7 +168,7 @@ const T: Record<string, Record<Lang, string>> = {
   "land.hiw.cl.1.title":   { en: "Post your project",   ar: "انشر مشروعك" },
   "land.hiw.cl.1.desc":    { en: "Describe the work, set a budget, and list required skills. Our AI instantly categorises your project for smarter matching.", ar: "صف العمل، حدد الميزانية، وأدرج المهارات المطلوبة. يصنّف الذكاء الاصطناعي مشروعك فوراً." },
   "land.hiw.cl.2.title":   { en: "Review AI-ranked talent", ar: "راجع المواهب المصنّفة بالذكاء الاصطناعي" },
-  "land.hiw.cl.2.desc":    { en: "SkillLink scores every freelancer against your project and ranks proposals by relevance — so you see the best fits first.", ar: "يُقيّم SkillLink كل مستقل ويرتب العروض حسب الصلة — لترى الأنسب أولاً." },
+  "land.hiw.cl.2.desc":    { en: "Skillink scores every freelancer against your project and ranks proposals by relevance — so you see the best fits first.", ar: "يُقيّم Skillink كل مستقل ويرتب العروض حسب الصلة — لترى الأنسب أولاً." },
   "land.hiw.cl.3.title":   { en: "Hire & set milestones", ar: "وظّف وحدد المراحل" },
   "land.hiw.cl.3.desc":    { en: "Accept the best proposal, open a Workroom, and break the project into milestones with clear deliverables and due dates.", ar: "اقبل أفضل عرض، افتح غرفة عمل، وقسّم المشروع إلى مراحل بمخرجات وتواريخ واضحة." },
   "land.hiw.cl.4.title":   { en: "Approve & release payment", ar: "اعتمد الدفع وحرّره" },
@@ -211,7 +211,7 @@ const T: Record<string, Record<Lang, string>> = {
   // ── Landing Page — Bottom CTA & Footer ───────────────────────────────────────
   "land.bottom.ready":     { en: "Ready to get started?", ar: "مستعد للبدء؟" },
   "land.bottom.create":    { en: "Create an account",   ar: "إنشاء حساب" },
-  "land.footer":           { en: "© 2025 SkillLink. All rights reserved.", ar: "© 2025 SkillLink. جميع الحقوق محفوظة." },
+  "land.footer":           { en: "© 2025 Skillink. All rights reserved.", ar: "© 2025 Skillink. جميع الحقوق محفوظة." },
   "land.theme.dark":       { en: "Dark mode",           ar: "الوضع الداكن" },
   "land.theme.light":      { en: "Light mode",          ar: "الوضع الفاتح" },
 

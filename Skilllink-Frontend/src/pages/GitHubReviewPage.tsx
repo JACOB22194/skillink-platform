@@ -150,7 +150,7 @@ const StepOne: React.FC<{
       <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: 20, padding: "2.5rem 2rem", width: "100%", maxWidth: 500 }}>
         {/* Logo */}
         <div style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.3px", color: c.text, textAlign: "center", marginBottom: "2rem" }}>
-          Skill<span style={{ color: c.primary }}>Link</span>
+          Skill<span style={{ color: c.primary }}>ink</span>
         </div>
 
         {/* Hero text */}
@@ -261,7 +261,7 @@ const StepTwo: React.FC<{
             Change URL
           </button>
           <div style={{ height: 18, width: "0.5px", background: c.border }} />
-          <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Skill<span style={{ color: c.primary }}>Link</span></div>
+          <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: "-0.3px", color: c.text }}>Skill<span style={{ color: c.primary }}>ink</span></div>
         </div>
         <button
           onClick={onSave}

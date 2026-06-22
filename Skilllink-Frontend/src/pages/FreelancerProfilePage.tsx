@@ -170,7 +170,7 @@ export const FreelancerProfilePage: React.FC = () => {
       <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "14px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={() => navigate(-1)} style={{ background: "none", border: `1px solid ${T.border}`, color: T.sub, cursor: "pointer", fontSize: 12, borderRadius: 8, padding: "6px 12px" }}>{t("flprof.back")}</button>
-          <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Skill<span style={{ color: T.accent }}>Link</span></div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Skill<span style={{ color: T.accent }}>ink</span></div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button
