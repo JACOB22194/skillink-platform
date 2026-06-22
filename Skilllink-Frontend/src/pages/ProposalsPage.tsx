@@ -374,6 +374,7 @@ export const ProposalsPage: React.FC = () => {
   const [filterText, setFilterText]     = useState("");
   const [filterMin, setFilterMin]       = useState("");
   const [filterMax, setFilterMax]       = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [loading, setLoading]           = useState(true);
   const [projLoading, setProjLoading]   = useState(false);
   const [toast, setToast]               = useState<{ msg: string; ok: boolean } | null>(null);
@@ -552,13 +553,55 @@ export const ProposalsPage: React.FC = () => {
                 type="number" placeholder="Max $" value={filterMax} onChange={e => setFilterMax(e.target.value)}
                 style={{ flex: "1 1 80px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontSize: 13, outline: "none" }}
               />
-              {(filterText || filterMin || filterMax) && (
-                <button onClick={() => { setFilterText(""); setFilterMin(""); setFilterMax(""); }}
+              {(filterText || filterMin || filterMax || selectedCategories.length > 0) && (
+                <button onClick={() => { setFilterText(""); setFilterMin(""); setFilterMax(""); setSelectedCategories([]); }}
                   style={{ padding: "10px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.sub, cursor: "pointer", fontSize: 12 }}>
                   {t("common.back").replace("← ", "").replace(" →", "")}
                 </button>
               )}
             </div>
+
+            {/* Category filter — chips derived from sub_category on currently loaded open projects */}
+            {(() => {
+              const allCategories = Array.from(
+                new Set(openProjects.map(p => p.sub_category).filter((c): c is string => !!c))
+              ).sort();
+              if (allCategories.length === 0) return null;
+              const toggleCategory = (cat: string) =>
+                setSelectedCategories(prev =>
+                  prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+                );
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: selectedCategories.length > 0 ? 10 : 0 }}>
+                    {selectedCategories.map(cat => (
+                      <div key={cat} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.accentSoft, padding: "8px 16px", borderRadius: 100, border: `1px solid ${T.accent}30` }}>
+                        <span style={{ fontSize: 13, color: T.accent, fontWeight: 500 }}>{cat}</span>
+                        <button onClick={() => toggleCategory(cat)} aria-label="Remove filter" style={{ background: "none", border: "none", fontSize: 14, color: T.sub, cursor: "pointer", lineHeight: 1, marginLeft: 2, padding: 0, fontFamily: "inherit" }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  {allCategories.filter(c => !selectedCategories.includes(c)).length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 12, color: T.sub, marginBottom: 8 }}>Filter by category — click to add</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {allCategories.filter(c => !selectedCategories.includes(c)).map(cat => (
+                          <button
+                            key={cat}
+                            onClick={() => toggleCategory(cat)}
+                            style={{ border: `1px solid ${T.border}`, display: "inline-flex", alignItems: "center", padding: "6px 14px", borderRadius: 100, fontSize: 12, background: T.surface, color: T.sub, cursor: "pointer", fontWeight: 500, transition: "all 0.15s ease" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.color = T.accent; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.sub; }}
+                          >
+                            + {cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {projLoading ? (
               <div style={{ textAlign: "center", padding: 60, color: T.sub }}>{t("clprop.loading")}</div>
@@ -574,6 +617,7 @@ export const ProposalsPage: React.FC = () => {
                   .filter((p: Project) => !filterText || p.title.toLowerCase().includes(filterText.toLowerCase()) || (p.description ?? "").toLowerCase().includes(filterText.toLowerCase()))
                   .filter((p: Project) => !filterMin || p.budget >= Number(filterMin))
                   .filter((p: Project) => !filterMax || p.budget <= Number(filterMax))
+                  .filter((p: Project) => selectedCategories.length === 0 || (p.sub_category && selectedCategories.includes(p.sub_category)))
                   .map((proj: Project) => (
                   <div key={proj.project_id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
