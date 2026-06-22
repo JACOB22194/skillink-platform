@@ -1,0 +1,11 @@
+#!/bin/bash
+echo "---alembic_version---"
+docker exec skillink_db psql -U skillink_user -d skillink_db -c "SELECT * FROM alembic_version;"
+echo "---milestones columns---"
+docker exec skillink_db psql -U skillink_user -d skillink_db -c "SELECT column_name FROM information_schema.columns WHERE table_name='milestones';"
+echo "---escrow_transactions exists---"
+docker exec skillink_db psql -U skillink_user -d skillink_db -c "SELECT to_regclass('escrow_transactions');"
+echo "---idempotency_logs exists---"
+docker exec skillink_db psql -U skillink_user -d skillink_db -c "SELECT to_regclass('idempotency_logs');"
+echo "---milestonestatus enum values---"
+docker exec skillink_db psql -U skillink_user -d skillink_db -c "SELECT enumlabel FROM pg_enum JOIN pg_type ON pg_enum.enumtypid = pg_type.oid WHERE typname='milestonestatus';"

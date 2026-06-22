@@ -156,6 +156,7 @@ class User(Base):
     notifications     = relationship("Notification",  back_populates="user",    # ✅ Phase 5
                                      foreign_keys="Notification.user_id", cascade="all, delete")
     subscription = relationship("Subscription", back_populates="user", uselist=False, cascade="all, delete")
+    uploaded_files    = relationship("File",          back_populates="uploader", foreign_keys="File.uploader_id", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -190,6 +191,9 @@ class Freelancer(Base):
     wallet_transactions = relationship("WalletTransaction", back_populates="freelancer", cascade="all, delete")
     recommendations     = relationship("Recommendation",    back_populates="freelancer", cascade="all, delete")
     portfolio_items     = relationship("PortfolioItem",     back_populates="freelancer", cascade="all, delete")
+    launchpad_reservations = relationship("LaunchpadReservation", back_populates="freelancer", cascade="all, delete")
+    invitations            = relationship("Invitation",          back_populates="freelancer", cascade="all, delete")
+    client_reviews         = relationship("ClientReview",        back_populates="freelancer", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -206,6 +210,9 @@ class Client(Base):
 
     user     = relationship("User",    back_populates="client")
     projects = relationship("Project", back_populates="client", cascade="all, delete")
+    invitations            = relationship("Invitation",          back_populates="client", cascade="all, delete")
+    client_reviews         = relationship("ClientReview",        back_populates="client", cascade="all, delete")
+    reviews                = relationship("Review",              back_populates="client", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -275,6 +282,7 @@ class Project(Base):
     reviews         = relationship("Review",         back_populates="project", cascade="all, delete")
     ai_pricing      = relationship("AIPricing",      back_populates="project", uselist=False, cascade="all, delete")
     recommendations = relationship("Recommendation", back_populates="project", cascade="all, delete")
+    invitations     = relationship("Invitation",     back_populates="project", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
@@ -341,6 +349,7 @@ class Contract(Base):
     milestones      = relationship("Milestone",  back_populates="contract", cascade="all, delete")
     escrow          = relationship("Escrow",     back_populates="contract", uselist=False, cascade="all, delete")
     dispute         = relationship("Dispute",    back_populates="contract", uselist=False, cascade="all, delete")
+    client_review   = relationship("ClientReview", back_populates="contract", uselist=False, cascade="all, delete")
 
     @property
     def freelancer_name(self) -> str | None:
@@ -463,7 +472,7 @@ class Review(Base):
 
     project    = relationship("Project",    back_populates="reviews")
     freelancer = relationship("Freelancer", back_populates="reviews")
-    client     = relationship("Client")
+    client     = relationship("Client",     back_populates="reviews")
 
 
 # ─────────────────────────────────────────
@@ -481,9 +490,9 @@ class ClientReview(Base):
     comment       = Column(Text)
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
-    contract   = relationship("Contract")
-    freelancer = relationship("Freelancer")
-    client     = relationship("Client")
+    contract   = relationship("Contract", back_populates="client_review")
+    freelancer = relationship("Freelancer", back_populates="client_reviews")
+    client     = relationship("Client", back_populates="client_reviews")
 
 
 # ─────────────────────────────────────────
@@ -660,6 +669,7 @@ class File(Base):
     created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     project = relationship("Project", back_populates="files")
+    uploader = relationship("User", back_populates="uploaded_files", foreign_keys=[uploader_id])
 
 
 # ─────────────────────────────────────────
@@ -804,7 +814,7 @@ class LaunchpadReservation(Base):
     expires_at           = Column(DateTime(timezone=True), nullable=True)
     completed_at         = Column(DateTime(timezone=True), nullable=True)
 
-    freelancer = relationship("Freelancer", backref="launchpad_reservations")
+    freelancer = relationship("Freelancer", back_populates="launchpad_reservations")
 
 
 # ─────────────────────────────────────────
@@ -842,9 +852,9 @@ class Invitation(Base):
     status        = Column(Enum(InvitationStatus), default=InvitationStatus.pending, index=True)
     created_at    = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-    project    = relationship("Project")
-    freelancer = relationship("Freelancer")
-    client     = relationship("Client")
+    project    = relationship("Project", back_populates="invitations")
+    freelancer = relationship("Freelancer", back_populates="invitations")
+    client     = relationship("Client", back_populates="invitations")
 
 
 # ─────────────────────────────────────────
