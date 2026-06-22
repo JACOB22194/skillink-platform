@@ -30,6 +30,10 @@ services:
         sync: false
       - key: MAIL_PASSWORD
         sync: false
+      # Must match MAIL_USERNAME exactly — Gmail SMTP rejects/bounces sends
+      # where the From address doesn't match the authenticated account.
+      - key: MAIL_FROM
+        sync: false
       - key: MAIL_PORT
         value: "465"
       - key: MAIL_SERVER
