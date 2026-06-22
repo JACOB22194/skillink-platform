@@ -46,25 +46,6 @@ services:
       - key: AI_SERVICE_URL
         sync: false
 
-  # ── Background worker (milestone escrow scheduler) ─────────────────────────
-  - type: worker
-    name: skillink-worker
-    runtime: docker
-    repo: https://github.com/JACOB22194/skillink-platform
-    rootDir: Skilllink-backend
-    dockerfilePath: ./Dockerfile
-    dockerCommand: python run_worker.py
-    plan: free
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: skillink-db
-          property: connectionString
-      - key: SECRET_KEY
-        sync: false
-      - key: LOG_LEVEL
-        value: INFO
-
   # ── AI / recommendation service ─────────────────────────────────────────────
   - type: web
     name: skillink-ai
