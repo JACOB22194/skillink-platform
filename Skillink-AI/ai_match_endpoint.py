@@ -10,12 +10,19 @@ Add this to your existing AI service main.py:
 """
 
 import asyncio
+import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import json
 
-_INFERENCE_TIMEOUT = 5.0  # seconds — ML-04
+# ML-04 originally specified 5s, tuned for faster hardware. On constrained
+# free-tier compute (e.g. Render's free plan), scoring even a single
+# candidate measured ~4.9-5.6s, causing near-constant timeouts. Callers
+# (recommend_router.py, matching_service.py) already allow up to 30s, so
+# this can safely go higher without those call sites timing out first.
+# Override via AI_INFERENCE_TIMEOUT if hardware changes.
+_INFERENCE_TIMEOUT = float(os.getenv("AI_INFERENCE_TIMEOUT", "25.0"))  # seconds
 
 from recommender import (
     SkillinkRecommender,

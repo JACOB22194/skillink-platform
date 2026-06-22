@@ -76,6 +76,12 @@ services:
         value: INFO
       - key: ALLOWED_ORIGINS
         sync: false
+      # /match's internal inference budget. 25s leaves margin under the
+      # backend's 30s caller timeout (recommend_router.py,
+      # matching_service.py). Raise further if free-tier CPU is still
+      # too slow for larger candidate pools.
+      - key: AI_INFERENCE_TIMEOUT
+        value: "25"
 
   # ── Frontend (static production build — NOT the Vite dev server) ──────────
   - type: web
