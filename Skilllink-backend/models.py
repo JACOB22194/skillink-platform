@@ -398,7 +398,8 @@ class Milestone(Base):
     escrow_transaction_id    = Column(Integer, ForeignKey("escrow_transactions.escrow_transaction_id"), nullable=True)
 
     contract           = relationship("Contract", back_populates="milestones")
-    escrow_transaction = relationship("EscrowTransaction", foreign_keys=[escrow_transaction_id])
+    escrow_transaction = relationship("EscrowTransaction", foreign_keys=[escrow_transaction_id], post_update=True)
+    milestone_transactions = relationship("EscrowTransaction", foreign_keys="EscrowTransaction.milestone_id", cascade="all, delete")
 
 
 # ─────────────────────────────────────────
