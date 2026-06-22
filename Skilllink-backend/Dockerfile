@@ -17,5 +17,7 @@ COPY . .
 # Expose port 8000 for FastAPI
 EXPOSE 8000
 
-# Command to run the server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run the server.
+# ${PORT:-8000} keeps this compatible with docker-compose (no PORT set -> 8000)
+# while also satisfying Render, which injects its own PORT at runtime.
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
