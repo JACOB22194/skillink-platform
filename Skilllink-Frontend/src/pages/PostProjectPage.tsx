@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_BASE_URL, getAuthHeaders } from "../shared/api";
+import { API_BASE_URL, AI_SERVICE_URL, getAuthHeaders } from "../shared/api";
 import { useLanguage, LangToggle } from "../shared/LanguageContext";
 import Tooltip from "../shared/Tooltip";
 
@@ -161,7 +161,7 @@ const PostProjectPage: React.FC = () => {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch("http://localhost:8001/predict", {
+        const res = await fetch(`${AI_SERVICE_URL}/predict`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: title.trim(), description: description.trim(), top_k: 5 }),
@@ -195,7 +195,7 @@ const PostProjectPage: React.FC = () => {
       try {
         const category = analysisResult.category || analysisResult.label || "Web Development";
 
-        const res = await fetch("http://localhost:8001/pricing/recommend", {
+        const res = await fetch(`${AI_SERVICE_URL}/pricing/recommend`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ category, experience: "Intermediate" }),

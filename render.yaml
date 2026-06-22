@@ -86,6 +86,10 @@ services:
       # Vite bakes this in at BUILD time, so it must be set before building.
       - key: VITE_API_BASE_URL
         sync: false
+      # Used for direct frontend -> AI service calls (live preview while
+      # typing a project description). Also baked in at build time.
+      - key: VITE_AI_SERVICE_URL
+        sync: false
     routes:
       - type: rewrite
         source: /*
