@@ -16,6 +16,7 @@ POST /auth/verify-reset-otp-check → validate OTP without changing password yet
 POST /auth/verify-reset-otp       → validate OTP + set new password in one step (Flow B step 2)
 """
 
+import os       # reads FRONTEND_URL for activation/reset links
 import pyotp    # generates MFA secrets and verifies 6-digit codes
 import qrcode   # draws QR code images
 import io       # keeps the image in memory (never saved to disk)
@@ -35,6 +36,8 @@ from auth import create_access_token, create_refresh_token, decode_token, get_cu
 from services.email_service import send_async_email
 
 router  = APIRouter(prefix="/auth", tags=["Authentication"])
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 
 # ── Password helpers ──────────────────────────────────────────────────────────
@@ -103,7 +106,7 @@ def register(body: schema.RegisterRequest, background_tasks: BackgroundTasks, db
     
     # Send Email via Background Task
     activation_token = create_access_token(user.id, user.role.value)
-    activation_link = f"http://localhost:3000/activate?token={activation_token}"
+    activation_link = f"{FRONTEND_URL}/activate?token={activation_token}"
     background_tasks.add_task(
         send_async_email,
         "Verify your SkillLink account",
@@ -407,7 +410,7 @@ def forgot_password(
         expires = datetime.now(timezone.utc) + timedelta(minutes=15)
         _reset_tokens[token] = {"user_id": user.id, "expires_at": expires}
 
-        reset_url = f"http://localhost:3000/reset-password?token={token}"
+        reset_url = f"{FRONTEND_URL}/reset-password?token={token}"
         
         background_tasks.add_task(
             send_async_email,

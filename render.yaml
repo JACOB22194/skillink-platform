@@ -26,13 +26,17 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: MAIL_USERNAME
+      # Render blocks outbound SMTP ports, so email goes through Resend's
+      # HTTP API instead. Setting RESEND_API_KEY switches email_service.py
+      # to that path automatically (see services/email_service.py).
+      - key: RESEND_API_KEY
         sync: false
-      - key: MAIL_PASSWORD
-        sync: false
-      # Must match MAIL_USERNAME exactly — Gmail SMTP rejects/bounces sends
-      # where the From address doesn't match the authenticated account.
+      # Must be onboarding@resend.dev (Resend's shared test sender) unless
+      # you've verified your own domain with Resend.
       - key: MAIL_FROM
+        sync: false
+      # Used to build activation/reset-password links in emails.
+      - key: FRONTEND_URL
         sync: false
       - key: MAIL_PORT
         value: "465"
